@@ -1,0 +1,10 @@
+version: '3'
+services:
+  lr-agent:
+    image: bambula/lr-agent:first
+    environment:
+      - WHALEBONE_CLIENT_CRT_BASE64:
+      - WHALEBONE_CLIENT_KEY_BASE64:
+      - WHALEBONE_PORTAL_ADDRESS:wss://localhost:8443/wsproxy/ws
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

@@ -16,6 +16,8 @@ def validate_settings():
         raise InitException('System env WHALEBONE_LR_CLIENT_CERT must be set')
     if not os.path.exists(WHALEBONE_LR_CLIENT_CERT) or os.stat(WHALEBONE_LR_CLIENT_CERT).st_size == 0:
         raise InitException('Client certificate {0} must exist and mustn\'t be empty'.format(WHALEBONE_LR_CLIENT_CERT))
+    if not WHALEBONE_PORTAL_ADDRESS:
+        raise InitException('System env WHALEBONE_PORTAL_ADDRESS must be set')
 
 
 async def connect():

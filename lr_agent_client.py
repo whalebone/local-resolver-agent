@@ -1,6 +1,7 @@
 import json
-from sys_info import get_system_info
-from docker_connector import DockerConnector
+
+from dockertools.docker_connector import DockerConnector
+from sysinfo.sys_info import get_system_info
 
 
 class LRAgentClient:
@@ -41,7 +42,7 @@ class LRAgentClient:
             response["status"] = "success"
             return response
 
-        # get docker containers
+        # get dockertools containers
         if request["action"] == "containers":
             data = list()
             for container in self.dockerConnector.getContainers():

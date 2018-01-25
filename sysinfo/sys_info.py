@@ -1,8 +1,9 @@
 import psutil
 import platform
+from local_resolver_agent.dockertools.docker_connector import DockerConnector
+import json
 
-
-def get_system_info():
+def get_system_info(docker_connector):
     mem = psutil.virtual_memory()
     du = psutil.disk_usage('/')
     sysInfo = {
@@ -23,6 +24,8 @@ def get_system_info():
             'free': du.free,
             'usage': du.percent,
         },
+        "docker": docker_connector.docker_version(),
+        "containers": [container.name for container in docker_connector.get_containers()],
         'interfaces': get_ifaces()
     }
     return sysInfo
@@ -38,3 +41,4 @@ def get_ifaces():
             iface['addresses'].append(addr_info.address)
         interfaces.append(iface)
     return interfaces
+

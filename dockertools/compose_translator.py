@@ -1,4 +1,4 @@
-from exception.exc import ComposeException
+#from exception.exc import ComposeException
 
 
 def create_docker_run_kwargs(service_compose_fragmet):
@@ -39,11 +39,11 @@ def parse_ports(ports_list):
     for port in ports_list:
         port_def = port.split(':')
         if len(port_def) != 2:
-            raise ComposeException("Invalid format of 'ports' definition: {0}".format(port))
+            raise Exception("Invalid format of 'ports' definition: {0}".format(port))
         try:
             ports_dict[port_def[1]] = int(port_def[0])
         except ValueError:
-            raise ComposeException("Invalid format of 'ports' definition: {0}".format(port))
+            raise Exception("Invalid format of 'ports' definition: {0}".format(port))
     return ports_dict
 
 
@@ -54,7 +54,7 @@ def parse_volumes(volumes_list):
     for volume in volumes_list:
         volume_def = volume.split(':')
         if len(volume_def) < 2 or len(volume_def) > 3:
-            raise ComposeException("Invalid format(short syntax supported only) of 'volumes' definition: {0}".format(volume))
+            raise Exception("Invalid format(short syntax supported only) of 'volumes' definition: {0}".format(volume))
         volumes_dict[volume_def[0]] = {
             'bind': volume_def[1]
         }
@@ -66,16 +66,14 @@ def parse_volumes(volumes_list):
 
 
 def parse_restart_policy(restart_policy):
-    if restart_policy is None:
+    policies = {"on-failure": {'Name': restart_policy, 'MaximumRetryCount': 5}, "always": {'Name': restart_policy}}
+    try:
+        return policies[restart_policy]
+    except KeyError:
         return None
-    return {
-        'Name': restart_policy,
-        'MaximumRetryCount': 5
-    }
-
 
 SUPPORTED_PARAMETERS_V1 = {
-    'image': None, # not part of kwargs
+    'image': None,  # not part of kwargs
     'net': {'fn': parse_value, 'name': 'network_mode'},
     'ports': parse_ports,
     'volumes': parse_volumes,
@@ -84,6 +82,8 @@ SUPPORTED_PARAMETERS_V1 = {
     'privileged': parse_value,
     'stdin_open': parse_value,
     'restart': {'fn': parse_restart_policy, 'name': 'restart_policy'},
-    'log_driver': None, # special formatting together with log_opt
-    'log_opt': None, # special formatting together with log_driver
+    'cpu_shares': parse_value,
+    'name': parse_value,
+    'log_driver': None,  # special formatting together with log_opt
+    'log_opt': None,  # special formatting together with log_driver
 }

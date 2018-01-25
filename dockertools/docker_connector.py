@@ -1,38 +1,56 @@
 import docker
-from dockertools.compose_tools import create_docker_run_kwargs
+import time
+from .compose_translator import create_docker_run_kwargs
+from .compose_parser import ComposeParser
+
 
 
 class DockerConnector:
     def __init__(self):
-        self.client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        self.docker_client = docker.DockerClient(base_url='unix://var/run/docker.sock') # hish level api
+        self.api_client = docker.APIClient(base_url='unix://var/run/docker.sock') # low level api
+        self.compose_parser = ComposeParser()
 
-    def getImages(self):
-        return self.client.images.list()
+    def get_images(self):
+        return self.docker_client.images().list()
 
-    def getContainers(self):
-        return self.client.containers.list()
+    def get_containers(self):
+        return self.docker_client.containers.list()
 
-    def startService(self, service_name, service_compose):
-        kwargs = create_docker_run_kwargs(service_compose)
-        name = service_name + '_' + service_compose['image']
-        kwargs['name'] = name
-        return self.client.containers.run(service_compose['image'], **kwargs)
+    def start_service(self, yml):
+        parsed_compose = self.compose_parser.create_service(yml)
+        kwargs = create_docker_run_kwargs(parsed_compose)
+        for service in parsed_compose["services"]:
+            try:
+                self.docker_client.containers.run(parsed_compose["services"][service]['image'], detach=True, **kwargs)
+                if service == "lr-agent-new":
+                    while True:
+                        if self.inspect_config("lr-agent-new")["State"]["Running"] is True:
+                            self.remove_container("lr-agent")
+                            self.rename_container("lr-agent-new", "lr-agent")
+                            break
+                        else:
+                            time.sleep(2)
+            except Exception as e:
+                pass
+                #raise exc.StartException("{} start failed with exception {}".format(service, e))
+                # TODO: logging for failure
+        # TODO: return status of transaction
 
-    def getContainersByPrefix(self, prefix):
-        containers = []
-        for container in self.getContainers():
-            if container.name.startsWith(prefix):
-                containers.append(container)
-        return containers
+    def docker_version(self):
+        return self.api_client.version()
 
-    def restartContainer(self, container_id):
-        self.client.containers.get(container_id).restart()
+    def restart_container(self, container_name):
+        self.api_client.restart(container_name)
 
-    def stopContainer(self, container_id):
-        self.client.containers.get(container_id).stop()
+    def stop_container(self, container_name):
+        self.api_client.stop(container_name)
 
-    def runCompose(self, compose_file):
-        # TODO compose
-        pass
+    def rename_container(self, container_name, name):
+        self.api_client.rename(container_name, name)
 
+    def remove_container(self, container_name):
+        self.api_client.remove_container(container_name, force=True)
 
+    def inspect_config(self, container_name):
+        return self.api_client.inspect_container(container_name)

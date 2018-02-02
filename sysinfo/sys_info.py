@@ -1,7 +1,5 @@
 import psutil
 import platform
-from local_resolver_agent.dockertools.docker_connector import DockerConnector
-import json
 
 def get_system_info(docker_connector):
     mem = psutil.virtual_memory()

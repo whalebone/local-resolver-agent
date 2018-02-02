@@ -41,16 +41,22 @@ async def local_resolver_agent_app():
         except Exception as e:
             logger.error('Generic error: {0}'.format(str(e)))
             logger.error('Retrying in 10 secs...')
+            try:
+                await websocket.close()
+            except Exception:
+                pass
             await asyncio.sleep(10)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
     try:
         validate_settings()
         loop = asyncio.get_event_loop()
         loop.run_until_complete(local_resolver_agent_app())
         loop.run_forever()
     except InitException as e:
-        logger = logging.getLogger(__name__)
+        logger.error(str(e))
+    except Exception as e:
         logger.error(str(e))

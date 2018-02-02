@@ -29,7 +29,10 @@ def create_docker_run_kwargs(service_compose_fragmet):
 
 
 def parse_value(value):
-    return value
+    if isinstance(value, float):
+        return int(value)
+    else:
+        return value
 
 
 def parse_ports(ports_list):

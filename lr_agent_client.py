@@ -1,5 +1,6 @@
 import json
 import asyncio
+import base64
 
 from local_resolver_agent.dockertools.docker_connector import DockerConnector
 from local_resolver_agent.sysinfo.sys_info import get_system_info
@@ -23,11 +24,13 @@ class LRAgentClient:
             try:
                 response = await self.process(request)
             except Exception as e:
-                response = {"status": "general failure", "body": e}
+                request = json.loads(request)
+                response = {"status": "failure", "requestId": request["requestId"], "action": request["action"],
+                            "body": e}
                 self.logger.warning(e)
             await self.send(response)
 
-    async def send(self, message):
+    async def send(self, message: dict):
         try:
             await self.websocket.send(json.dumps(message))
         except Exception as e:
@@ -50,6 +53,7 @@ class LRAgentClient:
         if "requestId" in request and request["requestId"] is not None:
             response["requestId"] = request["requestId"]
         response["action"] = request["action"]
+        response["status"] = "success"
 
         if request["action"] == "sysinfo":
             try:
@@ -69,11 +73,12 @@ class LRAgentClient:
                 try:
                     await self.dockerConnector.start_service(config)
                 except ContainerException as e:
-                    status[service] = {"status": "failed", "body": e}
+                    status[service] = {"status": "failure", "body": e}
+                    response["status"] = "failure"
                     self.logger.info(e)
                 else:
                     status[service]["status"] = "success"
-            response["status"] = status
+            response["data"] = status
             return response
 
         if request["action"] == "upgrade":
@@ -86,13 +91,15 @@ class LRAgentClient:
                     try:
                         await self.dockerConnector.remove_container(service)  # tries to remove old container
                     except ContainerException as e:
-                        status[service] = {"status": "failed", "action": "remove old container", "body": e}
+                        status[service] = {"status": "failure", "message": "remove old container", "body": e}
+                        response["status"] = "failure"
                         self.logger.info(e)
                     else:
                         try:
-                            await self.dockerConnector.start_service(config)  # tries to start new container
+                            await self.dockerConnector.start_service(config, service)  # tries to start new container
                         except ContainerException as e:
-                            status[service] = {"status": "failed", "action": "start of new container", "body": e}
+                            status[service] = {"status": "failure", "message": "start of new container", "body": e}
+                            response["status"] = "failure"
                             self.logger.info(e)
                         else:
                             status[service]["status"] = "success"
@@ -100,21 +107,24 @@ class LRAgentClient:
                 try:
                     await self.dockerConnector.rename_container("lr-agent", "lr-agent-old")  # tries to rename old agent
                 except ContainerException as e:
-                    status["lr-agent"] = {"status": "failed", "action": "rename old agent", "body": e}
+                    status["lr-agent"] = {"status": "failure", "message": "rename old agent", "body": e}
+                    response["status"] = "failure"
                     self.logger.info(e)
                 else:
                     for service, config in parsed_compose.items():
                         status[service] = {}
                         try:
-                            await self.dockerConnector.start_service(config)  # tries to start new agent
+                            await self.dockerConnector.start_service(config, service)  # tries to start new agent
                         except ContainerException as e:
-                            status[service] = {"status": "failed", "action": "start of new agent", "body": e}
+                            status[service] = {"status": "failure", "message": "start of new agent", "body": e}
+                            response["status"] = "failure"
                             self.logger.info(e)
                             try:
                                 await self.dockerConnector.rename_container("lr-agent-old",
                                                                             "lr-agent")  # tries to rename old agent
                             except ContainerException as e:
-                                status[service] = {"status": "failed", "action": "rename rollback", "body": e}
+                                status[service] = {"status": "failure", "message": "rename rollback", "body": e}
+                                response["status"] = "failure"
                                 self.logger.info(e)
                         else:
                             while True:
@@ -124,15 +134,16 @@ class LRAgentClient:
                                         await self.dockerConnector.remove_container(
                                             "lr-agent-old")  # tries to renomve old agent
                                     except ContainerException as e:
-                                        status[service] = {"status": "failed", "action": "removal of old agent",
+                                        status[service] = {"status": "failure", "message": "removal of old agent",
                                                            "body": e}
+                                        response["status"] = "failure"
                                         self.logger.info(e)
                                         try:
                                             await self.dockerConnector.remove_container(
                                                 "lr-agent")  # tries to rename new agent
                                         except ContainerException as e:
-                                            status[service] = {"status": "failed",
-                                                               "action": "removal of old agent and new agent",
+                                            status[service] = {"status": "failure",
+                                                               "message": "removal of old agent and new agent",
                                                                "body": e}
                                             self.logger.info(e)
                                         else:
@@ -140,15 +151,14 @@ class LRAgentClient:
                                                 await self.dockerConnector.rename_container("lr-agent-old",
                                                                                             "lr-agent")  # tries to rename old agent
                                             except ContainerException as e:
-                                                status[service] = {"status": "failed",
-                                                                   "action": "removal and rename of old agent",
+                                                status[service] = {"status": "failure",
+                                                                   "message": "removal and rename of old agent",
                                                                    "body": e}
                                                 self.logger.info(e)
                                     break
                                 else:
                                     await asyncio.sleep(2)
-            response["status"] = status
-            print(response)
+            response["data"] = status
             return response
 
         if request["action"] == "rename":
@@ -158,11 +168,12 @@ class LRAgentClient:
                 try:
                     await self.dockerConnector.rename_container(old_name, new_name)
                 except ContainerException as e:
-                    status[old_name] = {"status": "failed", "body": e}
+                    status[old_name] = {"status": "failure", "body": e}
+                    response["status"] = "failure"
                     self.logger.info(e)
                 else:
                     status[old_name]["status"] = "sucess"
-            response["status"] = status
+            response["data"] = status
             return response
 
         if request["action"] == "restart":
@@ -172,7 +183,8 @@ class LRAgentClient:
                 try:
                     await self.dockerConnector.restart_container(container)
                 except ContainerException as e:
-                    status[container] = {"status": "failed", "body": e}
+                    status[container] = {"status": "failure", "body": e}
+                    response["status"] = "failure"
                     self.logger.info(e)
                 else:
                     status[container]["status"] = "sucess"
@@ -186,7 +198,8 @@ class LRAgentClient:
                 try:
                     await self.dockerConnector.stop_container(container)
                 except ContainerException as e:
-                    status[container] = {"status": "failed", "body": e}
+                    status[container] = {"status": "failure", "body": e}
+                    response["status"] = "failure"
                     self.logger.info(e)
                 else:
                     status[container]["status"] = "sucess"
@@ -200,7 +213,8 @@ class LRAgentClient:
                 try:
                     await self.dockerConnector.remove_container(container)
                 except ContainerException as e:
-                    status[container] = {"status": "failed", "body": e}
+                    status[container] = {"status": "failure", "body": e}
+                    response["status"] = "failure"
                     self.logger.info(e)
                 else:
                     status[container]["status"] = "sucess"
@@ -219,7 +233,7 @@ class LRAgentClient:
                     "name": container.name,
                     "status": container.status
                 })
-            return {"status": "success", "data": data}
+            return {**response, "status": "success", "data": data}
         else:
             return self.getError('Unknown action', request)
 

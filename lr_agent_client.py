@@ -66,9 +66,10 @@ class LRAgentClient:
 
         if request["action"] == "create":
             status = {}
-            # parsed_compose = await self.compose_parser.create_service(request["data"])
-            parsed_compose = request["data"]
-            for service, config in parsed_compose.items():
+            decoded_data=base64.b64decode(request["data"])
+            parsed_compose = self.compose_parser.create_service(decoded_data)
+            #parsed_compose = request["data"]
+            for service, config in parsed_compose["services"].items():
                 status[service] = {}
                 try:
                     await self.dockerConnector.start_service(config)
@@ -83,10 +84,11 @@ class LRAgentClient:
 
         if request["action"] == "upgrade":
             status = {}
-            # parsed_compose = await self.compose_parser.create_service(request["data"])
-            parsed_compose = request["data"]
+            decoded_data=base64.b64decode(request["data"])
+            parsed_compose = self.compose_parser.create_service(decoded_data)
+            #parsed_compose = request["data"]
             if "lr-agent" not in parsed_compose:
-                for service, config in parsed_compose.items():
+                for service, config in parsed_compose["services"].items():
                     status[service] = {}
                     try:
                         await self.dockerConnector.remove_container(service)  # tries to remove old container
@@ -96,7 +98,7 @@ class LRAgentClient:
                         self.logger.info(e)
                     else:
                         try:
-                            await self.dockerConnector.start_service(config, service)  # tries to start new container
+                            await self.dockerConnector.start_service(config)  # tries to start new container
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "start of new container", "body": e}
                             response["status"] = "failure"
@@ -111,10 +113,10 @@ class LRAgentClient:
                     response["status"] = "failure"
                     self.logger.info(e)
                 else:
-                    for service, config in parsed_compose.items():
+                    for service, config in parsed_compose["services"].items():
                         status[service] = {}
                         try:
-                            await self.dockerConnector.start_service(config, service)  # tries to start new agent
+                            await self.dockerConnector.start_service(config)  # tries to start new agent
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "start of new agent", "body": e}
                             response["status"] = "failure"

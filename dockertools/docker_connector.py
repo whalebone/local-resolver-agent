@@ -1,7 +1,7 @@
 import docker
 
 from .compose_translator import create_docker_run_kwargs
-from local_resolver_agent.exception import exc
+from local_resolver_agent.exception.exc import ContainerException
 from local_resolver_agent.secret_directory import logger
 
 
@@ -26,13 +26,12 @@ class DockerConnector:
             self.logger.info(e)
             return []
 
-    async def start_service(self, parsed_compose):
+    async def start_service(self, parsed_compose: dict):
         kwargs = create_docker_run_kwargs(parsed_compose)
         try:
             self.docker_client.containers.run(parsed_compose['image'], detach=True, **kwargs)
         except Exception as e:
-            self.logger.warning(e)
-            raise exc.ContainerException(e)
+            raise ContainerException(e)
 
     def docker_version(self):
         try:
@@ -41,37 +40,32 @@ class DockerConnector:
             self.logger.info(e)
             return "docker version unavailable"
 
-    async def restart_container(self, container_name):
+    async def restart_container(self, container_name: str):
         try:
             self.api_client.restart(container_name)
         except Exception as e:
-            self.logger.info(e)
-            raise exc.ContainerException(e)
+            raise ContainerException(e)
 
-    async def stop_container(self, container_name):
+    async def stop_container(self, container_name: str):
         try:
             self.api_client.stop(container_name)
         except Exception as e:
-            self.logger.info(e)
-            raise exc.ContainerException(e)
+            raise ContainerException(e)
 
-    async def rename_container(self, container_name, name):
+    async def rename_container(self, container_name: str, name: str):
         try:
             self.api_client.rename(container_name, name)
         except Exception as e:
-            self.logger.info(e)
-            raise exc.ContainerException(e)
+            raise ContainerException(e)
 
-    async def remove_container(self, container_name):
+    async def remove_container(self, container_name: str):
         try:
-            return self.api_client.remove_container(container_name, force=True)
+            self.api_client.remove_container(container_name, force=True)
         except Exception as e:
-            self.logger.info(e)
-            raise exc.ContainerException(e)
+            raise ContainerException(e)
 
-    async def inspect_config(self, container_name):
+    async def inspect_config(self, container_name: str):
         try:
             return self.api_client.inspect_container(container_name)
         except Exception as e:
-            self.logger.info(e)
-            raise exc.ContainerException(e)
+            raise ContainerException(e)

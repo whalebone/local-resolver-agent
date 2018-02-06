@@ -1,6 +1,6 @@
 import requests
 import os
-
+import json
 
 class FirewallConnector:
     def __init__(self):
@@ -26,3 +26,9 @@ class FirewallConnector:
     def delete_rule(self, rule_id: str):
         req = requests.delete("http://{}:8053/daf/{}".format(self.resolver_address, rule_id))
         return req.text
+
+    def inject_all_rules(self):
+        with open("/etc/whalebone/kresd/rules", "r") as file:
+            rules = json.load(file)
+        for rule in rules:
+            self.create_rule(rule["info"])

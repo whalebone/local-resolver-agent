@@ -1,7 +1,6 @@
 import yaml
-import docker
 
-# from .exc import ComposeException
+from local_resolver_agent.exception import exc
 
 SUPPORTED_VERSIONS = ['1', '3']
 LR_AGENT_SERVICE = "lr-agent"
@@ -16,10 +15,7 @@ class ComposeParser:
         compose = self.parse(compose_yaml)
         self.validate(compose)
         for service_name in compose['services']:
-            if service_name == LR_AGENT_SERVICE:
-                compose['services'][service_name]["name"] = "lr-agent-new"
-            else:
-                compose['services'][service_name]["name"] = service_name
+            compose['services'][service_name]["name"] = "whalebone_{}_1".format(service_name)
         return compose
 
     def parse(self, compose_yaml):
@@ -33,12 +29,12 @@ class ComposeParser:
                     'version': '1',
                     'services': parsed_compose
                 }
-        except yaml.YAMLError as exc:
-            raise Exception("Invalid compose YAML format") from exc
+        except yaml.YAMLError as e:
+            raise exc.ComposeException("Invalid compose YAML format")
 
     def validate(self, parsed_compose):
         if parsed_compose['version'] not in SUPPORTED_VERSIONS:
-            raise Exception("Compose version '{0}' not supported. Supported versions: {1}"
-                            .format(parsed_compose['version'], SUPPORTED_VERSIONS))
+            raise exc.ComposeException("Compose version '{0}' not supported. Supported versions: {1}"
+                                       .format(parsed_compose['version'], SUPPORTED_VERSIONS))
         if 'services' not in parsed_compose:
-            raise Exception("Missing section 'services'")
+            raise exc.ComposeException("Missing section 'services'")

@@ -44,6 +44,10 @@ class LRAgentClient:
             sys_info = {"action": "sysinfo", "status": "failure", "data": str(e)}
         await self.send(sys_info)
 
+    async def send_acknowledgement(self, message: dict):
+        message["data"] = "Command received"
+        await self.send(message)
+
     async def process(self, request_json):
         request = json.loads(request_json)
         print(request)
@@ -65,6 +69,7 @@ class LRAgentClient:
             return response
 
         if request["action"] == "create":
+            await self.send_acknowledgement(response)
             status = {}
             decoded_data = base64.b64decode(request["data"])
             parsed_compose = self.compose_parser.create_service(decoded_data)
@@ -79,10 +84,12 @@ class LRAgentClient:
                     self.logger.info(e)
                 else:
                     status[service]["status"] = "success"
+            del response["requestId"]
             response["data"] = status
             return response
 
         if request["action"] == "upgrade":
+            await self.send_acknowledgement(response)
             status = {}
             decoded_data = base64.b64decode(request["data"])
             parsed_compose = self.compose_parser.create_service(decoded_data)
@@ -162,6 +169,7 @@ class LRAgentClient:
                                         break
                                 else:
                                     await asyncio.sleep(2)
+            del response["requestId"]
             response["data"] = status
             return response
 
@@ -181,6 +189,7 @@ class LRAgentClient:
             return response
 
         if request["action"] == "restart":
+            await self.send_acknowledgement(response)
             status = {}
             for container in request["data"]:
                 status[container] = {}
@@ -192,10 +201,12 @@ class LRAgentClient:
                     self.logger.info(e)
                 else:
                     status[container]["status"] = "success"
+            del response["requestId"]
             response["data"] = status
             return response
 
         if request["action"] == "stop":
+            await self.send_acknowledgement(response)
             status = {}
             for container in request["data"]:
                 status[container] = {}
@@ -207,10 +218,12 @@ class LRAgentClient:
                     self.logger.info(e)
                 else:
                     status[container]["status"] = "success"
+            del response["requestId"]
             response["data"] = status
             return response
 
         if request["action"] == "remove":
+            await self.send_acknowledgement(response)
             status = {}
             for container in request["data"]:
                 status[container] = {}
@@ -222,6 +235,7 @@ class LRAgentClient:
                     self.logger.info(e)
                 else:
                     status[container]["status"] = "success"
+            del response["requestId"]
             response["data"] = status
             return response
 

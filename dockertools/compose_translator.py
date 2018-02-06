@@ -25,6 +25,13 @@ def create_docker_run_kwargs(service_compose_fragmet):
         }
         if 'log_opt' in service_compose_fragmet and service_compose_fragmet['log_opt'] is not None:
             kwargs['log_config']['config'] = service_compose_fragmet['log_opt']
+
+    if 'logging' in service_compose_fragmet and service_compose_fragmet['logging']['driver'] is not None:
+        kwargs['log_config'] = {
+            'type': service_compose_fragmet['logging']['driver']
+        }
+        if 'log_opt' in service_compose_fragmet and service_compose_fragmet['log_opt'] is not None:
+            kwargs['log_config']['config'] = service_compose_fragmet['logging']['options']
     return kwargs
 
 
@@ -75,9 +82,11 @@ def parse_restart_policy(restart_policy):
     except KeyError:
         return None
 
+
 SUPPORTED_PARAMETERS_V1 = {
-    'image': None,  # not part of kwargs
-    'net': {'fn': parse_value, 'name': 'network_mode'},
+    'image': None,  # not part of kwargs #
+    'net': {'fn': parse_value, 'name': 'network_mode'},  # <1
+    'network_mode': parse_value,
     'ports': parse_ports,
     'volumes': parse_volumes,
     'environment': parse_value,
@@ -85,8 +94,9 @@ SUPPORTED_PARAMETERS_V1 = {
     'privileged': parse_value,
     'stdin_open': parse_value,
     'restart': {'fn': parse_restart_policy, 'name': 'restart_policy'},
-    'cpu_shares': parse_value,
+    'cpu_shares': parse_value, # <1
     'name': parse_value,
-    'log_driver': None,  # special formatting together with log_opt
-    'log_opt': None,  # special formatting together with log_driver
+    'logging': None,
+    'log_driver': None,  # special formatting together with log_opt <1
+    'log_opt': None,  # special formatting together with log_driver <
 }

@@ -1,6 +1,7 @@
 import json
 import asyncio
 import base64
+import yaml
 
 from local_resolver_agent.dockertools.docker_connector import DockerConnector
 from local_resolver_agent.sysinfo.sys_info import get_system_info
@@ -65,9 +66,9 @@ class LRAgentClient:
 
         if request["action"] == "create":
             status = {}
-            decoded_data=base64.b64decode(request["data"])
+            decoded_data = base64.b64decode(request["data"])
             parsed_compose = self.compose_parser.create_service(decoded_data)
-            #parsed_compose = request["data"]
+            self.save_file("compose/docker-compose.yml", "yml", parsed_compose)
             for service, config in parsed_compose["services"].items():
                 status[service] = {}
                 try:
@@ -83,9 +84,9 @@ class LRAgentClient:
 
         if request["action"] == "upgrade":
             status = {}
-            decoded_data=base64.b64decode(request["data"])
+            decoded_data = base64.b64decode(request["data"])
             parsed_compose = self.compose_parser.create_service(decoded_data)
-            #parsed_compose = request["data"]
+            self.save_file("compose/docker-compose.yml", "yml", parsed_compose)
             if "lr-agent" not in parsed_compose:
                 for service, config in parsed_compose["services"].items():
                     status[service] = {}
@@ -157,7 +158,7 @@ class LRAgentClient:
                                                                    "body": str(e)}
                                                 self.logger.info(e)
                                         # break
-                                    else: # for testing puropse
+                                    else:  # for testing purpose
                                         break
                                 else:
                                     await asyncio.sleep(2)
@@ -239,6 +240,15 @@ class LRAgentClient:
             return {**response, "status": "success", "data": data}
         else:
             return self.getError('Unknown action', request)
+
+    def save_file(self, location, file_type, content):
+        with open("/etc/whalebone/{}".format(location), "w") as file:
+            if file_type == "yml":
+                yaml.dump(content, file, default_flow_style=False)
+            elif file_type == "json":
+                json.dump(content, file)
+            else:
+                file.write(content)
 
     def getError(self, message, request):
         errorResponse = {

@@ -5,9 +5,10 @@ import yaml
 
 from local_resolver_agent.dockertools.docker_connector import DockerConnector
 from local_resolver_agent.sysinfo.sys_info import get_system_info
-from local_resolver_agent.exception.exc import ContainerException
+from local_resolver_agent.exception.exc import ContainerException, ComposeException
 from local_resolver_agent.dockertools.compose_parser import ComposeParser
 from local_resolver_agent.secret_directory.logger import build_logger
+from local_resolver_agent.resolvertools.resolver_connector import FirewallConnector
 
 
 class LRAgentClient:
@@ -16,6 +17,7 @@ class LRAgentClient:
         self.websocket = websocket
         self.dockerConnector = DockerConnector()
         self.compose_parser = ComposeParser()
+        self.firewall_connector=FirewallConnector()
         self.logger = build_logger("lr-agent", "/home/narzhan/Downloads/agent_logs/")
 
     async def listen(self):
@@ -36,7 +38,7 @@ class LRAgentClient:
         except Exception as e:
             self.logger.warning(e)
 
-    async def sendSysInfo(self):
+    async def send_sys_info(self):
         try:
             sys_info = {"action": "sysinfo", "data": get_system_info(self.dockerConnector)}
         except Exception as e:
@@ -59,21 +61,75 @@ class LRAgentClient:
         response["action"] = request["action"]
         response["status"] = "success"
 
-        if request["action"] == "sysinfo":
-            try:
-                response["data"] = get_system_info(self.dockerConnector)
-                response["status"] = "success"
-            except Exception as e:
-                self.logger.info(e)
-                self.getError(e, request)
-            return response
+        method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
+                        "rename": self.rename_container, "containers": self.list_containers,
+                        "restart": self.restart_container, "stop": self.stop_container, "remove": self.remove_container,
+                        "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
+                        "fwmodify": self.modify_rule, "fwdelete": self.delete_rule}
+        method_arguments = {"sysinfo": [response, request], "create": [response, request],
+                            "upgrade": [response, request],
+                            "rename": [response, request], "containers": [response],
+                            "restart": [response, request], "stop": [response, request], "remove": [response, request],
+                            "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
+                            "fwmodify": [response, request], "fwdelete": [response, request]}
 
-        if request["action"] == "create":
-            await self.send_acknowledgement(response)
-            status = {}
-            decoded_data = base64.b64decode(request["data"])
+        try:
+            return await method_calls[request["action"]](*method_arguments[request["action"]])
+        except KeyError as e:
+            self.logger.info(e)
+            return self.getError('Unknown action', request)
+
+        # if request["action"] == "sysinfo":
+        #     return self.system_info(response, request)
+        #
+        # if request["action"] == "create":
+        #     return await self.create_container(response, request)
+        #
+        # if request["action"] == "upgrade":
+        #     return await self.upgrade_container(response, request)
+        #
+        # if request["action"] == "rename":
+        #     return await self.rename_container(response, request)
+        #
+        # if request["action"] == "restart":
+        #     return await self.restart_container(response, request)
+        #
+        # if request["action"] == "stop":
+        #     return await self.stop_container(response, request)
+        #
+        # if request["action"] == "remove":
+        #     return await self.remove_container(response, request)
+        #
+        # if request["action"] == "containers":
+        #     return self.list_containers(response)
+        # else:
+        #     return self.getError('Unknown action', request)
+
+    async def system_info(self, response: dict, request: dict) -> dict:
+        try:
+            response["data"] = get_system_info(self.dockerConnector)
+            response["status"] = "success"
+        except Exception as e:
+            self.logger.info(e)
+            self.getError(e, request)
+        return response
+
+    async def create_container(self, response: dict, request: dict) -> dict:
+        await self.send_acknowledgement(response)
+        status = {}
+        decoded_data = base64.b64decode(request["data"])
+        try:
             parsed_compose = self.compose_parser.create_service(decoded_data)
-            self.save_file("compose/docker-compose.yml", "yml", parsed_compose)
+        except ComposeException as e:
+            self.logger.warning(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        else:
+            if "resolver" not in parsed_compose["services"]:
+                try:
+                    self.save_file("compose/docker-compose.yml", "yml", parsed_compose)
+                except IOError as e:
+                    status["dump"] = {"compose": {"status": "failure", "body": str(e)}}
             for service, config in parsed_compose["services"].items():
                 status[service] = {}
                 try:
@@ -86,15 +142,22 @@ class LRAgentClient:
                     status[service]["status"] = "success"
             del response["requestId"]
             response["data"] = status
-            return response
+        return response
 
-        if request["action"] == "upgrade":
-            await self.send_acknowledgement(response)
-            status = {}
-            decoded_data = base64.b64decode(request["data"])
+    async def upgrade_container(self, response: dict, request: dict) -> dict:
+        await self.send_acknowledgement(response)
+        status = {}
+        decoded_data = base64.b64decode(request["data"])
+        try:
             parsed_compose = self.compose_parser.create_service(decoded_data)
-            self.save_file("compose/docker-compose.yml", "yml", parsed_compose)
-            if "lr-agent" not in parsed_compose:
+        except ComposeException as e:
+            self.logger.warning(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        else:
+            if "resolver" in parsed_compose["services"]:
+                self.save_file("compose/docker-compose.yml", "yml", parsed_compose)
+            if "lr-agent" not in parsed_compose["services"]:
                 for service, config in parsed_compose["services"].items():
                     status[service] = {}
                     try:
@@ -171,98 +234,164 @@ class LRAgentClient:
                                     await asyncio.sleep(2)
             del response["requestId"]
             response["data"] = status
-            return response
+        return response
 
-        if request["action"] == "rename":
-            status = {}
-            for old_name, new_name in request["data"].items():
-                status[old_name] = {}
-                try:
-                    await self.dockerConnector.rename_container(old_name, new_name)
-                except ContainerException as e:
-                    status[old_name] = {"status": "failure", "body": str(e)}
-                    response["status"] = "failure"
-                    self.logger.info(e)
-                else:
-                    status[old_name]["status"] = "success"
-            response["data"] = status
-            return response
+    async def rename_container(self, response: dict, request: dict) -> dict:
+        status = {}
+        for old_name, new_name in request["data"].items():
+            status[old_name] = {}
+            try:
+                await self.dockerConnector.rename_container(old_name, new_name)
+            except ContainerException as e:
+                status[old_name] = {"status": "failure", "body": str(e)}
+                response["status"] = "failure"
+                self.logger.info(e)
+            else:
+                status[old_name]["status"] = "success"
+        response["data"] = status
+        return response
 
-        if request["action"] == "restart":
-            await self.send_acknowledgement(response)
-            status = {}
-            for container in request["data"]:
-                status[container] = {}
-                try:
-                    await self.dockerConnector.restart_container(container)
-                except ContainerException as e:
-                    status[container] = {"status": "failure", "body": str(e)}
-                    response["status"] = "failure"
-                    self.logger.info(e)
-                else:
-                    status[container]["status"] = "success"
-            del response["requestId"]
-            response["data"] = status
-            return response
+    async def restart_container(self, response: dict, request: dict) -> dict:
+        await self.send_acknowledgement(response)
+        status = {}
+        for container in request["data"]:
+            status[container] = {}
+            try:
+                await self.dockerConnector.restart_container(container)
+            except ContainerException as e:
+                status[container] = {"status": "failure", "body": str(e)}
+                response["status"] = "failure"
+                self.logger.info(e)
+            else:
+                status[container]["status"] = "success"
+        del response["requestId"]
+        response["data"] = status
+        return response
 
-        if request["action"] == "stop":
-            await self.send_acknowledgement(response)
-            status = {}
-            for container in request["data"]:
-                status[container] = {}
-                try:
-                    await self.dockerConnector.stop_container(container)
-                except ContainerException as e:
-                    status[container] = {"status": "failure", "body": str(e)}
-                    response["status"] = "failure"
-                    self.logger.info(e)
-                else:
-                    status[container]["status"] = "success"
-            del response["requestId"]
-            response["data"] = status
-            return response
+    async def stop_container(self, response: dict, request: dict) -> dict:
+        await self.send_acknowledgement(response)
+        status = {}
+        for container in request["data"]:
+            status[container] = {}
+            try:
+                await self.dockerConnector.stop_container(container)
+            except ContainerException as e:
+                status[container] = {"status": "failure", "body": str(e)}
+                response["status"] = "failure"
+                self.logger.info(e)
+            else:
+                status[container]["status"] = "success"
+        del response["requestId"]
+        response["data"] = status
+        return response
 
-        if request["action"] == "remove":
-            await self.send_acknowledgement(response)
-            status = {}
-            for container in request["data"]:
-                status[container] = {}
-                try:
-                    await self.dockerConnector.remove_container(container)
-                except ContainerException as e:
-                    status[container] = {"status": "failure", "body": str(e)}
-                    response["status"] = "failure"
-                    self.logger.info(e)
-                else:
-                    status[container]["status"] = "success"
-            del response["requestId"]
-            response["data"] = status
-            return response
+    async def remove_container(self, response: dict, request: dict) -> dict:
+        await self.send_acknowledgement(response)
+        status = {}
+        for container in request["data"]:
+            status[container] = {}
+            try:
+                await self.dockerConnector.remove_container(container)
+            except ContainerException as e:
+                status[container] = {"status": "failure", "body": str(e)}
+                response["status"] = "failure"
+                self.logger.info(e)
+            else:
+                status[container]["status"] = "success"
+        del response["requestId"]
+        response["data"] = status
+        return response
 
-        if request["action"] == "containers":
-            data = []
-            for container in self.dockerConnector.get_containers():
-                data.append({
-                    "id": container.short_id,
-                    "image": {
-                        "id": container.image.id[7:19],
-                        "tags": container.image.tags
-                    },
-                    "name": container.name,
-                    "status": container.status
-                })
-            return {**response, "status": "success", "data": data}
+    async def list_containers(self, response: dict) -> dict:
+        data = []
+        for container in self.dockerConnector.get_containers():
+            data.append({
+                "id": container.short_id,
+                "image": {
+                    "id": container.image.id[7:19],
+                    "tags": container.image.tags
+                },
+                "name": container.name,
+                "status": container.status
+            })
+        return {**response, "data": data}
+
+    async def firewall_rules(self, response: dict) -> dict:
+        try:
+            data = self.firewall_connector.active_rules()
+        except (ConnectionError, Exception) as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
         else:
-            return self.getError('Unknown action', request)
+            response["data"] = data
+        return response
+
+    async def create_rule(self, response: dict, request: dict) -> dict:
+        try:
+            data = self.firewall_connector.create_rule(request["data"])
+        except (ConnectionError, Exception) as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        else:
+            response["data"] = data
+            try:
+                data = self.firewall_connector.active_rules()
+            except (ConnectionError, Exception) as e:
+                self.logger.info(e)
+                response["status"] = "failure"
+                response["data"] = str(e)
+            else:
+                try:
+                    self.save_file("kresd/rules.txt", "json", data)
+                except IOError as e:
+                    self.logger.info(e)
+                    response["status"] = "failure"
+                    response["data"] = str(e)
+        return response
+
+    async def fetch_rule(self, response: dict, request: dict) -> dict:
+        try:
+            data = self.firewall_connector.fetch_rule_information(request["data"])
+        except (ConnectionError, Exception) as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        else:
+            response["data"] = data
+        return response
+
+    async def delete_rule(self, response: dict, request: dict) -> dict:
+        try:
+            self.firewall_connector.delete_rule(request["data"])
+        except (ConnectionError, Exception) as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        return response
+
+    async def modify_rule(self, response: dict, request: dict) -> dict:
+        try:
+            self.firewall_connector.modify_rule(*request["data"])
+        except (ConnectionError, Exception) as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        return response
 
     def save_file(self, location, file_type, content):
-        with open("/etc/whalebone/{}".format(location), "w") as file:
-            if file_type == "yml":
-                yaml.dump(content, file, default_flow_style=False)
-            elif file_type == "json":
-                json.dump(content, file)
-            else:
-                file.write(content)
+        try:
+            with open("/etc/whalebone/{}".format(location), "w") as file:
+                if file_type == "yml":
+                    yaml.dump(content, file, default_flow_style=False)
+                elif file_type == "json":
+                    json.dump(content, file)
+                else:
+                    file.write(content)
+        except Exception as e:
+            self.logger.info(e)
+            raise IOError(e)
 
     def getError(self, message, request):
         errorResponse = {

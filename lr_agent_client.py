@@ -7,7 +7,8 @@ from local_resolver_agent.dockertools.docker_connector import DockerConnector
 from local_resolver_agent.sysinfo.sys_info import get_system_info
 from local_resolver_agent.exception.exc import ContainerException, ComposeException
 from local_resolver_agent.dockertools.compose_parser import ComposeParser
-from local_resolver_agent.secret_directory.logger import build_logger
+from local_resolver_agent.loggingtools.logger import build_logger
+from local_resolver_agent.loggingtools.log_reader import LogReader
 from local_resolver_agent.resolvertools.resolver_connector import FirewallConnector
 
 
@@ -18,6 +19,7 @@ class LRAgentClient:
         self.dockerConnector = DockerConnector()
         self.compose_parser = ComposeParser()
         self.firewall_connector = FirewallConnector()
+        self.log_reader = LogReader()
         self.logger = build_logger("lr-agent", "/home/narzhan/Downloads/agent_logs/")
 
     async def listen(self):
@@ -66,14 +68,18 @@ class LRAgentClient:
                         "restart": self.restart_container, "stop": self.stop_container, "remove": self.remove_container,
                         "containerlogs": self.container_logs,
                         "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
-                        "fwmodify": self.modify_rule, "fwdelete": self.delete_rule}
+                        "fwmodify": self.modify_rule, "fwdelete": self.delete_rule,
+                        "aglogs": self.agent_log_files, "aglog": self.agent_all_logs,
+                        "agflog": self.agent_filtered_logs, "agdellogs": self.agent_delete_logs}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
                             "containerlogs": [response, request],
                             "restart": [response, request], "stop": [response, request], "remove": [response, request],
                             "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
-                            "fwmodify": [response, request], "fwdelete": [response, request]}
+                            "fwmodify": [response, request], "fwdelete": [response, request],
+                            "aglogs": [response], "aglog": [response, request],
+                            "agflog": [response, request], "agdellogs": [response, request]}
 
         try:
             return await method_calls[request["action"]](*method_arguments[request["action"]])
@@ -324,7 +330,7 @@ class LRAgentClient:
         try:
             logs = self.dockerConnector.container_logs(**request["data"])
         except ConnectionError as e:
-            response["data"] = {"status": "failure", "body": str(e)}
+            response["data"] = str(e)
             response["status"] = "failure"
             self.logger.info(e)
         else:
@@ -393,6 +399,52 @@ class LRAgentClient:
             self.logger.info(e)
             response["status"] = "failure"
             response["data"] = str(e)
+        return response
+
+    async def agent_log_files(self, response: dict) -> dict:
+        try:
+            files = self.log_reader.list_files()
+        except FileNotFoundError as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        else:
+            response["data"] = files
+        return response
+
+    async def agent_all_logs(self, response: dict, request: dict) -> dict:
+        try:
+            lines = self.log_reader.view_log(request["data"])
+        except IOError as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        else:
+            response["data"] = lines
+        return response
+
+    async def agent_filtered_logs(self, response: dict, request: dict) -> dict:
+        try:
+            lines = self.log_reader.filter_logs(**request["data"])
+        except Exception as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        else:
+            response["data"] = lines
+        return response
+
+    async def agent_delete_logs(self, response: dict, request: dict) -> dict:
+        status = {}
+        for file in request["data"]:
+            status[file] = {}
+            try:
+                self.log_reader.delete_log(file)
+            except IOError as e:
+                response[file] = {"status": "failure", "data": str(e)}
+                response["status"] = "failure"
+            else:
+                response[file]["status"] = "success"
         return response
 
     def save_file(self, location, file_type, content):

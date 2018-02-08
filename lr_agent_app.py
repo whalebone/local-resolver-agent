@@ -6,9 +6,11 @@ import websockets
 
 from lr_agent_client import LRAgentClient
 from exception.exc import InitException
+from loggingtools.logger import build_logger
 
 WHALEBONE_LR_CLIENT_CERT = os.environ['WHALEBONE_LR_CLIENT_CERT']
 WHALEBONE_PORTAL_ADDRESS = os.environ['WHALEBONE_PORTAL_ADDRESS']
+
 
 
 def validate_settings():
@@ -36,7 +38,7 @@ async def local_resolver_agent_app():
             client = LRAgentClient(websocket)
             asyncio.ensure_future(client.listen())
             while True:
-                await client.sendSysInfo()
+                await client.send_sys_info()
                 await asyncio.sleep(10)
         except Exception as e:
             logger.error('Generic error: {0}'.format(str(e)))
@@ -49,8 +51,11 @@ async def local_resolver_agent_app():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
+    if os.environ['LOGGING_LEVEL'] == "DEBUG":
+        logging.basicConfig(level=logging.DEBUG)
+        logger = logging.getLogger(__name__)
+    else:
+        logger = build_logger(__name__, "/home/narzhan/Downloads/agent_logs/")
     try:
         validate_settings()
         loop = asyncio.get_event_loop()

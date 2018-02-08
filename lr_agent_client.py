@@ -17,7 +17,7 @@ class LRAgentClient:
         self.websocket = websocket
         self.dockerConnector = DockerConnector()
         self.compose_parser = ComposeParser()
-        self.firewall_connector=FirewallConnector()
+        self.firewall_connector = FirewallConnector()
         self.logger = build_logger("lr-agent", "/home/narzhan/Downloads/agent_logs/")
 
     async def listen(self):
@@ -64,11 +64,13 @@ class LRAgentClient:
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
                         "rename": self.rename_container, "containers": self.list_containers,
                         "restart": self.restart_container, "stop": self.stop_container, "remove": self.remove_container,
+                        "containerlogs": self.container_logs,
                         "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
                         "fwmodify": self.modify_rule, "fwdelete": self.delete_rule}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
+                            "containerlogs": [response, request],
                             "restart": [response, request], "stop": [response, request], "remove": [response, request],
                             "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
                             "fwmodify": [response, request], "fwdelete": [response, request]}
@@ -113,6 +115,8 @@ class LRAgentClient:
             self.logger.info(e)
             self.getError(e, request)
         return response
+
+    # {compose: yml_string, config: string_config, rules: rules_list}
 
     async def create_container(self, response: dict, request: dict) -> dict:
         await self.send_acknowledgement(response)
@@ -315,6 +319,17 @@ class LRAgentClient:
                 "status": container.status
             })
         return {**response, "data": data}
+
+    async def container_logs(self, response: dict, request: dict) -> dict:
+        try:
+            logs = self.dockerConnector.container_logs(**request["data"])
+        except ConnectionError as e:
+            response["data"] = {"status": "failure", "body": str(e)}
+            response["status"] = "failure"
+            self.logger.info(e)
+        else:
+            response["data"] = base64.b64encode(logs)
+        return response
 
     async def firewall_rules(self, response: dict) -> dict:
         try:

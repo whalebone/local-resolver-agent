@@ -152,13 +152,13 @@ class LRAgentClient:
             response["data"] = str(e)
         else:
             for service, config in parsed_compose["services"].items():
-                if service in services or \
-                        self.dockerConnector.inspect_config("whalebone_{}_1".format(service))["Config"]["Labels"][
-                            service] != config["labels"][service]:
+                container_version = \
+                    await self.dockerConnector.inspect_config("whalebone_{}_1".format(service))
+                if service in services or container_version["Config"]["Labels"][service] != config["labels"][service]:
                     if service not in ["lr-agent", "resolver"]:
                         status[service] = {}
                         try:
-                            await self.dockerConnector.remove_container(service)  # tries to remove old container
+                            await self.dockerConnector.remove_container("whalebone_{}_1".format(service))  # tries to remove old container
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "remove old container", "body": str(e)}
                             response["status"] = "failure"

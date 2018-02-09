@@ -89,6 +89,7 @@ SUPPORTED_PARAMETERS_V1 = {
     'network_mode': parse_value,
     'ports': parse_ports,
     'volumes': parse_volumes,
+    'labels':parse_value,
     'environment': parse_value,
     'tty': parse_value,
     'privileged': parse_value,

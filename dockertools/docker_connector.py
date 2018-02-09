@@ -2,7 +2,7 @@ import docker
 
 from .compose_translator import create_docker_run_kwargs
 from local_resolver_agent.exception.exc import ContainerException
-from local_resolver_agent.secret_directory import logger
+from local_resolver_agent.loggingtools import logger
 from datetime import datetime
 
 
@@ -41,11 +41,11 @@ class DockerConnector:
             self.logger.info(e)
             return "docker version unavailable"
 
-    def container_logs(self, name: str, timestamps: bool = False, tail: str = "all", since: str = None,
-                       until: str = None):
-        since, until = datetime.strptime(since, '%Y-%m-%dT%H:%M:%S'), datetime.strptime(until,'%Y-%m-%dT%H:%M:%S')
+    def container_logs(self, name: str, timestamps: bool = False, tail: str = "all", since: str = None):
+        if since is not None:
+            since = datetime.strptime(since, '%Y-%m-%dT%H:%M:%S')
         try:
-            return self.api_client.logs(name, timestamps=timestamps, tail=tail, since=since, until=until)
+            return self.api_client.logs(name, timestamps=timestamps, tail=tail, since=since)
         except Exception as e:
             raise ConnectionError(e)
 

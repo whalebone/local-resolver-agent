@@ -14,7 +14,7 @@ class LogReader:
     def view_log(self, file: str) -> dict:
         logs = {}
         try:
-            with open(file, "r") as file:
+            with open("{}{}".format(self.logging_directory, file), "r") as file:
                 for line in file:
                     split_line = line.split("|")
                     logs[split_line[0]] = {"line": split_line[1], "level": split_line[2], "message": split_line[3]}

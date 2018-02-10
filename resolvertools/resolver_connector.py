@@ -5,7 +5,8 @@ import json
 
 class FirewallConnector:
     def __init__(self):
-        self.resolver_address = os.environ['LOCAL_RESOLVER_ADDRESS']
+        #self.resolver_address = os.environ['LOCAL_RESOLVER_ADDRESS']
+        self.resolver_address="localhost"
 
     def active_rules(self):
         # returns {} if non are present, if some returns a list of dicts, where dict is a rule
@@ -53,6 +54,6 @@ class FirewallConnector:
             with open("/etc/whalebone/kresd/rules.txt", "r") as file:
                 rules = json.load(file)
             for rule in rules:
-                self.create_rule(rule["info"])
+                self.create_rule(rule)
         except Exception as e:
-            pass
+            raise ConnectionError(e)

@@ -158,7 +158,8 @@ class LRAgentClient:
                     if service not in ["lr-agent", "resolver"]:
                         status[service] = {}
                         try:
-                            await self.dockerConnector.remove_container("whalebone_{}_1".format(service))  # tries to remove old container
+                            await self.dockerConnector.remove_container(
+                                "whalebone_{}_1".format(service))  # tries to remove old container
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "remove old container", "body": str(e)}
                             response["status"] = "failure"
@@ -177,7 +178,7 @@ class LRAgentClient:
                         if "resolver" in parsed_compose["services"]:
                             try:
                                 if "config" in request["data"]:
-                                    self.save_file("kresd/config.conf", "yml", request["data"]["config"])
+                                    self.save_file("kresd/config.conf", "json", request["data"]["config"])
                                 if "rules" in request["data"]:
                                     self.save_file("kresd/rules.txt", "json", request["data"]["rules"])
                             except IOError as e:
@@ -248,7 +249,8 @@ class LRAgentClient:
                                                 except ConnectionError as e:
                                                     self.logger.info(e)
                                                     status[service]["inject"] = "failure"
-                                            break  # for testing purpose
+                                            status[service]["status"] = "success"
+                                            break
                                     else:
                                         await asyncio.sleep(2)
             del response["requestId"]
@@ -329,6 +331,10 @@ class LRAgentClient:
                 "image": {
                     "id": container.image.id[7:19],
                     "tags": container.image.tags
+                },
+                "labels": {
+                    label: value for label, value in container.labels.items() if
+                container.name[len("whalebone_"):-len("_1")] == label
                 },
                 "name": container.name,
                 "status": container.status

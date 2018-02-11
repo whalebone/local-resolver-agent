@@ -152,9 +152,7 @@ class LRAgentClient:
             response["data"] = str(e)
         else:
             for service, config in parsed_compose["services"].items():
-                container_version = \
-                    await self.dockerConnector.inspect_config("whalebone_{}_1".format(service))
-                if service in services or container_version["Config"]["Labels"][service] != config["labels"][service]:
+                if service in services or len(services) == 0:
                     if service not in ["lr-agent", "resolver"]:
                         status[service] = {}
                         try:

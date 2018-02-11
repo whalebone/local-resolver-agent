@@ -349,7 +349,7 @@ class LRAgentClient:
             response["status"] = "failure"
             self.logger.info(e)
         else:
-            response["data"] = base64.b64encode(logs)
+            response["data"] = base64.b64encode(logs).decode("utf-8")
         return response
 
     async def firewall_rules(self, response: dict) -> dict:

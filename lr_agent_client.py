@@ -2,6 +2,7 @@ import json
 import asyncio
 import base64
 import yaml
+import os
 
 from local_resolver_agent.dockertools.docker_connector import DockerConnector
 from local_resolver_agent.sysinfo.sys_info import get_system_info
@@ -52,6 +53,26 @@ class LRAgentClient:
     async def send_acknowledgement(self, message: dict):
         message["data"] = "Command received"
         await self.send(message)
+
+    async def validate_host(self):
+        if not os.path.exists("{}docker-compose.yml".format(self.folder)):
+            request = {"action": "request", "data": "compose missing, send resolver compose"}
+            await self.send(request)
+        else:
+            try:
+                with open("{}docker-compose.yml".format(self.folder), "r") as compose:
+                    parsed_compose = self.compose_parser.create_service(compose)
+                    active_services = [container.name for container in self.dockerConnector.get_containers()]
+                    for service, config in parsed_compose["services"].items():
+                        if service not in active_services:
+                            try:
+                                await self.dockerConnector.start_service(config)
+                            except Exception as e:
+                                print(service)
+                                self.logger.warning(
+                                    "Service: {} is offline, automatic start failed due to: {}".format(service, e))
+            except Exception as e:
+                self.logger.warning(e)
 
     async def process(self, request_json):
         request = json.loads(request_json)
@@ -110,6 +131,8 @@ class LRAgentClient:
         else:
             if "resolver" in parsed_compose["services"]:
                 try:
+                    if "compose" in request["data"]:
+                        self.save_file("compose/docker-compose.yml", "yml", request["data"]["compose"])
                     if "config" in request["data"]:
                         self.save_file("kresd/kres.conf", "text", request["data"]["config"])
                     if "rules" in request["data"]:

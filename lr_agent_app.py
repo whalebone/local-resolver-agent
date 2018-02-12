@@ -36,6 +36,7 @@ async def local_resolver_agent_app():
         try:
             websocket = await connect()
             client = LRAgentClient(websocket)
+            await client.validate_host()
             asyncio.ensure_future(client.listen())
             while True:
                 await client.send_sys_info()

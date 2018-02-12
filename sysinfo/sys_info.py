@@ -13,13 +13,13 @@ def get_system_info(docker_connector):
             'usage': psutil.cpu_percent()
         },
         'memory': {
-            'total': mem.total >> 20,
-            'free': mem.free >> 20,
+            'total': mem.total >> 30,
+            'free': mem.free >> 30,
             'usage': mem.percent,
         },
         'hdd': {
-            'total': du.total >> 20,
-            'free': du.free >> 20,
+            'total': du.total >> 30,
+            'free': du.free >> 30,
             'usage': du.percent,
         },
         "docker": docker_connector.docker_version(),

@@ -66,7 +66,7 @@ class LRAgentClient:
 
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
                         "rename": self.rename_container, "containers": self.list_containers,
-                        "restart": self.upgrade_container, "stop": self.stop_container, "remove": self.remove_container,
+                        "stop": self.stop_container, "remove": self.remove_container,
                         "containerlogs": self.container_logs,
                         "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
                         "fwmodify": self.modify_rule, "fwdelete": self.delete_rule,
@@ -76,7 +76,7 @@ class LRAgentClient:
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
                             "containerlogs": [response, request],
-                            "restart": [response, request], "stop": [response, request], "remove": [response, request],
+                            "stop": [response, request], "remove": [response, request],
                             "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
                             "fwmodify": [response, request], "fwdelete": [response, request],
                             "logs": [response], "log": [response, request],
@@ -111,9 +111,9 @@ class LRAgentClient:
             if "resolver" in parsed_compose["services"]:
                 try:
                     if "config" in request["data"]:
-                        self.save_file("kresd/config.conf", "text", request["data"]["config"])
+                        self.save_file("kresd/kres.conf", "text", request["data"]["config"])
                     if "rules" in request["data"]:
-                        self.save_file("kresd/rules.txt", "json", request["data"]["rules"])
+                        self.save_file("kresd/firewall.conf", "json", request["data"]["rules"])
                 except IOError as e:
                     status["dump"] = {"compose": {"status": "failure", "body": str(e)}}
             for service, config in parsed_compose["services"].items():
@@ -156,8 +156,7 @@ class LRAgentClient:
                     if service not in ["lr-agent", "resolver"]:
                         status[service] = {}
                         try:
-                            await self.dockerConnector.remove_container(
-                                "whalebone_{}_1".format(service))  # tries to remove old container
+                            await self.dockerConnector.remove_container(service)  # tries to remove old container
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "remove old container", "body": str(e)}
                             response["status"] = "failure"
@@ -176,15 +175,14 @@ class LRAgentClient:
                         if "resolver" in parsed_compose["services"]:
                             try:
                                 if "config" in request["data"]:
-                                    self.save_file("kresd/config.conf", "json", request["data"]["config"])
+                                    self.save_file("kresd/kres.conf", "text", request["data"]["config"])
                                 if "rules" in request["data"]:
-                                    self.save_file("kresd/rules.txt", "json", request["data"]["rules"])
+                                    self.save_file("kresd/firewall.conf", "json", request["data"]["rules"])
                             except IOError as e:
                                 status["dump"] = {"compose": {"status": "failure", "body": str(e)}}
                         try:
-                            await self.dockerConnector.rename_container("whalebone_{}_1".format(service),
-                                                                        "{}-old".format(
-                                                                            service))  # tries to rename old agent
+                            await self.dockerConnector.rename_container(service, "{}-old".format(
+                                service))  # tries to rename old agent
                         except ContainerException as e:
                             status["lr-agent"] = {"status": "failure", "message": "rename old service", "body": str(e)}
                             response["status"] = "failure"
@@ -200,8 +198,7 @@ class LRAgentClient:
                                 self.logger.info(e)
                                 try:
                                     await self.dockerConnector.rename_container("{}-old".format(service),
-                                                                                "whalebone_{}_1".format(
-                                                                                    service))  # tries to rename old agent
+                                                                                service)  # tries to rename old agent
                                 except ContainerException as e:
                                     status[service] = {"status": "failure", "message": "rename rollback",
                                                        "body": str(e)}
@@ -209,8 +206,7 @@ class LRAgentClient:
                                     self.logger.info(e)
                             else:
                                 while True:
-                                    inspect = await self.dockerConnector.inspect_config(
-                                        "whalebone_{}_1".format(service))
+                                    inspect = await self.dockerConnector.inspect_config(service)
                                     if inspect["State"]["Running"] is True:
                                         try:
                                             await self.dockerConnector.remove_container(
@@ -222,7 +218,7 @@ class LRAgentClient:
                                             self.logger.info(e)
                                             try:
                                                 await self.dockerConnector.remove_container(
-                                                    "whalebone_{}_1".format(service))  # tries to rename new agent
+                                                    service)  # tries to rename new agent
                                             except ContainerException as e:
                                                 status[service] = {"status": "failure",
                                                                    "message": "removal of old and new service",
@@ -231,9 +227,7 @@ class LRAgentClient:
                                             else:
                                                 try:
                                                     await self.dockerConnector.rename_container(
-                                                        "{}-old".format(service),
-                                                        "whalebone_{}_1".format(
-                                                            service))  # tries to rename old agent
+                                                        "{}-old".format(service), service)  # tries to rename old agent
                                                 except ContainerException as e:
                                                     status[service] = {"status": "failure",
                                                                        "message": "removal and rename of old agent",
@@ -331,8 +325,7 @@ class LRAgentClient:
                     "tags": container.image.tags
                 },
                 "labels": {
-                    label: value for label, value in container.labels.items() if
-                container.name[len("whalebone_"):-len("_1")] == label
+                    label: value for label, value in container.labels.items() if container.name == label
                 },
                 "name": container.name,
                 "status": container.status
@@ -463,13 +456,14 @@ class LRAgentClient:
 
     def save_file(self, location, file_type, content):
         try:
-            with open("{}{}".format(location, self.folder), "w") as file:
+            with open("{}{}".format(self.folder, location), "w") as file:
                 if file_type == "yml":
                     yaml.dump(content, file, default_flow_style=False)
                 elif file_type == "json":
                     json.dump(content, file)
                 else:
-                    file.write(content)
+                    for rule in content:
+                        file.write(rule + "\n")
         except Exception as e:
             self.logger.info(e)
             raise IOError(e)

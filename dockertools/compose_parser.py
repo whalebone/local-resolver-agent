@@ -15,7 +15,7 @@ class ComposeParser:
         compose = self.parse(compose_yaml)
         self.validate(compose)
         for service_name in compose['services']:
-            compose['services'][service_name]["name"] = "whalebone_{}_1".format(service_name)
+            compose['services'][service_name]["name"] = service_name
         return compose
 
     def parse(self, compose_yaml):

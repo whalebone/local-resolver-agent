@@ -51,7 +51,7 @@ class FirewallConnector:
 
     def inject_all_rules(self):
         try:
-            with open("/etc/whalebone/kresd/rules.txt", "r") as file:
+            with open("/etc/whalebone/kresd/firewall.conf", "r") as file:
                 rules = json.load(file)
             for rule in rules:
                 self.create_rule(rule)

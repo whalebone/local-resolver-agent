@@ -3,7 +3,7 @@ from datetime import datetime
 
 class LogReader:
     def __init__(self):
-        self.logging_directory = "/home/narzhan/Downloads/agent_logs/"
+        self.logging_directory = "/tmp/whalebone/logs/"
 
     def list_files(self):
         try:

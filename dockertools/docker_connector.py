@@ -11,7 +11,7 @@ class DockerConnector:
         self.docker_client = docker.DockerClient(base_url='unix://var/run/docker.sock')  # hish level api
         self.api_client = docker.APIClient(base_url='unix://var/run/docker.sock')  # low level api
         # keep socket connections uncaught so the exception propagates to main, adn the cycle restarts
-        self.logger = logger.build_logger("docker-connector", "/home/narzhan/Downloads/agent_logs/") #/etc/whalebone/logs/
+        self.logger = logger.build_logger("docker-connector", "/tmp/whalebone/logs/") #/etc/whalebone/logs/
 
     def get_images(self):
         try:

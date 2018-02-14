@@ -21,8 +21,8 @@ class LRAgentClient:
         self.compose_parser = ComposeParser()
         self.firewall_connector = FirewallConnector()
         self.log_reader = LogReader()
-        self.folder = "/home/narzhan/Downloads/agent_logs/"
-        self.logger = build_logger("lr-agent", "/home/narzhan/Downloads/agent_logs/")
+        self.folder = "/tmp/whalebone/"
+        self.logger = build_logger("lr-agent", "/tmp/whalebone/logs/")
 
     async def listen(self):
         while True:

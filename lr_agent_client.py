@@ -378,27 +378,25 @@ class LRAgentClient:
         return response
 
     async def create_rule(self, response: dict, request: dict) -> dict:
-        try:
-            data = self.firewall_connector.create_rule(request["data"])
-        except (ConnectionError, Exception) as e:
-            self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
-        else:
-            response["data"] = data
+        status = {}
+        for rule in request["data"]:
+            status[rule] = {}
             try:
-                data = self.firewall_connector.active_rules()
+                data = self.firewall_connector.create_rule(rule)
             except (ConnectionError, Exception) as e:
                 self.logger.info(e)
                 response["status"] = "failure"
-                response["data"] = str(e)
+                status[rule] = {"status": "failure", "body": str(e)}
             else:
-                try:
-                    self.save_file("kresd/rules.txt", "json", data)
-                except IOError as e:
-                    self.logger.info(e)
-                    response["status"] = "failure"
-                    response["data"] = str(e)
+                status[rule] = {"status": "success", "rule": data}
+        successful_rules = [rule for rule in status.keys() if status[rule]["status"] == "success"]
+        try:
+            self.save_file("kresd/firewall.conf", "json", successful_rules)
+        except IOError as e:
+            self.logger.info(e)
+            response["status"] = "failure"
+            response["data"] = str(e)
+        response["data"] = status
         return response
 
     async def fetch_rule(self, response: dict, request: dict) -> dict:
@@ -413,12 +411,18 @@ class LRAgentClient:
         return response
 
     async def delete_rule(self, response: dict, request: dict) -> dict:
-        try:
-            self.firewall_connector.delete_rule(request["data"])
-        except (ConnectionError, Exception) as e:
-            self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+        status = {}
+        for rule in request["data"]:
+            status[rule] = {}
+            try:
+                self.firewall_connector.delete_rule(rule)
+            except (ConnectionError, Exception) as e:
+                self.logger.info(e)
+                response["status"] = "failure"
+                status[rule] = {"status": "failure", "body": str(e)}
+            else:
+                status[rule] = {"status": "success"}
+        response["data"] = status
         return response
 
     async def modify_rule(self, response: dict, request: dict) -> dict:

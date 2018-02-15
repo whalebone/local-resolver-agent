@@ -4,9 +4,9 @@ import os
 import logging
 import websockets
 
-from lr_agent_client import LRAgentClient
-from exception.exc import InitException
-from loggingtools.logger import build_logger
+from .lr_agent_client import LRAgentClient
+from .exception.exc import InitException
+from .loggingtools.logger import build_logger
 
 
 def validate_settings():
@@ -15,7 +15,7 @@ def validate_settings():
     except KeyError:
         raise InitException('System env WHALEBONE_LR_CLIENT_CERT must be set')
     try:
-        proxy_address = os.environ['WHALEBONE_PORTAL_ADDRESS']
+        proxy_address = os.environ['WHALEBONE_PROXY_ADDRESS']
     except KeyError:
         raise InitException('System env WHALEBONE_PORTAL_ADDRESS must be set')
     try:

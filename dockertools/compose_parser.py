@@ -1,6 +1,6 @@
 import yaml
 
-from local_resolver_agent.exception import exc
+from ..exception.exc import ComposeException
 
 SUPPORTED_VERSIONS = ['1', '3']
 LR_AGENT_SERVICE = "lr-agent"
@@ -30,11 +30,11 @@ class ComposeParser:
                     'services': parsed_compose
                 }
         except yaml.YAMLError as e:
-            raise exc.ComposeException("Invalid compose YAML format")
+            raise ComposeException("Invalid compose YAML format")
 
     def validate(self, parsed_compose):
         if parsed_compose['version'] not in SUPPORTED_VERSIONS:
-            raise exc.ComposeException("Compose version '{0}' not supported. Supported versions: {1}"
+            raise ComposeException("Compose version '{0}' not supported. Supported versions: {1}"
                                        .format(parsed_compose['version'], SUPPORTED_VERSIONS))
         if 'services' not in parsed_compose:
-            raise exc.ComposeException("Missing section 'services'")
+            raise ComposeException("Missing section 'services'")

@@ -1,8 +1,8 @@
 import docker
 
 from .compose_translator import create_docker_run_kwargs
-from local_resolver_agent.exception.exc import ContainerException
-from local_resolver_agent.loggingtools import logger
+from ..exception.exc import ContainerException
+from ..loggingtools import logger
 from datetime import datetime
 
 

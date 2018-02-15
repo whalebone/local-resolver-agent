@@ -4,13 +4,13 @@ import base64
 import yaml
 import os
 
-from local_resolver_agent.dockertools.docker_connector import DockerConnector
-from local_resolver_agent.sysinfo.sys_info import get_system_info
-from local_resolver_agent.exception.exc import ContainerException, ComposeException
-from local_resolver_agent.dockertools.compose_parser import ComposeParser
-from local_resolver_agent.loggingtools.logger import build_logger
-from local_resolver_agent.loggingtools.log_reader import LogReader
-from local_resolver_agent.resolvertools.resolver_connector import FirewallConnector
+from .dockertools.docker_connector import DockerConnector
+from .sysinfo.sys_info import get_system_info
+from .exception.exc import ContainerException, ComposeException
+from .dockertools.compose_parser import ComposeParser
+from .loggingtools.logger import build_logger
+from .loggingtools.log_reader import LogReader
+from .resolvertools.resolver_connector import FirewallConnector
 
 
 class LRAgentClient:

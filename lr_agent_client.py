@@ -4,13 +4,13 @@ import base64
 import yaml
 import os
 
-from .dockertools.docker_connector import DockerConnector
-from .sysinfo.sys_info import get_system_info
-from .exception.exc import ContainerException, ComposeException
-from .dockertools.compose_parser import ComposeParser
-from .loggingtools.logger import build_logger
-from .loggingtools.log_reader import LogReader
-from .resolvertools.resolver_connector import FirewallConnector
+from dockertools.docker_connector import DockerConnector
+from sysinfo.sys_info import get_system_info
+from exception.exc import ContainerException, ComposeException
+from dockertools.compose_parser import ComposeParser
+from loggingtools.logger import build_logger
+from loggingtools.log_reader import LogReader
+from resolvertools.resolver_connector import FirewallConnector
 
 
 class LRAgentClient:
@@ -21,8 +21,8 @@ class LRAgentClient:
         self.compose_parser = ComposeParser()
         self.firewall_connector = FirewallConnector()
         self.log_reader = LogReader()
-        self.folder = "/tmp/whalebone/"
-        self.logger = build_logger("lr-agent", "/tmp/whalebone/logs/")
+        self.folder = "/etc/whalebone/"
+        self.logger = build_logger("lr-agent", "/etc/whalebone/logs/")
 
     async def listen(self):
         while True:
@@ -382,20 +382,21 @@ class LRAgentClient:
         for rule in request["data"]:
             status[rule] = {}
             try:
-                data = self.firewall_connector.create_rule(rule)
+                self.firewall_connector.create_rule(rule)
             except (ConnectionError, Exception) as e:
                 self.logger.info(e)
                 response["status"] = "failure"
                 status[rule] = {"status": "failure", "body": str(e)}
             else:
-                status[rule] = {"status": "success", "rule": data}
+                status[rule] = {"status": "success"}
         successful_rules = [rule for rule in status.keys() if status[rule]["status"] == "success"]
-        try:
-            self.save_file("kresd/firewall.conf", "json", successful_rules)
-        except IOError as e:
-            self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+        if len(successful_rules) > 0:
+            try:
+                self.save_file("kresd/firewall.conf", "json", successful_rules)
+            except IOError as e:
+                self.logger.info(e)
+                response["status"] = "failure"
+                response["data"] = str(e)
         response["data"] = status
         return response
 

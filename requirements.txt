@@ -2,4 +2,4 @@ asyncio
 docker
 psutil
 websockets
-yaml
+pyaml

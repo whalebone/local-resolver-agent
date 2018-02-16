@@ -4,9 +4,9 @@ import os
 import logging
 import websockets
 
-from .lr_agent_client import LRAgentClient
-from .exception.exc import InitException
-from .loggingtools.logger import build_logger
+from lr_agent_client import LRAgentClient
+from exception.exc import InitException
+from loggingtools.logger import build_logger
 
 
 def validate_settings():
@@ -21,7 +21,7 @@ def validate_settings():
     try:
         client_cert_pass = os.environ['WHALEBONE_CLIENT_CERT_PASS']
     except KeyError:
-        client_cert_pass = "password" # remove for production
+        client_cert_pass = "password"  # remove for production
         # raise InitException('System env WHALEBONE_LR_CLIENT_CERT_PASS must be set')
 
     if not os.path.exists(client_cert) or os.stat(client_cert).st_size == 0:  # change to None or len()=0
@@ -65,7 +65,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
         logger = logging.getLogger(__name__)
     else:
-        logger = build_logger(__name__, "/tmp/whalebone/logs/")
+        logger = build_logger(__name__, "/etc/whalebone/logs/")
     try:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(local_resolver_agent_app())

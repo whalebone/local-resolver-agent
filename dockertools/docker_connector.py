@@ -1,8 +1,8 @@
 import docker
 
 from .compose_translator import create_docker_run_kwargs
-from ..exception.exc import ContainerException
-from ..loggingtools import logger
+from exception.exc import ContainerException
+from loggingtools import logger
 from datetime import datetime
 
 
@@ -11,7 +11,7 @@ class DockerConnector:
         self.docker_client = docker.DockerClient(base_url='unix://var/run/docker.sock')  # hish level api
         self.api_client = docker.APIClient(base_url='unix://var/run/docker.sock')  # low level api
         # keep socket connections uncaught so the exception propagates to main, adn the cycle restarts
-        self.logger = logger.build_logger("docker-connector", "/tmp/whalebone/logs/") #/etc/whalebone/logs/
+        self.logger = logger.build_logger("docker-connector", "/etc/whalebone/logs/") #/etc/whalebone/logs/
 
     def get_images(self):
         try:

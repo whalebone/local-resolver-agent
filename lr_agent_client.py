@@ -38,25 +38,30 @@ class LRAgentClient:
 
     async def send(self, message: dict):
         try:
-            await self.websocket.send(json.dumps(message))
+            message = self.encode_base64_json(message)
         except Exception as e:
             self.logger.warning(e)
+        else:
+            try:
+                await self.websocket.send(json.dumps(message))
+            except Exception as e:
+                self.logger.warning(e)
 
     async def send_sys_info(self):
         try:
             sys_info = {"action": "sysinfo", "data": get_system_info(self.dockerConnector)}
         except Exception as e:
             self.logger.info(e)
-            sys_info = {"action": "sysinfo", "status": "failure", "data": str(e)}
+            sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
         await self.send(sys_info)
 
     async def send_acknowledgement(self, message: dict):
-        message["data"] = "Command received"
+        message["data"] = {"status": "success", "message": "Command received"}
         await self.send(message)
 
     async def validate_host(self):
         if not os.path.exists("{}docker-compose.yml".format(self.folder)):
-            request = {"action": "request", "data": "compose missing, send resolver compose"}
+            request = {"action": "request", "data": {"message": "compose missing, send resolver compose"}}
             await self.send(request)
         else:
             try:
@@ -76,6 +81,12 @@ class LRAgentClient:
 
     async def process(self, request_json):
         request = json.loads(request_json)
+        try:
+            request = self.decode_base64_json(request)
+        except Exception as e:
+            self.logger.info(e, request)
+            return {"requestId": request["requestId"], "action": request["action"],
+                    "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
         print(request)
         response = {}
         if "action" not in request or request["action"] is None:
@@ -83,7 +94,6 @@ class LRAgentClient:
         if "requestId" in request and request["requestId"] is not None:
             response["requestId"] = request["requestId"]
         response["action"] = request["action"]
-        response["status"] = "success"
 
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
                         "rename": self.rename_container, "containers": self.list_containers,
@@ -112,7 +122,6 @@ class LRAgentClient:
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
             response["data"] = get_system_info(self.dockerConnector)
-            response["status"] = "success"
         except Exception as e:
             self.logger.info(e)
             self.getError(str(e), request)
@@ -126,8 +135,7 @@ class LRAgentClient:
             parsed_compose = self.compose_parser.create_service(decoded_data)
         except ComposeException as e:
             self.logger.warning(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+            response["data"] = {"status": "failure", "body": str(e)}
         else:
             if "resolver" in parsed_compose["services"]:
                 try:
@@ -145,7 +153,6 @@ class LRAgentClient:
                     await self.dockerConnector.start_service(config)
                 except ContainerException as e:
                     status[service] = {"status": "failure", "body": str(e)}
-                    response["status"] = "failure"
                     self.logger.info(e)
                 else:
                     status[service]["status"] = "success"
@@ -155,6 +162,8 @@ class LRAgentClient:
                     except ConnectionError as e:
                         self.logger.info(e)
                         status[service]["inject"] = "failure"
+                    else:
+                        status[service]["inject"] = "success"
             del response["requestId"]
             response["data"] = status
         return response
@@ -171,8 +180,7 @@ class LRAgentClient:
             parsed_compose = self.compose_parser.create_service(decoded_data)
         except ComposeException as e:
             self.logger.warning(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+            response["data"] = {"status": "failure", "body": str(e)}
         else:
             for service, config in parsed_compose["services"].items():
                 if service in services or len(services) == 0:
@@ -182,7 +190,6 @@ class LRAgentClient:
                             await self.dockerConnector.remove_container(service)  # tries to remove old container
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "remove old container", "body": str(e)}
-                            response["status"] = "failure"
                             self.logger.info(e)
                         else:
                             try:
@@ -190,7 +197,6 @@ class LRAgentClient:
                             except ContainerException as e:
                                 status[service] = {"status": "failure", "message": "start of new container",
                                                    "body": str(e)}
-                                response["status"] = "failure"
                                 self.logger.info(e)
                             else:
                                 status[service]["status"] = "success"
@@ -207,8 +213,7 @@ class LRAgentClient:
                             await self.dockerConnector.rename_container(service, "{}-old".format(
                                 service))  # tries to rename old agent
                         except ContainerException as e:
-                            status["lr-agent"] = {"status": "failure", "message": "rename old service", "body": str(e)}
-                            response["status"] = "failure"
+                            status[service] = {"status": "failure", "message": "rename old service", "body": str(e)}
                             self.logger.info(e)
                         else:
                             status[service] = {}
@@ -217,7 +222,6 @@ class LRAgentClient:
                             except ContainerException as e:
                                 status[service] = {"status": "failure", "message": "start of new service",
                                                    "body": str(e)}
-                                response["status"] = "failure"
                                 self.logger.info(e)
                                 try:
                                     await self.dockerConnector.rename_container("{}-old".format(service),
@@ -225,7 +229,6 @@ class LRAgentClient:
                                 except ContainerException as e:
                                     status[service] = {"status": "failure", "message": "rename rollback",
                                                        "body": str(e)}
-                                    response["status"] = "failure"
                                     self.logger.info(e)
                             else:
                                 while True:
@@ -237,7 +240,6 @@ class LRAgentClient:
                                         except ContainerException as e:
                                             status[service] = {"status": "failure", "message": "removal of old service",
                                                                "body": str(e)}
-                                            response["status"] = "failure"
                                             self.logger.info(e)
                                             try:
                                                 await self.dockerConnector.remove_container(
@@ -258,12 +260,13 @@ class LRAgentClient:
                                                     self.logger.info(e)
                                             break
                                         else:
-                                            if service == "resolver":  # for testing purpose
-                                                try:
-                                                    self.firewall_connector.inject_all_rules()
-                                                except ConnectionError as e:
-                                                    self.logger.info(e)
-                                                    status[service]["inject"] = "failure"
+                                            try:
+                                                self.firewall_connector.inject_all_rules()
+                                            except ConnectionError as e:
+                                                self.logger.info(e)
+                                                status[service]["inject"] = "failure"
+                                            else:
+                                                status[service]["inject"] = "success"
                                             status[service]["status"] = "success"
                                             break
                                     else:
@@ -280,7 +283,6 @@ class LRAgentClient:
                 await self.dockerConnector.rename_container(old_name, new_name)
             except ContainerException as e:
                 status[old_name] = {"status": "failure", "body": str(e)}
-                response["status"] = "failure"
                 self.logger.info(e)
             else:
                 status[old_name]["status"] = "success"
@@ -313,7 +315,6 @@ class LRAgentClient:
                 await self.dockerConnector.stop_container(container)
             except ContainerException as e:
                 status[container] = {"status": "failure", "body": str(e)}
-                response["status"] = "failure"
                 self.logger.info(e)
             else:
                 status[container]["status"] = "success"
@@ -330,7 +331,6 @@ class LRAgentClient:
                 await self.dockerConnector.remove_container(container)
             except ContainerException as e:
                 status[container] = {"status": "failure", "body": str(e)}
-                response["status"] = "failure"
                 self.logger.info(e)
             else:
                 status[container]["status"] = "success"
@@ -359,8 +359,7 @@ class LRAgentClient:
         try:
             logs = self.dockerConnector.container_logs(**request["data"])
         except ConnectionError as e:
-            response["data"] = str(e)
-            response["status"] = "failure"
+            response["data"] = {"status": "failure", "body": str(e)}
             self.logger.info(e)
         else:
             response["data"] = base64.b64encode(logs).decode("utf-8")
@@ -371,8 +370,7 @@ class LRAgentClient:
             data = self.firewall_connector.active_rules()
         except (ConnectionError, Exception) as e:
             self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+            response["data"] = {"status": "failure", "body": str(e)}
         else:
             response["data"] = data
         return response
@@ -382,21 +380,19 @@ class LRAgentClient:
         for rule in request["data"]:
             status[rule] = {}
             try:
-                self.firewall_connector.create_rule(rule)
+                data = self.firewall_connector.create_rule(rule)
             except (ConnectionError, Exception) as e:
                 self.logger.info(e)
-                response["status"] = "failure"
                 status[rule] = {"status": "failure", "body": str(e)}
             else:
-                status[rule] = {"status": "success"}
+                status[rule] = {"status": "success", "rule": data}
         successful_rules = [rule for rule in status.keys() if status[rule]["status"] == "success"]
         if len(successful_rules) > 0:
             try:
                 self.save_file("kresd/firewall.conf", "json", successful_rules)
             except IOError as e:
                 self.logger.info(e)
-                response["status"] = "failure"
-                response["data"] = str(e)
+                response["data"] = {"status": "failure", "body": str(e)}
         response["data"] = status
         return response
 
@@ -405,8 +401,7 @@ class LRAgentClient:
             data = self.firewall_connector.fetch_rule_information(request["data"])
         except (ConnectionError, Exception) as e:
             self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+            response["data"] = {"status": "failure", "body": str(e)}
         else:
             response["data"] = data
         return response
@@ -419,7 +414,6 @@ class LRAgentClient:
                 self.firewall_connector.delete_rule(rule)
             except (ConnectionError, Exception) as e:
                 self.logger.info(e)
-                response["status"] = "failure"
                 status[rule] = {"status": "failure", "body": str(e)}
             else:
                 status[rule] = {"status": "success"}
@@ -431,8 +425,9 @@ class LRAgentClient:
             self.firewall_connector.modify_rule(*request["data"])
         except (ConnectionError, Exception) as e:
             self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+            response["data"] = {"status": "failure", "body": str(e)}
+        else:
+            response["data"] = {"status": "success"}
         return response
 
     async def agent_log_files(self, response: dict) -> dict:
@@ -440,8 +435,7 @@ class LRAgentClient:
             files = self.log_reader.list_files()
         except FileNotFoundError as e:
             self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+            response["data"] ={"status": "failure", "body": str(e)}
         else:
             response["data"] = files
         return response
@@ -451,8 +445,7 @@ class LRAgentClient:
             lines = self.log_reader.view_log(request["data"])
         except IOError as e:
             self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+            response["data"] = {"status": "failure", "body": str(e)}
         else:
             response["data"] = lines
         return response
@@ -462,8 +455,7 @@ class LRAgentClient:
             lines = self.log_reader.filter_logs(**request["data"])
         except Exception as e:
             self.logger.info(e)
-            response["status"] = "failure"
-            response["data"] = str(e)
+            response["data"] = {"status": "failure", "body": str(e)}
         else:
             response["data"] = lines
         return response
@@ -476,10 +468,9 @@ class LRAgentClient:
                 self.log_reader.delete_log(file)
             except IOError as e:
                 status[file] = {"status": "failure", "data": str(e)}
-                response["status"] = "failure"
             else:
-                status["status"] = "success"
-                status[file] = {"status": "status"}
+                status[file] = {"status": "success"}
+        response["data"] = status
         return response
 
     def save_file(self, location, file_type, content):
@@ -496,15 +487,30 @@ class LRAgentClient:
             self.logger.info(e)
             raise IOError(e)
 
+    def decode_base64_json(self, message: dict) -> dict:
+        if "data" in message and message is not None:
+            try:
+                message["data"] = json.loads(base64.b64decode(message["data"].encode("utf-8")).decode("utf-8"))
+            except json.JSONDecodeError:
+                message["data"] = self.decode_base64_string(message["data"])
+        return message
+
+    def encode_base64_json(self, message: dict) -> dict:
+        if "data" in message:
+            message["data"] = base64.b64encode(json.dumps(message["data"]).encode("utf-8")).decode("utf-8")
+        return message
+
+    def decode_base64_string(self, b64_string: str) -> str:
+        return base64.b64decode(b64_string.encode("utf-8")).decode("utf-8")
+
     def getError(self, message: str, request: dict)-> dict:
-        errorResponse = {
-            "status": "failure",
-            "message": message,
-        }
+        errorResponse = {}
         if "requestId" in request and request["requestId"] is not None:
             errorResponse["requestId"] = request["requestId"]
         if "action" in request and request["action"] is not None:
             errorResponse["action"] = request["action"]
         if "data" in request and request["data"] is not None:
-            errorResponse["data"] = request["data"]
+            errorResponse["data"] = {"message": message, "body": request["data"]}
+        else:
+            errorResponse["data"] = message
         return errorResponse

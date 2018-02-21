@@ -2,8 +2,6 @@ import redis
 import hug
 import os
 import logging
-import requests
-import base64
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -40,30 +38,24 @@ def save_data(key, message):
 
 
 @hug.post("/{}/sysinfo".format(agent_id))
-def sysinfo(body: dict):
+def sysinfo(body):
     logger.info(body)
     save_data("sysinfo", body)
 
 
 @hug.post("/{}/create".format(agent_id))
-def create(body: dict):
+def create(body):
     logger.info(body)
     save_data("create", body)
 
 
 @hug.post("/{}/upgrade".format(agent_id))
-def upgrade(body: dict):
+def upgrade(body):
     logger.info(body)
     save_data("upgrade", body)
 
 
-# @hug.post("/{}/request".format(agent_id))
-# def start(body: dict):
-#     logger.info(body)
-#     try:
-#         rec = requests.post("http://{}:8080/wsproxy/rest/message/{}/create".format(proxy_address, agent_id),
-#                             data=base64.b64encode(resolver_compose.encode("utf-8")))
-#     except Exception as e:
-#         logger.warning(e)
-#     else:
-#         logger.info(rec.text)
+@hug.post("/{}/request".format(agent_id))
+def start(body: dict):
+    logger.info(body)
+    save_data("upgrade", body)

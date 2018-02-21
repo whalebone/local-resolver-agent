@@ -14,7 +14,7 @@ class Tester():
     def __init__(self):
         self.docker_client = docker.DockerClient(base_url='unix://var/run/docker.sock')
         self.api_client = docker.APIClient(base_url='unix://var/run/docker.sock')
-        self.firewall_rules = []
+        self.firewall_rules = ["src = 127.0.0.1 pass", "qname = whalebone.io deny"]
         try:
             self.proxy_address = os.environ["PROXY_ADDRESS"]
         except KeyError:
@@ -65,10 +65,11 @@ class Tester():
             while True:
                 if self.redis.exists("create"):
                     status = self.redis_output(self.redis.lpop("create"))
-                    if status["status"] == "success":
-                        self.logger.info("Resolver creation successful")
-                    else:
-                        self.logger.warning("resolver upgrade unsuccessful with response: {}".format(status["body"]))
+                    for key in status:
+                        if key["status"] == "success":
+                            self.logger.info("{} creation successful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key,key["body"]))
                     break
                 else:
                     time.sleep(3)
@@ -90,11 +91,11 @@ class Tester():
         else:
             rec = json.loads(rec.text)
             if rec.ok:
-                successful_rules = [rule for rule in rec["body"] if rec["body"][rule]["status"] == "success"]
+                successful_rules = [rule for rule in rec if rule["status"] == "success"]
                 if successful_rules == self.firewall_rules:
                     self.logger.info("Inject successful")
                 else:
-                    self.logger.warning("Inject unsuccessful at rules {}".format(rec["body"]))
+                    self.logger.warning("Inject unsuccessful at rules {}".format(rec))
             else:
                 self.logger.warning("Inject failed", rec)
 
@@ -103,22 +104,24 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
-                json={"compose": base64.b64encode(compose.encode("utf-8")).decode("utf-8"), "services": ["resolver", "logrotate"]})
+                json={"compose": base64.b64encode(compose.encode("utf-8")).decode("utf-8"),
+                      "services": ["resolver", "logrotate"]})
         except Exception as e:
             self.logger.warning(e)
         else:
             while True:
                 if self.redis.exists("upgrade"):
                     status = self.redis_output(self.redis.lpop("upgrade"))
-                    if status["status"] == "success":
-                        self.logger.info("Resolver upgrade successful")
-                        for config in self.view_config()["body"]:
-                            if config["name"] == "resolver" and config["labels"]["resolver"] == "3.0":
-                                self.logger.info("Resolver upgrade config check successful")
-                            else:
-                                self.logger.warning("Resolver upgrade config check unsuccessful")
-                    else:
-                        self.logger.warning("resolver upgrade unsuccessful with response: {}".format(status["body"]))
+                    for key in status:
+                        if key["status"] == "success":
+                            self.logger.info("{} upgrade successful".format(key))
+                            for config in self.view_config()["body"]:
+                                if config["name"] == key and config["labels"][key] == "3.0":
+                                    self.logger.info("{} upgrade config check successful".format(key))
+                                else:
+                                    self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
                     break
                 else:
                     time.sleep(3)
@@ -139,7 +142,7 @@ class Tester():
                     if config["name"] == "lr-agent" and config["labels"]["lr-agent"] == "3.0":
                         self.logger.info("Agent upgrade config check successful")
             else:
-                self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec["body"]))
+                self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
 
     def get_sysinfo(self):
         try:

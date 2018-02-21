@@ -18,6 +18,8 @@ services:
       command: dotnet run
       restart: always
       network_mode: host
+      restart: always
+      network_mode: host
     passivedns:
       image: whalebone/passivedns:local-3
       labels:

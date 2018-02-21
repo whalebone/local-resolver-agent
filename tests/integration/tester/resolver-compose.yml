@@ -16,13 +16,14 @@ services:
       labels:
          kresman: "2.0"
       command: dotnet run
+      restart: always
       network_mode: host
     passivedns:
       image: whalebone/passivedns:local-3
       labels:
          passivedns: "2.0"
       environment:
-        DNS_INTERFACE: 'enp0s3 '
+        DNS_INTERFACE: 'eth0'
         MAX_MEMORY: '256'
       volumes:
       - /var/log/whalebone:/var/log/whalebone

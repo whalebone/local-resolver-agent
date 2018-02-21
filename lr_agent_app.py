@@ -17,7 +17,7 @@ def validate_settings():
     try:
         proxy_address = os.environ['WHALEBONE_PROXY_ADDRESS']
     except KeyError:
-        raise InitException('System env WHALEBONE_PORTAL_ADDRESS must be set')
+        raise InitException('System env WHALEBONE_PROXY_ADDRESS must be set')
     try:
         client_cert_pass = os.environ['WHALEBONE_CLIENT_CERT_PASS']
     except KeyError:

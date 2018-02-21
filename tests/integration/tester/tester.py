@@ -153,7 +153,7 @@ class Tester():
         else:
             rec = json.loads(rec.text)
             containers = ["lr-agent", "resolver", " logrotate", "passivedns", "logstream"]
-            for key, value in rec["body"].items():
+            for key, value in rec:
                 if key == "containers" and set(containers).issubset(set(value)):
                     self.logger.info("All services containers are running")
 
@@ -163,6 +163,65 @@ class Tester():
                     self.logger.info("memory: " + str(value))
                 if key == "hdd":
                     self.logger.info("hdd: " + str(value))
+
+    def rename_container(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/rename".format(self.proxy_address, self.agent_id), json={"logrotate":"mega_rotate"})
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            if rec["logrotate"]["status"]=="success":
+                self.logger.info("Logrotate renamed successfully")
+            else:
+                self.logger.info("Logrotate rename failed")
+
+    def stop_container(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/stop".format(self.proxy_address, self.agent_id), json=["mega_rotate"])
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            if rec["status"] == "success":
+                while True:
+                    if self.redis.exists("stop"):
+                        status = self.redis_output(self.redis.lpop("stop"))
+                        for key in status:
+                            if key["status"] == "success":
+                                self.logger.info("{} stop successful".format(key))
+                            else:
+                                self.logger.warning("{} stop unsuccessful with response: {}".format(key, status))
+                        break
+                    else:
+                        time.sleep(3)
+            else:
+                self.logger.info("Failed to deliver stop")
+
+    def remove_container(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/remove".format(self.proxy_address, self.agent_id), json=["passivedns"])
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            if rec["status"] == "success":
+                while True:
+                    if self.redis.exists("remove"):
+                        status = self.redis_output(self.redis.lpop("remove"))
+                        for key in status:
+                            if key["status"] == "success":
+                                self.logger.info("{} remove successful".format(key))
+                            else:
+                                self.logger.warning("{} remove unsuccessful with response: {}".format(key, status))
+                        break
+                    else:
+                        time.sleep(3)
+            else:
+                self.logger.info("Failed to deliver remove")
 
     def view_config(self):
         try:
@@ -182,6 +241,10 @@ class Tester():
         time.sleep(8)
         self.upgrade_agent()
         self.get_sysinfo()
+        self.rename_container()
+        self.stop_container()
+        self.remove_container()
+
 
 
 if __name__ == '__main__':

@@ -1,5 +1,3 @@
-#from exception.exc import ComposeException
-
 
 def create_docker_run_kwargs(service_compose_fragmet):
     kwargs = dict()

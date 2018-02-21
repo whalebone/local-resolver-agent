@@ -10,4 +10,4 @@ cat /opt/whalebone/certs/client.crt /opt/whalebone/certs/client.key > /opt/whale
 
 export WHALEBONE_LR_CLIENT_CERT=/opt/whalebone/certs/client.pem
 
-python lr_agent_app.py
+python3 lr_agent_app.py

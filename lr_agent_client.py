@@ -130,7 +130,7 @@ class LRAgentClient:
     async def create_container(self, response: dict, request: dict) -> dict:
         await self.send_acknowledgement(response)
         status = {}
-        decoded_data = base64.b64decode(request["data"]["compose"])
+        decoded_data = self.decode_base64_string(request["data"]["compose"])
         try:
             parsed_compose = self.compose_parser.create_service(decoded_data)
         except ComposeException as e:
@@ -140,7 +140,7 @@ class LRAgentClient:
             if "resolver" in parsed_compose["services"]:
                 try:
                     if "compose" in request["data"]:
-                        self.save_file("compose/docker-compose.yml", "yml", request["data"]["compose"])
+                        self.save_file("compose/docker-compose.yml", "yml", decoded_data)
                     if "config" in request["data"]:
                         self.save_file("kresd/kres.conf", "text", request["data"]["config"])
                     if "rules" in request["data"]:
@@ -171,7 +171,7 @@ class LRAgentClient:
     async def upgrade_container(self, response: dict, request: dict) -> dict:
         await self.send_acknowledgement(response)
         status = {}
-        decoded_data = base64.b64decode(request["data"]["compose"])
+        decoded_data = self.decode_base64_string(request["data"]["compose"])
         if "services" in request["data"]:
             services = request["data"]["services"]
         else:
@@ -203,6 +203,8 @@ class LRAgentClient:
                     else:
                         if "resolver" in parsed_compose["services"]:
                             try:
+                                if "compose" in request["data"]:
+                                    self.save_file("compose/docker-compose.yml", "yml", decoded_data)
                                 if "config" in request["data"]:
                                     self.save_file("kresd/kres.conf", "text", request["data"]["config"])
                                 if "rules" in request["data"]:

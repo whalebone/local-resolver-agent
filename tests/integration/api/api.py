@@ -43,6 +43,18 @@ def sysinfo(body):
     save_data("sysinfo", body)
 
 
+@hug.post("/{}/stop".format(agent_id))
+def sysinfo(body):
+    logger.info(body)
+    save_data("stop", body)
+
+
+@hug.post("/{}/remove".format(agent_id))
+def sysinfo(body):
+    logger.info(body)
+    save_data("remove", body)
+
+
 @hug.post("/{}/create".format(agent_id))
 def create(body):
     logger.info(body)
@@ -56,6 +68,6 @@ def upgrade(body):
 
 
 @hug.post("/{}/request".format(agent_id))
-def start(body: dict):
+def start(body):
     logger.info(body)
-    save_data("upgrade", body)
+    save_data("request", body)

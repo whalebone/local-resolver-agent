@@ -51,25 +51,27 @@ class Tester():
         for k, v in compose["services"].items():
             if "volumes" in v:
                 compose["services"][k]["volumes"] = self.parse_volumes(v["volumes"])
-        self.docker_client.containers.run(detach=True,**compose["services"]["lr-agent"])
+        self.docker_client.containers.run(detach=True, **compose["services"]["lr-agent"])
 
     def start_resolver(self):
         compose = self.compose_reader("resolver-compose.yml")
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
-                json={"compose": base64.b64encode(compose.encode("utf-8")).decode("utf-8")})
+                json={"compose": base64.b64encode(compose.encode("utf-8")).decode("utf-8"),
+                      "rules": self.firewall_rules})
         except Exception as e:
             self.logger.info(e)
         else:
             while True:
                 if self.redis.exists("create"):
                     status = self.redis_output(self.redis.lpop("create"))
-                    for key in status:
-                        if key["status"] == "success":
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "success":
                             self.logger.info("{} creation successful".format(key))
                         else:
-                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key,key["body"]))
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, value["body"]))
                     break
                 else:
                     time.sleep(3)
@@ -89,10 +91,11 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
             if rec.ok:
-                successful_rules = [rule for rule in rec if rule["status"] == "success"]
-                if successful_rules == self.firewall_rules:
+                rec = json.loads(rec.text)
+                self.logger.info(rec)
+                successful_rules = [rule for rule, status in rec.items() if status["status"] == "success"]
+                if set(successful_rules) == set(self.firewall_rules):
                     self.logger.info("Inject successful")
                 else:
                     self.logger.warning("Inject unsuccessful at rules {}".format(rec))
@@ -101,22 +104,24 @@ class Tester():
 
     def upgrade_resolver(self):
         compose = self.compose_reader("resolver-compose-upgraded.yml")
+        services = ["resolver", "logrotate"]
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": base64.b64encode(compose.encode("utf-8")).decode("utf-8"),
-                      "services": ["resolver", "logrotate"]})
+                      "services": services})
         except Exception as e:
             self.logger.warning(e)
         else:
             while True:
                 if self.redis.exists("upgrade"):
                     status = self.redis_output(self.redis.lpop("upgrade"))
-                    for key in status:
-                        if key["status"] == "success":
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "success":
                             self.logger.info("{} upgrade successful".format(key))
-                            for config in self.view_config()["body"]:
-                                if config["name"] == key and config["labels"][key] == "3.0":
+                            for config in self.view_config():
+                                if config["name"] in services and config["labels"][key] == "3.0":
                                     self.logger.info("{} upgrade config check successful".format(key))
                                 else:
                                     self.logger.warning("{} upgrade config check unsuccessful".format(key))
@@ -136,9 +141,10 @@ class Tester():
             self.logger.warning(e)
         else:
             rec = json.loads(rec.text)
+            self.logger.info(rec)
             if rec["status"] == "success":
                 time.sleep(5)
-                for config in self.view_config()["body"]:
+                for config in self.view_config():
                     if config["name"] == "lr-agent" and config["labels"]["lr-agent"] == "3.0":
                         self.logger.info("Agent upgrade config check successful")
             else:
@@ -154,6 +160,8 @@ class Tester():
             rec = json.loads(rec.text)
             containers = ["lr-agent", "resolver", " logrotate", "passivedns", "logstream"]
             for key, value in rec:
+                if key == "containers":
+                    self.logger.info(value)
                 if key == "containers" and set(containers).issubset(set(value)):
                     self.logger.info("All services containers are running")
 
@@ -167,20 +175,24 @@ class Tester():
     def rename_container(self):
         try:
             rec = requests.post(
-                "http://{}:8080/wsproxy/rest/message/{}/rename".format(self.proxy_address, self.agent_id), json={"logrotate":"mega_rotate"})
+                "http://{}:8080/wsproxy/rest/message/{}/rename".format(self.proxy_address, self.agent_id),
+                json={"logrotate": "mega_rotate"})
         except Exception as e:
             self.logger.info(e)
         else:
             rec = json.loads(rec.text)
-            if rec["logrotate"]["status"]=="success":
-                self.logger.info("Logrotate renamed successfully")
-            else:
-                self.logger.info("Logrotate rename failed")
+            self.logger.info(rec)
+            for key, value in rec.items():
+                if value["status"] == "success":
+                    self.logger.info("{} renamed successfully".format(key))
+                else:
+                    self.logger.info("{} rename failed".format(key))
 
     def stop_container(self):
         try:
             rec = requests.post(
-                "http://{}:8080/wsproxy/rest/message/{}/stop".format(self.proxy_address, self.agent_id), json=["mega_rotate"])
+                "http://{}:8080/wsproxy/rest/message/{}/stop".format(self.proxy_address, self.agent_id),
+                json=["mega_rotate"])
         except Exception as e:
             self.logger.info(e)
         else:
@@ -189,8 +201,9 @@ class Tester():
                 while True:
                     if self.redis.exists("stop"):
                         status = self.redis_output(self.redis.lpop("stop"))
-                        for key in status:
-                            if key["status"] == "success":
+                        self.logger.info(status)
+                        for key, value in status.items():
+                            if value["status"] == "success":
                                 self.logger.info("{} stop successful".format(key))
                             else:
                                 self.logger.warning("{} stop unsuccessful with response: {}".format(key, status))
@@ -203,7 +216,8 @@ class Tester():
     def remove_container(self):
         try:
             rec = requests.post(
-                "http://{}:8080/wsproxy/rest/message/{}/remove".format(self.proxy_address, self.agent_id), json=["passivedns"])
+                "http://{}:8080/wsproxy/rest/message/{}/remove".format(self.proxy_address, self.agent_id),
+                json=["passivedns"])
         except Exception as e:
             self.logger.info(e)
         else:
@@ -212,8 +226,9 @@ class Tester():
                 while True:
                     if self.redis.exists("remove"):
                         status = self.redis_output(self.redis.lpop("remove"))
-                        for key in status:
-                            if key["status"] == "success":
+                        self.logger.info(status)
+                        for key, value in status.items():
+                            if value["status"] == "success":
                                 self.logger.info("{} remove successful".format(key))
                             else:
                                 self.logger.warning("{} remove unsuccessful with response: {}".format(key, status))
@@ -225,26 +240,54 @@ class Tester():
 
     def view_config(self):
         try:
-            rec = requests.post("http://{}:8080/wsproxy/rest/message/{}/containers".format(self.proxy_address, self.agent_id))
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/containers".format(self.proxy_address, self.agent_id))
         except Exception as e:
             self.logger.warning(e)
         else:
             return json.loads(rec.text)
 
     def run_test(self):
-        time.sleep(20)
-        self.start_agent()
+        time.sleep(10)
+        try:
+            self.start_agent()
+        except Exception:
+            pass
         time.sleep(8)
-        self.start_resolver()
+        try:
+            self.start_resolver()
+        except Exception:
+            pass
+        try:
+            self.inject_rules()
+        except Exception:
+            pass
         time.sleep(8)
-        self.upgrade_resolver()
+        try:
+            self.upgrade_resolver()
+        except Exception:
+            pass
         time.sleep(8)
-        self.upgrade_agent()
-        self.get_sysinfo()
-        self.rename_container()
-        self.stop_container()
-        self.remove_container()
-
+        # try:
+        #     self.upgrade_agent()
+        # except Exception:
+        #     pass
+        try:
+            self.get_sysinfo()
+        except Exception:
+            pass
+        try:
+            self.rename_container()
+        except Exception:
+            pass
+        try:
+            self.stop_container()
+        except Exception:
+            pass
+        try:
+            self.remove_container()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':

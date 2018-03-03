@@ -8,7 +8,8 @@ class FirewallConnector:
         try:
             self.resolver_address = os.environ['LOCAL_RESOLVER_ADDRESS']
         except KeyError:
-            self.resolver_address="localhost"
+            self.resolver_address = "localhost"
+        self.folder = "/etc/whalebone/"
 
     def active_rules(self):
         # returns {} if non are present, if some returns a list of dicts, where dict is a rule
@@ -53,7 +54,7 @@ class FirewallConnector:
 
     def inject_all_rules(self):
         try:
-            with open("/etc/whalebone/kresd/firewall.conf", "r") as file:
+            with open("{}kresd/firewall.conf".format(self.folder), "r") as file:
                 rules = json.load(file)
             for rule in rules:
                 self.create_rule(rule)

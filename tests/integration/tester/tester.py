@@ -268,10 +268,10 @@ class Tester():
         except Exception:
             pass
         time.sleep(8)
-        # try:
-        #     self.upgrade_agent()
-        # except Exception:
-        #     pass
+        try:
+            self.upgrade_agent()
+        except Exception:
+            pass
         try:
             self.get_sysinfo()
         except Exception:
@@ -286,6 +286,10 @@ class Tester():
             pass
         try:
             self.remove_container()
+        except Exception:
+            pass
+        try:
+            self.get_sysinfo()
         except Exception:
             pass
 

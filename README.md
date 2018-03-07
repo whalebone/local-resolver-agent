@@ -7,3 +7,4 @@ Used envs:
 - LOGGING_LEVEL: optional, if set debug option is enabled, accepts whatever value you supply
 - LOCAL_RESOLVER_ADDRESS: resolver address
 - WHALEBONE_PROXY_ADDRESS: proxy address (wss://wsproxy:8443/wsproxy/ws)
+- PERIODIC_INTERVAL: sets period in seconds for periodic functions sending (sysinfo), if not set default value of 10 seconds will be used

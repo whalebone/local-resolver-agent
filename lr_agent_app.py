@@ -41,6 +41,10 @@ async def connect():
 
 async def local_resolver_agent_app():
     logger = logging.getLogger(__name__)
+    try:
+        interval = int(os.environ['PERIODIC_INTERVAL'])
+    except KeyError:
+        interval = 10
     while True:
         try:
             websocket = await connect()
@@ -49,7 +53,7 @@ async def local_resolver_agent_app():
             asyncio.ensure_future(client.listen())
             while True:
                 await client.send_sys_info()
-                await asyncio.sleep(10)
+                await asyncio.sleep(interval)
         except Exception as e:
             logger.error('Generic error: {0}'.format(str(e)))
             logger.error('Retrying in 10 secs...')

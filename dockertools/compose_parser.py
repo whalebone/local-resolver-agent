@@ -30,7 +30,7 @@ class ComposeParser:
                     'services': parsed_compose
                 }
         except yaml.YAMLError as e:
-            raise ComposeException("Invalid compose YAML format")
+            raise ComposeException("Invalid compose YAML format {}".format(e))
 
     def validate(self, parsed_compose):
         if parsed_compose['version'] not in SUPPORTED_VERSIONS:

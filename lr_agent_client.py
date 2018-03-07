@@ -22,7 +22,9 @@ class LRAgentClient:
         self.firewall_connector = FirewallConnector()
         self.log_reader = LogReader()
         self.folder = "/etc/whalebone/"
-        self.logger = build_logger("lr-agent", "/etc/whalebone/logs/")
+        self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
+        self.async_actions = ["stop", "remove", "create", "upgrade"]
+        self.error_stash = {}
 
     async def listen(self):
         while True:
@@ -31,9 +33,13 @@ class LRAgentClient:
                 response = await self.process(request)
             except Exception as e:
                 request = json.loads(request)
-                response = {"status": "failure", "requestId": request["requestId"], "action": request["action"],
-                            "body": str(e)}
+                response = {"requestId": request["requestId"], "action": request["action"], "body": str(e)}
                 self.logger.warning(e)
+            try:
+                if response["action"] in self.async_actions:
+                    self.process_response(response)
+            except Exception as e:
+                self.logger.info("General error at error dumping, {}".format(e))
             await self.send(response)
 
     async def send(self, message: dict):
@@ -49,7 +55,7 @@ class LRAgentClient:
 
     async def send_sys_info(self):
         try:
-            sys_info = {"action": "sysinfo", "data": get_system_info(self.dockerConnector)}
+            sys_info = {"action": "sysinfo", "data": get_system_info(self.dockerConnector, self.error_stash)}
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
@@ -73,11 +79,29 @@ class LRAgentClient:
                             try:
                                 await self.dockerConnector.start_service(config)
                             except Exception as e:
-                                print(service)
                                 self.logger.warning(
                                     "Service: {} is offline, automatic start failed due to: {}".format(service, e))
             except Exception as e:
                 self.logger.warning(e)
+
+    def process_response(self, response: dict):
+        for key, value in response["data"].items():
+            if value["status"] == "failure":
+                try:
+                    if key not in self.error_stash:
+                        self.error_stash[key] = {response["action"]: value["body"]}
+                    else:
+                        self.error_stash[key].update({response["action"]: value["body"]})
+                except KeyError as e:
+                    self.logger.info("Error at process_response during key ingest, key not found {}".format(e))
+            else:
+                try:
+                    if key in self.error_stash and response["action"] in self.error_stash[key]:
+                        del self.error_stash[key][response["action"]]
+                        if len(self.error_stash[key]) == 0:
+                            del self.error_stash[key]
+                except KeyError as e:
+                    self.logger.info("Error at process_response during key clearance, {}".format(e))
 
     async def process(self, request_json):
         request = json.loads(request_json)

@@ -1,7 +1,8 @@
 import psutil
 import platform
 
-def get_system_info(docker_connector):
+
+def get_system_info(docker_connector, error_stash: dict):
     mem = psutil.virtual_memory()
     du = psutil.disk_usage('/')
     sysInfo = {
@@ -24,6 +25,7 @@ def get_system_info(docker_connector):
         },
         "docker": docker_connector.docker_version(),
         "containers": {container.name: container.status for container in docker_connector.get_containers(all=True)},
+        "error_messages": error_stash,
         'interfaces': get_ifaces()
     }
     return sysInfo

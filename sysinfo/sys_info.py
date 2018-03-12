@@ -24,7 +24,7 @@ def get_system_info(docker_connector, error_stash: dict):
             'usage': du.percent,
         },
         "docker": docker_connector.docker_version(),
-        "containers": {container.name: container.status for container in docker_connector.get_containers(all=True)},
+        "containers": {container.name: container.status for container in docker_connector.get_containers(stopped=True)},
         "error_messages": error_stash,
         'interfaces': get_ifaces()
     }

@@ -111,7 +111,7 @@ class LRAgentClient:
             self.logger.info(e, request)
             return {"requestId": request["requestId"], "action": request["action"],
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
-        print(request)
+        self.logger.info(request)
         response = {}
         if "action" not in request or request["action"] is None:
             return self.getError('Missing action in request', request)
@@ -145,7 +145,7 @@ class LRAgentClient:
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
-            response["data"] = get_system_info(self.dockerConnector)
+            response["data"] = get_system_info(self.dockerConnector, self.error_stash)
         except Exception as e:
             self.logger.info(e)
             self.getError(str(e), request)

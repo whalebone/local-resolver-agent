@@ -1,5 +1,5 @@
 FROM python:3.5
+RUN pip install requests redis pyyaml docker
 ADD . /code
 WORKDIR /code
-RUN pip install requests redis pyyaml docker
 CMD ["python", "tester.py"]

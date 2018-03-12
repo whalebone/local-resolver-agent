@@ -58,7 +58,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
-                json={"compose": base64.b64encode(compose.encode("utf-8")).decode("utf-8"),
+                json={"compose": compose,
                       "rules": self.firewall_rules})
         except Exception as e:
             self.logger.info(e)
@@ -108,7 +108,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
-                json={"compose": base64.b64encode(compose.encode("utf-8")).decode("utf-8"),
+                json={"compose": compose,
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -136,7 +136,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
-                json={"compose": base64.b64encode(compose.encode("utf-8")).decode("utf-8"), "services": ["lr-agent"]})
+                json={"compose": compose, "services": ["lr-agent"]})
         except Exception as e:
             self.logger.warning(e)
         else:
@@ -161,9 +161,16 @@ class Tester():
             containers = ["lr-agent", "resolver", " logrotate", "passivedns", "logstream"]
             for key, value in rec:
                 if key == "containers":
-                    self.logger.info(value)
-                if key == "containers" and set(containers).issubset(set(value)):
-                    self.logger.info("All services containers are running")
+                    for cont, status in value.items():
+                        try:
+                            if status == "active":
+                                containers.remove(cont)
+                        except Exception:
+                            pass
+                    if len(containers) == 0:
+                        self.logger.info("All containers are running")
+                    else:
+                        self.logger.info("Some are not running: {}".format(containers))
 
                 if key == "cpu":
                     self.logger.info("cpu: " + str(value))
@@ -247,6 +254,90 @@ class Tester():
         else:
             return json.loads(rec.text)
 
+    def get_rules(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/fwrules".format(self.proxy_address, self.agent_id))
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            self.logger.info(rec)
+            for rule in rec:
+                if rule["info"] in self.firewall_rules:
+                    self.logger.info("Rule found with rule text: {}".format(rule["info"]))
+                else:
+                    self.logger.info("Rule not found: {}".format(rule["info"]))
+
+    def get_rule_info(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/fwfetch".format(self.proxy_address, self.agent_id), data="0")
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            self.logger.info(rec)
+            if rec["info"] in self.firewall_rules:
+                self.logger.info("Rule found with rule text: {}".format(rec["info"]))
+            else:
+                self.logger.info("Rule not found: {}".format(rec["info"]))
+
+    def delete_rule(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/fwdelete".format(self.proxy_address, self.agent_id), json=["0"])
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            if rec["0"]["status"] == "success":
+                self.logger.info("Rule deleted successfuly")
+            else:
+                self.logger.info("Rule not deleted: {}".format(rec["info"]))
+
+    def modify_rule(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/fwmodify".format(self.proxy_address, self.agent_id),
+                json=["1", "active", "false"])
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            if rec["status"] == "success":
+                self.logger.info("Rule modified successfully")
+            else:
+                self.logger.info("Rule not deleted: {}".format(rec["info"]))
+
+    def get_logs(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/logs".format(self.proxy_address, self.agent_id))
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            files = ["docker-connector.log", "lr-agent.log"]
+            rec = json.loads(rec.text)
+            if set(rec) == set(files):
+                self.logger.info("Log files are identical")
+            else:
+                self.logger.info("Log files are different: {}".format(rec))
+
+    def delete_log(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/dellogs".format(self.proxy_address, self.agent_id),
+                json=["docker-connector.log"])
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            if rec["docker-connector.log"]["status"] == "success":
+                self.logger.info("Log deleted successfully")
+            else:
+                self.logger.info("Log not deleted: {}".format(rec["info"]))
+
     def run_test(self):
         time.sleep(10)
         try:
@@ -258,16 +349,16 @@ class Tester():
             self.start_resolver()
         except Exception:
             pass
-        try:
-            self.inject_rules()
-        except Exception:
-            pass
         time.sleep(8)
         try:
             self.upgrade_resolver()
         except Exception:
             pass
         time.sleep(8)
+        try:
+            self.inject_rules()
+        except Exception:
+            pass
         try:
             self.upgrade_agent()
         except Exception:
@@ -289,7 +380,27 @@ class Tester():
         except Exception:
             pass
         try:
-            self.get_sysinfo()
+            self.get_rules()
+        except Exception:
+            pass
+        try:
+            self.get_rule_info()
+        except Exception:
+            pass
+        try:
+            self.delete_rule()
+        except Exception:
+            pass
+        try:
+            self.modify_rule()
+        except Exception:
+            pass
+        try:
+            self.get_logs()
+        except Exception:
+            pass
+        try:
+            self.delete_log()
         except Exception:
             pass
 

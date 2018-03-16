@@ -10,6 +10,8 @@ services:
           max-size: "10m"
           max-file: "1"
       tty: true
+      volumes:
+      - /etc/whalebone/kres:/etc/kres/
       network_mode: host
     kresman:
       image: kresman

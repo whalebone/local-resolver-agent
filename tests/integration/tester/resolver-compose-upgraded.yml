@@ -11,6 +11,8 @@ services:
           max-file: "1"
       tty: true
       network_mode: host
+      volumes:
+      - /etc/whalebone/kres:/etc/kres/
       restart: always
     kresman:
       image: kresman

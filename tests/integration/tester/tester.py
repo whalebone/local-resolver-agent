@@ -2,12 +2,12 @@ import redis
 import requests
 import yaml
 import docker
-import os
-import base64
-import time
 import json
 import logging
+import os
 import ast
+import time
+#from scapy.all import *
 
 
 class Tester():
@@ -59,7 +59,10 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "rules": self.firewall_rules})
+                        "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.size = 100 * MB"],})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -109,6 +112,10 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.size = 100 * MB"],
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -161,17 +168,7 @@ class Tester():
             containers = ["lr-agent", "resolver", " logrotate", "passivedns", "logstream"]
             for key, value in rec:
                 if key == "containers":
-                    for cont, status in value.items():
-                        try:
-                            if status == "active":
-                                containers.remove(cont)
-                        except Exception:
-                            pass
-                    if len(containers) == 0:
-                        self.logger.info("All containers are running")
-                    else:
-                        self.logger.info("Some are not running: {}".format(containers))
-
+                    self.logger.info("Containers: {}".format(value))
                 if key == "cpu":
                     self.logger.info("cpu: " + str(value))
                 if key == "memory":
@@ -244,6 +241,37 @@ class Tester():
                         time.sleep(3)
             else:
                 self.logger.info("Failed to deliver remove")
+
+    def dns_queries(self):
+        try:
+            dst_ip = os.environ["RESOLVER_IP"]
+        except KeyError:
+            dst_ip = "localhost"
+        src_ips = []
+        tested_domains = {"google.com": "allow", "seznam.cz": "allow"}
+        # for domain in tested_domains:
+        #     for ip in src_ips:
+        #         send(IP(dst=dst_ip, src=ip) / UDP() / DNS(rd=1, qd=DNSQR(qname=domain)))
+        if self.check_resolver_logs(tested_domains):
+            self.logger.info("Resolver test successful")
+        else:
+            self.logger.info("Resolver test failed, failures are shown above")
+
+    def check_resolver_logs(self, domains: dict) -> bool:
+        result = True
+        with open("file", "r") as log_file:
+            for log in log_file:
+                log = json.loads(log)
+                try:
+                    if domains[log["domain"]] == log["action"]:
+                        continue
+                    else:
+                        result = False
+                        self.logger.info(
+                            "Action mismatch for domain {} with action".format(log["domain"], log["action"]))
+                except KeyError as e:
+                    self.logger.info("Something not found in data {}".format(e))
+            return result
 
     def view_config(self):
         try:
@@ -342,67 +370,67 @@ class Tester():
         time.sleep(10)
         try:
             self.start_agent()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         time.sleep(8)
         try:
             self.start_resolver()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         time.sleep(8)
         try:
             self.upgrade_resolver()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         time.sleep(8)
         try:
             self.inject_rules()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.upgrade_agent()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.get_sysinfo()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.rename_container()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.stop_container()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.remove_container()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.get_rules()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.get_rule_info()
         except Exception:
             pass
         try:
             self.delete_rule()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.modify_rule()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.get_logs()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.delete_log()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.info(e)
 
 
 if __name__ == '__main__':

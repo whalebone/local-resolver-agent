@@ -7,7 +7,7 @@ import logging
 import os
 import ast
 import time
-#from scapy.all import *
+from scapy.all import *
 
 
 class Tester():
@@ -61,8 +61,8 @@ class Tester():
                 json={"compose": compose,
                         "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
                                  "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                                 "cache.size = 100 * MB"],})
+                                 "modules = { 'hints', 'policy', 'stats', 'predict' }",
+                                 "cache.size = 512 * MB"],})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -104,7 +104,7 @@ class Tester():
                     self.logger.warning("Inject unsuccessful at rules {}".format(rec))
             else:
                 self.logger.warning("Inject failed", rec)
-
+# os.getenv('KNOT_CACHE_SIZE') , 'whalebone'
     def upgrade_resolver(self):
         compose = self.compose_reader("resolver-compose-upgraded.yml")
         services = ["resolver", "logrotate"]
@@ -114,8 +114,8 @@ class Tester():
                 json={"compose": compose,
                       "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
                                  "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                                 "cache.size = 100 * MB"],
+                                 "modules = { 'hints', 'policy', 'stats', 'predict' }",
+                                 "cache.size = 512 * MB"],
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -247,11 +247,12 @@ class Tester():
             dst_ip = os.environ["RESOLVER_IP"]
         except KeyError:
             dst_ip = "localhost"
-        src_ips = []
-        tested_domains = {"google.com": "allow", "seznam.cz": "allow"}
-        # for domain in tested_domains:
-        #     for ip in src_ips:
-        #         send(IP(dst=dst_ip, src=ip) / UDP() / DNS(rd=1, qd=DNSQR(qname=domain)))
+        src_ips = ["192.168.1.2", "192.168.1.3", "127.0.0.1"]
+        tested_domains = {"malware.com": {"192.168.1.2": "block", "192.168.1.3": "block"},
+                          "test.com": {"192.168.1.2": "block", "192.168.1.3": "block"}}
+        for domain in tested_domains:
+            for ip in src_ips:
+                send(IP(dst=dst_ip, src=ip) / UDP() / DNS(rd=1, qd=DNSQR(qname=domain)))
         if self.check_resolver_logs(tested_domains):
             self.logger.info("Resolver test successful")
         else:
@@ -259,11 +260,11 @@ class Tester():
 
     def check_resolver_logs(self, domains: dict) -> bool:
         result = True
-        with open("file", "r") as log_file:
+        with open("/etc/whalebone/log/whalebone.log", "r") as log_file:
             for log in log_file:
                 log = json.loads(log)
                 try:
-                    if domains[log["domain"]] == log["action"]:
+                    if domains[log["domain"]][log["client_ip"]] == log["action"]:
                         continue
                     else:
                         result = False
@@ -389,6 +390,10 @@ class Tester():
             self.logger.info(e)
         try:
             self.upgrade_agent()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.dns_queries()
         except Exception as e:
             self.logger.info(e)
         try:

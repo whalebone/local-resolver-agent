@@ -12,6 +12,7 @@ services:
       tty: true
       volumes:
       - /etc/whalebone/kres:/etc/kres/
+      - /var/log/whalebone/:/var/log/whalebone/
       network_mode: host
     kresman:
       image: kresman

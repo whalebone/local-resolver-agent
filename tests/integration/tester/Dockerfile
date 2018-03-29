@@ -1,4 +1,9 @@
 FROM python:3.5
+#RUN apt-get update && apt-get install git
+WORKDIR /root/
+RUN git clone https://github.com/secdev/scapy.git
+WORKDIR /root/scapy/
+RUN python setup.py install
 RUN pip install requests redis pyyaml docker
 ADD . /code
 WORKDIR /code

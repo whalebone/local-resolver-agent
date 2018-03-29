@@ -13,6 +13,7 @@ services:
       network_mode: host
       volumes:
       - /etc/whalebone/kres:/etc/kres/
+      - /var/log/whalebone/:/var/log/whalebone/
       restart: always
     kresman:
       image: kresman

@@ -18,3 +18,4 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/whalebone/kres/:/etc/whalebone/kresd/
+      - /var/log/whalebone/:/etc/whalebone/log/

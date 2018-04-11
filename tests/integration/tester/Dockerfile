@@ -4,7 +4,7 @@ WORKDIR /root/
 RUN git clone https://github.com/secdev/scapy.git
 WORKDIR /root/scapy/
 RUN python setup.py install
-RUN pip install requests redis pyyaml docker
+RUN pip install requests redis pyyaml docker dnspython
 ADD . /code
 WORKDIR /code
 CMD ["python", "tester.py"]

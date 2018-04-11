@@ -14,7 +14,11 @@ services:
       volumes:
       - /etc/whalebone/kres:/etc/kres/
       - /var/log/whalebone/:/var/log/whalebone/
+      - /var/lib/kres:/var/lib/kres
       restart: always
+      environment:
+         SINKIP: 8.8.8.8
+         FORKS: 4
     kresman:
       image: kresman
       labels:

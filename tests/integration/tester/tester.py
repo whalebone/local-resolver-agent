@@ -7,6 +7,7 @@ import logging
 import os
 import ast
 import time
+from dns import resolver
 from scapy.all import *
 
 
@@ -59,10 +60,11 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                        "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
                                  "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict' }",
-                                 "cache.size = 512 * MB"],})
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb://var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"]})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -104,7 +106,7 @@ class Tester():
                     self.logger.warning("Inject unsuccessful at rules {}".format(rec))
             else:
                 self.logger.warning("Inject failed", rec)
-# os.getenv('KNOT_CACHE_SIZE') , 'whalebone'
+
     def upgrade_resolver(self):
         compose = self.compose_reader("resolver-compose-upgraded.yml")
         services = ["resolver", "logrotate"]
@@ -114,8 +116,9 @@ class Tester():
                 json={"compose": compose,
                       "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
                                  "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict' }",
-                                 "cache.size = 512 * MB"],
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb://var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -247,12 +250,19 @@ class Tester():
             dst_ip = os.environ["RESOLVER_IP"]
         except KeyError:
             dst_ip = "localhost"
-        src_ips = ["192.168.1.2", "192.168.1.3", "127.0.0.1"]
+        res = resolver.Resolver()
+        res.nameservers = [dst_ip]
+        # src_ips = ["192.168.1.2", "192.168.1.3", "127.0.0.1"]
+        try:
+            src_ips = os.environ["SOURCE_IP"].split(",")
+        except KeyError:
+            src_ips = ["localhost"]
         tested_domains = {"malware.com": {"192.168.1.2": "block", "192.168.1.3": "block"},
                           "test.com": {"192.168.1.2": "block", "192.168.1.3": "block"}}
         for domain in tested_domains:
             for ip in src_ips:
-                send(IP(dst=dst_ip, src=ip) / UDP() / DNS(rd=1, qd=DNSQR(qname=domain)))
+                answer = res.query(domain, source=ip)
+                # send(IP(dst=dst_ip, src=ip) / UDP(sport=17395) / DNS(rd=1, qd=DNSQR(qname=domain)))
         if self.check_resolver_logs(tested_domains):
             self.logger.info("Resolver test successful")
         else:

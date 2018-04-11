@@ -13,7 +13,11 @@ services:
       volumes:
       - /etc/whalebone/kres:/etc/kres/
       - /var/log/whalebone/:/var/log/whalebone/
+      - /var/lib/kres:/var/lib/kres
       network_mode: host
+      environment:
+         FORKS: 4
+         SINKIP: 8.8.8.8
     kresman:
       image: kresman
       labels:

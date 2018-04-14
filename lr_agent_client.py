@@ -80,7 +80,8 @@ class LRAgentClient:
                             try:
                                 await self.dockerConnector.start_service(config)
                             except Exception as e:
-                                self.logger.warning(e)
+                                self.logger.warning(
+                                    "Service: {} is offline, automatic start failed due to: {}".format(service, e))
             except Exception as e:
                 self.logger.warning(e)
 

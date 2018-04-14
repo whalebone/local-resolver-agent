@@ -48,10 +48,11 @@ class LRAgentClient:
         except Exception as e:
             self.logger.warning(e)
         else:
-            try:
+            # try:
+                self.logger.info("Sending: {}".format(message))
                 await self.websocket.send(json.dumps(message))
-            except Exception as e:
-                self.logger.warning(e)
+            # except Exception as e:
+            #     self.logger.warning("Error at sending {}".format(e))
 
     async def send_sys_info(self):
         try:
@@ -66,21 +67,20 @@ class LRAgentClient:
         await self.send(message)
 
     async def validate_host(self):
-        if not os.path.exists("{}docker-compose.yml".format(self.folder)):
+        if not os.path.exists("{}compose/docker-compose.yml".format(self.folder)):
             request = {"action": "request", "data": {"message": "compose missing"}}
             await self.send(request)
         else:
             try:
-                with open("{}docker-compose.yml".format(self.folder), "r") as compose:
-                    parsed_compose = self.compose_parser.create_service(compose)
+                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                    parsed_compose = self.compose_parser.create_service(yaml.load(compose))
                     active_services = [container.name for container in self.dockerConnector.get_containers()]
                     for service, config in parsed_compose["services"].items():
                         if service not in active_services:
                             try:
                                 await self.dockerConnector.start_service(config)
                             except Exception as e:
-                                self.logger.warning(
-                                    "Service: {} is offline, automatic start failed due to: {}".format(service, e))
+                                self.logger.warning(e)
             except Exception as e:
                 self.logger.warning(e)
 
@@ -111,7 +111,8 @@ class LRAgentClient:
             self.logger.info(e, request)
             return {"requestId": request["requestId"], "action": request["action"],
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
-        self.logger.info(request)
+
+        self.logger.info("Received: {}".format(request))
         response = {}
         if "action" not in request or request["action"] is None:
             return self.getError('Missing action in request', request)
@@ -167,9 +168,9 @@ class LRAgentClient:
                     if "compose" in request["data"]:
                         self.save_file("compose/docker-compose.yml", "yml", decoded_data)
                     if "config" in request["data"]:
-                        self.save_file("kresd/kres.conf", "text", request["data"]["config"])
+                        self.save_file("kres/kres.conf", "text", request["data"]["config"])
                     # if "rules" in request["data"]:
-                    #     self.save_file("kresd/firewall.conf", "json", request["data"]["rules"])
+                    #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
                 except IOError as e:
                     status["dump"] = {"status": "failure", "body": str(e)}
             for service, config in parsed_compose["services"].items():
@@ -181,14 +182,16 @@ class LRAgentClient:
                     self.logger.info(e)
                 else:
                     status[service]["status"] = "success"
-                if service == "resolver":
-                    try:
-                        request = {"action": "request", "data": {"message": "rules missing"}}
-                        await self.send(request)
-                    except Exception as e:
-                        status[service]["inject_request"] = {"status": "failure", "body": str(e)}
-                    else:
-                        status[service]["inject_request"] = "success"
+
+                # if service == "resolver":
+                #     try:
+                #         request = {"action": "request", "data": {"message": "rules missing"}}
+                #         await self.send(request)
+                #     except Exception as e:
+                #         status[service]["inject_request"] = {"status": "failure", "body": str(e)}
+                #     else:
+                #         status[service]["inject_request"] = "success"
+
                     # try:
                     #     self.firewall_connector.inject_all_rules()
                     # except ConnectionError as e:
@@ -239,9 +242,9 @@ class LRAgentClient:
                                 if "compose" in request["data"]:
                                     self.save_file("compose/docker-compose.yml", "yml", decoded_data)
                                 if "config" in request["data"]:
-                                    self.save_file("kresd/kres.conf", "text", request["data"]["config"])
+                                    self.save_file("kres/kres.conf", "text", request["data"]["config"])
                                 # if "rules" in request["data"]:
-                                #     self.save_file("kresd/firewall.conf", "json", request["data"]["rules"])
+                                #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
                             except IOError as e:
                                 status["dump"] = {"status": "failure", "body": str(e)}
                         try:
@@ -295,14 +298,14 @@ class LRAgentClient:
                                                     self.logger.info(e)
                                             break
                                         else:
-                                            try:
-                                                request = {"action": "request", "data": {"message": "rules missing"}}
-                                                await self.send(request)
-                                            except Exception as e:
-                                                status[service]["inject_request"] = {"status": "failure",
-                                                                                     "body": str(e)}
-                                            else:
-                                                status[service]["inject_request"] = "success"
+                                            # try:
+                                            #     request = {"action": "request", "data": {"message": "rules missing"}}
+                                            #     await self.send(request)
+                                            # except Exception as e:
+                                            #     status[service]["inject_request"] = {"status": "failure",
+                                            #                                          "body": str(e)}
+                                            # else:
+                                            #     status[service]["inject_request"] = "success"
                                             # try:
                                             #     self.firewall_connector.inject_all_rules()
                                             # except ConnectionError as e:
@@ -432,7 +435,7 @@ class LRAgentClient:
         successful_rules = [rule for rule in status.keys() if status[rule]["status"] == "success"]
         if len(successful_rules) > 0:
             try:
-                self.save_file("kresd/firewall.conf", "json", successful_rules)
+                self.save_file("kres/firewall.conf", "json", successful_rules)
             except IOError as e:
                 self.logger.info(e)
                 response["data"] = {"status": "failure", "body": str(e)}

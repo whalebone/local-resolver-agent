@@ -3,8 +3,6 @@ import yaml
 from exception.exc import ComposeException
 
 SUPPORTED_VERSIONS = ['1', '3']
-LR_AGENT_SERVICE = "lr-agent"
-
 
 class ComposeParser:
 

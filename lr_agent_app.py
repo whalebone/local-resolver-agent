@@ -32,7 +32,7 @@ def validate_settings():
 async def connect():
     client_cert, proxy_address, client_cert_pass = validate_settings()
     ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    ssl_context.load_cert_chain(client_cert, password=client_cert_pass)
+    ssl_context.load_cert_chain(client_cert)
     # sslContext.load_cert_chain(WHALEBONE_LR_CLIENT_CERT)
     logger = logging.getLogger(__name__)
     logger.info("Connecting to {0}".format(proxy_address))
@@ -44,7 +44,7 @@ async def local_resolver_agent_app():
     try:
         interval = int(os.environ['PERIODIC_INTERVAL'])
     except KeyError:
-        interval = 10
+        interval = 30
     while True:
         try:
             websocket = await connect()
@@ -53,6 +53,7 @@ async def local_resolver_agent_app():
             asyncio.ensure_future(client.listen())
             while True:
                 await client.send_sys_info()
+                await client.validate_host()
                 await asyncio.sleep(interval)
         except Exception as e:
             logger.error('Generic error: {0}'.format(str(e)))

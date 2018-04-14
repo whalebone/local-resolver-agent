@@ -1,6 +1,8 @@
+import base64
+import netifaces
 
 def create_docker_run_kwargs(service_compose_fragmet):
-    kwargs = dict()
+    kwargs = {}
 
     for compose_param_name in SUPPORTED_PARAMETERS_V1:
         param_def = SUPPORTED_PARAMETERS_V1[compose_param_name]
@@ -38,6 +40,17 @@ def parse_value(value):
         return int(value)
     else:
         return value
+
+
+def parse_envs(envs):
+    file_mapping = {"CLIENT_CRT_BASE64": "client.crt", "CLIENT_KEY_BASE64": "client.key"}
+    for name, value in envs.items():
+        if name in file_mapping:
+            envs[name] = read_file(file_mapping[name])
+        if name == "DNS_INTERFACE":
+            for interface in netifaces.gateways()["default"].values():
+                envs["DNS_INTERFACE"] = interface[1]
+    return envs
 
 
 def parse_ports(ports_list):
@@ -81,19 +94,24 @@ def parse_restart_policy(restart_policy):
         return None
 
 
+def read_file(file_name:str)->str:
+    with open("/opt/whalebone/certs/{}".format(file_name), "r") as file:
+        return base64.b64encode(file.read().encode("utf-8")).decode("utf-8")
+
+
 SUPPORTED_PARAMETERS_V1 = {
     'image': None,  # not part of kwargs #
     'net': {'fn': parse_value, 'name': 'network_mode'},  # <1
     'network_mode': parse_value,
     'ports': parse_ports,
     'volumes': parse_volumes,
-    'labels':parse_value,
-    'environment': parse_value,
+    'labels': parse_value,
+    'environment': parse_envs,
     'tty': parse_value,
     'privileged': parse_value,
     'stdin_open': parse_value,
     'restart': {'fn': parse_restart_policy, 'name': 'restart_policy'},
-    'cpu_shares': parse_value, # <1
+    'cpu_shares': parse_value,  # <1
     'name': parse_value,
     'logging': None,
     'log_driver': None,  # special formatting together with log_opt <1

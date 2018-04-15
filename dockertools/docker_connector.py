@@ -10,8 +10,8 @@ class DockerConnector:
     def __init__(self):
         self.docker_client = docker.DockerClient(base_url='unix://var/run/docker.sock')  # hish level api
         self.api_client = docker.APIClient(base_url='unix://var/run/docker.sock')  # low level api
-        # keep socket connections uncaught so the exception propagates to main, adn the cycle restarts
-        self.logger = logger.build_logger("docker-connector", "/etc/whalebone/logs/") #/etc/whalebone/logs/
+        # keep socket connections uncaught so the exception propagates to main, and the cycle restarts
+        self.logger = logger.build_logger("docker-connector", "/etc/whalebone/logs/")
 
     def get_images(self):
         try:
@@ -29,6 +29,7 @@ class DockerConnector:
 
     async def start_service(self, parsed_compose: dict):
         kwargs = create_docker_run_kwargs(parsed_compose)
+        await self.pull_image(parsed_compose['image'])
         try:
             self.docker_client.containers.run(parsed_compose['image'], detach=True, **kwargs)
         except Exception as e:
@@ -78,3 +79,9 @@ class DockerConnector:
             return self.api_client.inspect_container(container_name)
         except Exception as e:
             raise ContainerException(e)
+
+    async def pull_image(self, container_name: str):
+        try:
+            self.docker_client.images.pull(container_name)
+        except Exception as e:
+            self.logger.warning("Unable to pull image: {}, reason: {}".format(container_name, e))

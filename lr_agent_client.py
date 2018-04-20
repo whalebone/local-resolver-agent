@@ -49,7 +49,8 @@ class LRAgentClient:
             self.logger.warning(e)
         else:
             # try:
-                self.logger.info("Sending: {}".format(message))
+                if message["action"] != "sysinfo":
+                    self.logger.info("Sending: {}".format(message))
                 await self.websocket.send(json.dumps(message))
             # except Exception as e:
             #     self.logger.warning("Error at sending {}".format(e))

@@ -129,7 +129,8 @@ class LRAgentClient:
                         "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
                         "fwmodify": self.modify_rule, "fwdelete": self.delete_rule,
                         "logs": self.agent_log_files, "log": self.agent_all_logs,
-                        "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs}
+                        "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
+                        "test": self.agent_test_message}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
@@ -138,7 +139,7 @@ class LRAgentClient:
                             "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
                             "fwmodify": [response, request], "fwdelete": [response, request],
                             "logs": [response], "log": [response, request],
-                            "flog": [response, request], "dellogs": [response, request]}
+                            "flog": [response, request], "dellogs": [response, request], "test": [response]}
 
         try:
             return await method_calls[request["action"]](*method_arguments[request["action"]])
@@ -194,13 +195,13 @@ class LRAgentClient:
                 #     else:
                 #         status[service]["inject_request"] = "success"
 
-                    # try:
-                    #     self.firewall_connector.inject_all_rules()
-                    # except ConnectionError as e:
-                    #     self.logger.info(e)
-                    #     status[service]["inject"] = "failure"
-                    # else:
-                    #     status[service]["inject"] = "success"
+                # try:
+                #     self.firewall_connector.inject_all_rules()
+                # except ConnectionError as e:
+                #     self.logger.info(e)
+                #     status[service]["inject"] = "failure"
+                # else:
+                #     status[service]["inject"] = "success"
             del response["requestId"]
             response["data"] = status
         return response
@@ -483,7 +484,7 @@ class LRAgentClient:
             files = self.log_reader.list_files()
         except FileNotFoundError as e:
             self.logger.info(e)
-            response["data"] ={"status": "failure", "body": str(e)}
+            response["data"] = {"status": "failure", "body": str(e)}
         else:
             response["data"] = files
         return response
@@ -519,6 +520,10 @@ class LRAgentClient:
             else:
                 status[file] = {"status": "success"}
         response["data"] = status
+        return response
+
+    def agent_test_message(self, response: dict) -> dict:
+        response["data"] = "Agent seems ok"
         return response
 
     def save_file(self, location, file_type, content):

@@ -522,7 +522,7 @@ class LRAgentClient:
         response["data"] = status
         return response
 
-    def agent_test_message(self, response: dict) -> dict:
+    async def agent_test_message(self, response: dict) -> dict:
         response["data"] = "Agent seems ok"
         return response
 

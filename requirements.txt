@@ -1,5 +1,6 @@
 asyncio
-docker
+docker == 3.0.1
 psutil
 websockets
-yaml
+pyaml
+netifaces

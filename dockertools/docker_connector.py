@@ -1,38 +1,87 @@
 import docker
-from dockertools.compose_tools import create_docker_run_kwargs
+
+from .compose_translator import create_docker_run_kwargs
+from exception.exc import ContainerException
+from loggingtools import logger
+from datetime import datetime
 
 
 class DockerConnector:
     def __init__(self):
-        self.client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        self.docker_client = docker.DockerClient(base_url='unix://var/run/docker.sock')  # hish level api
+        self.api_client = docker.APIClient(base_url='unix://var/run/docker.sock')  # low level api
+        # keep socket connections uncaught so the exception propagates to main, and the cycle restarts
+        self.logger = logger.build_logger("docker-connector", "/etc/whalebone/logs/")
 
-    def getImages(self):
-        return self.client.images.list()
+    def get_images(self):
+        try:
+            return self.docker_client.images.list()
+        except Exception as e:
+            self.logger.info(e)
+            return []
 
-    def getContainers(self):
-        return self.client.containers.list()
+    def get_containers(self, stopped: bool = False):
+        try:
+            return self.docker_client.containers.list(all=stopped)
+        except Exception as e:
+            self.logger.info(e)
+            return []
 
-    def startService(self, service_name, service_compose):
-        kwargs = create_docker_run_kwargs(service_compose)
-        name = service_name + '_' + service_compose['image']
-        kwargs['name'] = name
-        return self.client.containers.run(service_compose['image'], **kwargs)
+    async def start_service(self, parsed_compose: dict):
+        kwargs = create_docker_run_kwargs(parsed_compose)
+        await self.pull_image(parsed_compose['image'])
+        try:
+            self.docker_client.containers.run(parsed_compose['image'], detach=True, **kwargs)
+        except Exception as e:
+            raise ContainerException(e)
 
-    def getContainersByPrefix(self, prefix):
-        containers = []
-        for container in self.getContainers():
-            if container.name.startsWith(prefix):
-                containers.append(container)
-        return containers
+    def docker_version(self):
+        try:
+            return self.api_client.version()
+        except Exception as e:
+            self.logger.info(e)
+            return "docker version unavailable"
 
-    def restartContainer(self, container_id):
-        self.client.containers.get(container_id).restart()
+    def container_logs(self, name: str, timestamps: bool = False, tail: int = "all", since: str = None):
+        if since is not None:
+            since = datetime.strptime(since, '%Y-%m-%dT%H:%M:%S')
+        try:
+            return self.api_client.logs(name, timestamps=timestamps, tail=int(tail), since=since)
+        except Exception as e:
+            raise ConnectionError(e)
 
-    def stopContainer(self, container_id):
-        self.client.containers.get(container_id).stop()
+    async def restart_container(self, container_name: str):
+        try:
+            self.api_client.restart(container_name)
+        except Exception as e:
+            raise ContainerException(e)
 
-    def runCompose(self, compose_file):
-        # TODO compose
-        pass
+    async def stop_container(self, container_name: str):
+        try:
+            self.api_client.stop(container_name)
+        except Exception as e:
+            raise ContainerException(e)
 
+    async def rename_container(self, container_name: str, name: str):
+        try:
+            self.api_client.rename(container_name, name)
+        except Exception as e:
+            raise ContainerException(e)
 
+    async def remove_container(self, container_name: str):
+        try:
+            self.api_client.remove_container(container_name, force=True)
+        except Exception as e:
+            raise ContainerException(e)
+
+    async def inspect_config(self, container_name: str):
+        try:
+            return self.api_client.inspect_container(container_name)
+        except Exception as e:
+            raise ContainerException(e)
+
+    async def pull_image(self, container_name: str):
+        try:
+            self.docker_client.images.pull(container_name)
+        except Exception as e:
+            self.logger.warning("Unable to pull image: {}, reason: {}".format(container_name, e))

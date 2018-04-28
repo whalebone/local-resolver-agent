@@ -6,51 +6,76 @@ import websockets
 
 from lr_agent_client import LRAgentClient
 from exception.exc import InitException
-
-WHALEBONE_LR_CLIENT_CERT = os.environ['WHALEBONE_LR_CLIENT_CERT']
-WHALEBONE_PORTAL_ADDRESS = os.environ['WHALEBONE_PORTAL_ADDRESS']
+from loggingtools.logger import build_logger
 
 
 def validate_settings():
-    if not WHALEBONE_LR_CLIENT_CERT:
+    try:
+        client_cert = os.environ['WHALEBONE_LR_CLIENT_CERT']
+    except KeyError:
         raise InitException('System env WHALEBONE_LR_CLIENT_CERT must be set')
-    if not os.path.exists(WHALEBONE_LR_CLIENT_CERT) or os.stat(WHALEBONE_LR_CLIENT_CERT).st_size == 0:
-        raise InitException('Client certificate {0} must exist and mustn\'t be empty'.format(WHALEBONE_LR_CLIENT_CERT))
-    if not WHALEBONE_PORTAL_ADDRESS:
-        raise InitException('System env WHALEBONE_PORTAL_ADDRESS must be set')
+    try:
+        proxy_address = os.environ['WHALEBONE_PROXY_ADDRESS']
+    except KeyError:
+        raise InitException('System env WHALEBONE_PROXY_ADDRESS must be set')
+    try:
+        client_cert_pass = os.environ['WHALEBONE_CLIENT_CERT_PASS']
+    except KeyError:
+        client_cert_pass = "password"  # remove for production
+        # raise InitException('System env WHALEBONE_LR_CLIENT_CERT_PASS must be set')
+
+    if not os.path.exists(client_cert) or os.stat(client_cert).st_size == 0:  # change to None or len()=0
+        raise InitException('Client certificate {0} must exist and mustn\'t be empty'.format(client_cert))
+    return client_cert, proxy_address, client_cert_pass
 
 
 async def connect():
-    sslContext = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    sslContext.load_cert_chain(WHALEBONE_LR_CLIENT_CERT)
-    logger = logging.getLogger(__name__)
-    logger.info("Connecting to {0}".format(WHALEBONE_PORTAL_ADDRESS))
-    return await websockets.connect(WHALEBONE_PORTAL_ADDRESS, ssl=sslContext)
+    client_cert, proxy_address, client_cert_pass = validate_settings()
+    ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    ssl_context.load_cert_chain(client_cert)
+    # sslContext.load_cert_chain(WHALEBONE_LR_CLIENT_CERT)
+    logger = logging.getLogger("main")
+    logger.info("Connecting to {0}".format(proxy_address))
+    return await websockets.connect(proxy_address, ssl=ssl_context)
 
 
 async def local_resolver_agent_app():
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger("main")
+    try:
+        interval = int(os.environ['PERIODIC_INTERVAL'])
+    except KeyError:
+        interval = 30
     while True:
         try:
             websocket = await connect()
             client = LRAgentClient(websocket)
+            await client.validate_host()
             asyncio.ensure_future(client.listen())
             while True:
-                await client.sendSysInfo()
-                await asyncio.sleep(10)
+                await client.send_sys_info()
+                await client.validate_host()
+                await asyncio.sleep(interval)
         except Exception as e:
             logger.error('Generic error: {0}'.format(str(e)))
             logger.error('Retrying in 10 secs...')
+            try:
+                await websocket.close()
+            except Exception:
+                pass
             await asyncio.sleep(10)
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    if 'LOGGING_LEVEL' in os.environ:
+        logging.basicConfig(level=logging.DEBUG)
+        logger = logging.getLogger("main")
+    else:
+        logger = build_logger("main", "/etc/whalebone/logs/")
     try:
-        validate_settings()
         loop = asyncio.get_event_loop()
         loop.run_until_complete(local_resolver_agent_app())
         loop.run_forever()
     except InitException as e:
-        logger = logging.getLogger(__name__)
+        logger.error(str(e))
+    except Exception as e:
         logger.error(str(e))

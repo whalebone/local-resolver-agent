@@ -2,7 +2,7 @@ import psutil
 import platform
 
 
-def get_system_info():
+def get_system_info(docker_connector, error_stash: dict):
     mem = psutil.virtual_memory()
     du = psutil.disk_usage('/')
     sysInfo = {
@@ -14,15 +14,18 @@ def get_system_info():
             'usage': psutil.cpu_percent()
         },
         'memory': {
-            'total': mem.total,
-            'free': mem.free,
+            'total': mem.total >> 30,
+            'free': mem.free >> 30,
             'usage': mem.percent,
         },
         'hdd': {
-            'total': du.total,
-            'free': du.free,
+            'total': du.total >> 30,
+            'free': du.free >> 30,
             'usage': du.percent,
         },
+        "docker": docker_connector.docker_version(),
+        "containers": {container.name: container.status for container in docker_connector.get_containers(stopped=True)},
+        "error_messages": error_stash,
         'interfaces': get_ifaces()
     }
     return sysInfo
@@ -38,3 +41,4 @@ def get_ifaces():
             iface['addresses'].append(addr_info.address)
         interfaces.append(iface)
     return interfaces
+

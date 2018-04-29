@@ -358,15 +358,19 @@ class LRAgentClient:
     async def stop_container(self, response: dict, request: dict) -> dict:
         await self.send_acknowledgement(response)
         status = {}
-        for container in request["data"]:
-            status[container] = {}
-            try:
-                await self.dockerConnector.stop_container(container)
-            except ContainerException as e:
-                status[container] = {"status": "failure", "body": str(e)}
-                self.logger.info(e)
-            else:
-                status[container]["status"] = "success"
+        try:
+            for container in request["data"]["containers"]:
+                status[container] = {}
+                try:
+                    await self.dockerConnector.stop_container(container)
+                except ContainerException as e:
+                    status[container] = {"status": "failure", "body": str(e)}
+                    self.logger.info(e)
+                else:
+                    status[container]["status"] = "success"
+        except KeyError:
+            response["data"] = {"status": "failure", "body": "No containers specified in 'containers' key"}
+            return response
         del response["requestId"]
         response["data"] = status
         return response
@@ -374,15 +378,19 @@ class LRAgentClient:
     async def remove_container(self, response: dict, request: dict) -> dict:
         await self.send_acknowledgement(response)
         status = {}
-        for container in request["data"]:
-            status[container] = {}
-            try:
-                await self.dockerConnector.remove_container(container)
-            except ContainerException as e:
-                status[container] = {"status": "failure", "body": str(e)}
-                self.logger.info(e)
-            else:
-                status[container]["status"] = "success"
+        try:
+            for container in request["data"]["containers"]:
+                status[container] = {}
+                try:
+                    await self.dockerConnector.remove_container(container)
+                except ContainerException as e:
+                    status[container] = {"status": "failure", "body": str(e)}
+                    self.logger.info(e)
+                else:
+                    status[container]["status"] = "success"
+        except KeyError:
+            response["data"] = {"status": "failure", "body": "No containers specified in 'containers' key"}
+            return response
         del response["requestId"]
         response["data"] = status
         return response
@@ -426,15 +434,19 @@ class LRAgentClient:
 
     async def create_rule(self, response: dict, request: dict) -> dict:
         status = {}
-        for rule in request["data"]:
-            status[rule] = {}
-            try:
-                data = self.firewall_connector.create_rule(rule)
-            except (ConnectionError, Exception) as e:
-                self.logger.info(e)
-                status[rule] = {"status": "failure", "body": str(e)}
-            else:
-                status[rule] = {"status": "success", "rule": data}
+        try:
+            for rule in request["data"]["rules"]:
+                status[rule] = {}
+                try:
+                    data = self.firewall_connector.create_rule(rule)
+                except (ConnectionError, Exception) as e:
+                    self.logger.info(e)
+                    status[rule] = {"status": "failure", "body": str(e)}
+                else:
+                    status[rule] = {"status": "success", "rule": data}
+        except KeyError:
+            response["data"] = {"status": "failure", "body": "No rules specified in 'rules' key."}
+            return response
         successful_rules = [rule for rule in status.keys() if status[rule]["status"] == "success"]
         if len(successful_rules) > 0:
             try:
@@ -457,24 +469,31 @@ class LRAgentClient:
 
     async def delete_rule(self, response: dict, request: dict) -> dict:
         status = {}
-        for rule in request["data"]:
-            status[rule] = {}
-            try:
-                self.firewall_connector.delete_rule(rule)
-            except (ConnectionError, Exception) as e:
-                self.logger.info(e)
-                status[rule] = {"status": "failure", "body": str(e)}
-            else:
-                status[rule] = {"status": "success"}
+        try:
+            for rule in request["data"]["rules_ids"]:
+                status[rule] = {}
+                try:
+                    self.firewall_connector.delete_rule(rule)
+                except (ConnectionError, Exception) as e:
+                    self.logger.info(e)
+                    status[rule] = {"status": "failure", "body": str(e)}
+                else:
+                    status[rule] = {"status": "success"}
+        except KeyError:
+            response["data"] = {"status": "failure", "body": "No rules_ids specified in 'rules' key."}
+            return response
         response["data"] = status
         return response
 
     async def modify_rule(self, response: dict, request: dict) -> dict:
         try:
-            self.firewall_connector.modify_rule(*request["data"])
+            self.firewall_connector.modify_rule(*request["data"]["rule"])
         except (ConnectionError, Exception) as e:
             self.logger.info(e)
             response["data"] = {"status": "failure", "body": str(e)}
+        except KeyError:
+            response["data"] = {"status": "failure", "body": "No rule specified in 'rule' key."}
+            return response
         else:
             response["data"] = {"status": "success"}
         return response
@@ -511,14 +530,18 @@ class LRAgentClient:
 
     async def agent_delete_logs(self, response: dict, request: dict) -> dict:
         status = {}
-        for file in request["data"]:
-            status[file] = {}
-            try:
-                self.log_reader.delete_log(file)
-            except IOError as e:
-                status[file] = {"status": "failure", "data": str(e)}
-            else:
-                status[file] = {"status": "success"}
+        try:
+            for file in request["data"]["files"]:
+                status[file] = {}
+                try:
+                    self.log_reader.delete_log(file)
+                except IOError as e:
+                    status[file] = {"status": "failure", "data": str(e)}
+                else:
+                    status[file] = {"status": "success"}
+        except KeyError:
+            response["data"] = {"status": "failure", "body": "No files specified in 'files' key."}
+            return response
         response["data"] = status
         return response
 

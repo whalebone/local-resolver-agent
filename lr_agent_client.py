@@ -131,7 +131,7 @@ class LRAgentClient:
                         "fwmodify": self.modify_rule, "fwdelete": self.delete_rule,
                         "logs": self.agent_log_files, "log": self.agent_all_logs,
                         "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
-                        "test": self.agent_test_message}
+                        "test": self.agent_test_message, "updatecache": self.update_cache}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
@@ -140,7 +140,8 @@ class LRAgentClient:
                             "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
                             "fwmodify": [response, request], "fwdelete": [response, request],
                             "logs": [response], "log": [response, request],
-                            "flog": [response, request], "dellogs": [response, request], "test": [response]}
+                            "flog": [response, request], "dellogs": [response, request], "test": [response],
+                            "updatecache": [response]}
 
         try:
             return await method_calls[request["action"]](*method_arguments[request["action"]])

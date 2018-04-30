@@ -7,6 +7,7 @@ docker build -t whalebone/agent:testing-1 .
 - LOGGING_LEVEL: (optional) if set debug option is enabled, accepts whatever value you supply
 - LOCAL_RESOLVER_ADDRESS: (optional) resolver address, if not set localhost is used
 - PERIODIC_INTERVAL: (optional) sets period in seconds for periodic functions sending (sysinfo), if not set default value of 30 seconds will be used
+- KRESMAN_LISTENER: (optional) sets kresman listener for cache, if not set 'http:localhost:8080' is used
 
 ##### Messages:
 
@@ -17,7 +18,7 @@ Data and action are always present, requestId is present only when the message w
 Sample message from agent:
 '''json
 {"requestId": '4as6c4as6d4wf', "action": create,
-                    "data": {"status": "failure", "message": "failed to parse/decode request", "body": "some text"}}
+                    "data": {"status": "failure", "message": "failed to parse/decode request", "body": "some text"}}       
 '''
 
 

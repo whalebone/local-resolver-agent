@@ -3,6 +3,7 @@ import asyncio
 import base64
 import yaml
 import os
+import requests
 
 from dockertools.docker_connector import DockerConnector
 from sysinfo.sys_info import get_system_info
@@ -185,6 +186,8 @@ class LRAgentClient:
                     self.logger.info(e)
                 else:
                     status[service]["status"] = "success"
+                    if service == "resolver":
+                        await self.update_cache({})
 
                 # if service == "resolver":
                 #     try:
@@ -317,6 +320,8 @@ class LRAgentClient:
                                             # else:
                                             #     status[service]["inject"] = "success"
                                             status[service]["status"] = "success"
+                                            if service == "resolver":
+                                                await self.update_cache({})
                                             break
                                     else:
                                         await asyncio.sleep(2)
@@ -536,7 +541,7 @@ class LRAgentClient:
                 try:
                     self.log_reader.delete_log(file)
                 except IOError as e:
-                    status[file] = {"status": "failure", "data": str(e)}
+                    status[file] = {"status": "failure", "body": str(e)}
                 else:
                     status[file] = {"status": "success"}
         except KeyError:
@@ -546,7 +551,23 @@ class LRAgentClient:
         return response
 
     async def agent_test_message(self, response: dict) -> dict:
-        response["data"] = "Agent seems ok"
+        response["data"] = {"status": "success", "message": "Agent seems ok"}
+        return response
+
+    async def update_cache(self, response: dict) -> dict:
+        try:
+            address = os.getenv("KRESMAN_LISTENER")
+        except KeyError:
+            address = "http:localhost:8080"
+        try:
+            msg = requests.get("{}/updatenow".format(address))
+        except Exception as e:
+            response["data"] = {"status": "failure", "body": str(e)}
+        else:
+            if msg.ok:
+                response["data"] = {"status": "success", "message": "Cache update successful"}
+            else:
+                response["data"] = {"status": "failure", "message": "Cache update failed"}
         return response
 
     def save_file(self, location, file_type, content):

@@ -1,6 +1,8 @@
 import json
 import asyncio
 import base64
+from typing import Dict, Any, Union
+
 import yaml
 import os
 import requests
@@ -131,7 +133,8 @@ class LRAgentClient:
                         "fwmodify": self.modify_rule, "fwdelete": self.delete_rule,
                         "logs": self.agent_log_files, "log": self.agent_all_logs,
                         "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
-                        "test": self.agent_test_message, "updatecache": self.update_cache}
+                        "test": self.agent_test_message, "updatecache": self.update_cache,
+                        "saveconfig": self.write_config}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
@@ -141,7 +144,7 @@ class LRAgentClient:
                             "fwmodify": [response, request], "fwdelete": [response, request],
                             "logs": [response], "log": [response, request],
                             "flog": [response, request], "dellogs": [response, request], "test": [response],
-                            "updatecache": [response]}
+                            "updatecache": [response], "saveconfig": [response, request]}
 
         try:
             return await method_calls[request["action"]](*method_arguments[request["action"]])
@@ -172,16 +175,21 @@ class LRAgentClient:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            if "resolver" in parsed_compose["services"]:
+            if "config" in request["data"]:
                 try:
-                    if "compose" in request["data"]:
-                        self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-                    if "config" in request["data"]:
-                        self.save_file("kres/kres.conf", "text", request["data"]["config"])
-                    # if "rules" in request["data"]:
-                    #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
-                except IOError as e:
-                    status["dump"] = {"status": "failure", "body": str(e)}
+                    self.write_config(response, request)
+                except Exception as e:
+                    self.logger.info(e)
+            # if "resolver" in parsed_compose["services"]:
+            #     try:
+            #         if "compose" in request["data"]:
+            #             self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+            #         if "config" in request["data"]:
+            #             self.save_file("kres/kres.conf", "text", request["data"]["config"])
+            #         # if "rules" in request["data"]:
+            #         #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
+            #     except IOError as e:
+            #         status["dump"] = {"status": "failure", "body": str(e)}
             for service, config in parsed_compose["services"].items():
                 status[service] = {}
                 try:
@@ -252,16 +260,21 @@ class LRAgentClient:
                             else:
                                 status[service]["status"] = "success"
                     else:
-                        if "resolver" in parsed_compose["services"]:
+                        if "config" in request["data"]:
                             try:
-                                if "compose" in request["data"]:
-                                    self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-                                if "config" in request["data"]:
-                                    self.save_file("kres/kres.conf", "text", request["data"]["config"])
-                                # if "rules" in request["data"]:
-                                #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
-                            except IOError as e:
-                                status["dump"] = {"status": "failure", "body": str(e)}
+                                self.write_config(response, request)
+                            except Exception as e:
+                                self.logger.info(e)
+                        # if "resolver" in parsed_compose["services"]:
+                        #     try:
+                        #         if "compose" in request["data"]:
+                        #             self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+                        #         if "config" in request["data"]:
+                        #             self.save_file("kres/kres.conf", "text", request["data"]["config"])
+                        #         # if "rules" in request["data"]:
+                        #         #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
+                        #     except IOError as e:
+                        #         status["dump"] = {"status": "failure", "body": str(e)}
                         try:
                             await self.dockerConnector.rename_container(service, "{}-old".format(
                                 service))  # tries to rename old agent
@@ -579,6 +592,27 @@ class LRAgentClient:
                 response["data"] = {"status": "failure", "message": "Cache update failed"}
         return response
 
+    def write_config(self, response: dict, request: dict) -> dict:
+        write_type = {"base64": "wb", "json": "w", "text": "w"}
+        status = {}
+        for key, value in request["config"].items():
+            for data in value:
+                try:
+                    with open("{}/{}/{}".format(self.folder, key, data["path"]), write_type[data["type"]]) as file:
+                        if data["type"] == "json":
+                            json.dump(data["data"], file)
+                        elif data["type"] == "base64":
+                            file.write(base64.b64decode(data["data"].encode("utf-8")))
+                        else:
+                            for line in data["data"]:
+                                file.write("{}\n".format(line))
+                except Exception as e:
+                    status[key] = {"status": "failure", "message": "Failed to dump config", "body": str(e)}
+                else:
+                    status[key] = {"status": "success", "message": "Config dump successful"}
+        response["data"] = status
+        return response
+
     def save_file(self, location, file_type, content):
         try:
             with open("{}{}".format(self.folder, location), "w") as file:
@@ -610,13 +644,13 @@ class LRAgentClient:
         return base64.b64decode(b64_string.encode("utf-8")).decode("utf-8")
 
     def getError(self, message: str, request: dict)-> dict:
-        errorResponse = {}
+        error_response = {}
         if "requestId" in request and request["requestId"] is not None:
-            errorResponse["requestId"] = request["requestId"]
+            error_response["requestId"] = request["requestId"]
         if "action" in request and request["action"] is not None:
-            errorResponse["action"] = request["action"]
+            error_response["action"] = request["action"]
         if "data" in request and request["data"] is not None:
-            errorResponse["data"] = {"message": message, "body": request["data"]}
+            error_response["data"] = {"message": message, "body": request["data"]}
         else:
-            errorResponse["data"] = message
-        return errorResponse
+            error_response["data"] = message
+        return error_response

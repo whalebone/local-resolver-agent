@@ -161,7 +161,11 @@ class LRAgentClient:
         await self.send_acknowledgement(response)
         status = {}
         # decoded_data = self.decode_base64_string(request["data"]["compose"])
-        decoded_data = request["data"]["compose"]
+        if "compose" in request["data"]:
+            decoded_data = request["data"]["compose"]
+        else:
+            with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                decoded_data = yaml.load(compose)
         try:
             parsed_compose = self.compose_parser.create_service(decoded_data)
         except ComposeException as e:
@@ -214,7 +218,11 @@ class LRAgentClient:
         await self.send_acknowledgement(response)
         status = {}
         # decoded_data = self.decode_base64_string(request["data"]["compose"])
-        decoded_data = request["data"]["compose"]
+        if "compose" in request["data"]:
+            decoded_data = request["data"]["compose"]
+        else:
+            with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                decoded_data = yaml.load(compose)
         if "services" in request["data"]:
             services = request["data"]["services"]
         else:

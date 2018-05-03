@@ -44,7 +44,7 @@ async def local_resolver_agent_app():
     try:
         interval = int(os.environ['PERIODIC_INTERVAL'])
     except KeyError:
-        interval = 30
+        interval = 60
     while True:
         try:
             websocket = await connect()

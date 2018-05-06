@@ -25,7 +25,7 @@ Sample message from agent:
 ##### Used volumes:
 - /var/run/docker.sock : /var/run/docker.sock - to access docker api
 - /var/log/whalebone/ : /etc/whalebone/log/ - to access resolver log file
-- /etc/whalebone/kres/ : /etc/whalebone/kres/ - to save resolver config 
+- /etc/whalebone/resolver/ : /etc/whalebone/kres/ - to save resolver config 
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
 
 ##### Useful Directories:

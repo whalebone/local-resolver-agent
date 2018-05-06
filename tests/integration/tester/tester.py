@@ -60,11 +60,14 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                                 "cache.storage = 'lmdb://var/lib/kres/cache'",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"]})
+                      "config": {"resolver": [{"path": "kres.conf",
+                                               "date": ["net.ipv6 = false", "net.listen('0.0.0.0')",
+                                                        "net.listen('0.0.0.0', {tls=true})",
+                                                        "trust_anchors.file = '/etc/kres/root.keys'",
+                                                        "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                                        "cache.storage = 'lmdb://var/lib/kres/cache'",
+                                                        "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                                               "type": "text"}]}})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -114,11 +117,14 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                                 "cache.storage = 'lmdb://var/lib/kres/cache'",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "config": {"resolver": [{"path": "kres.conf",
+                                               "date": ["net.ipv6 = false", "net.listen('0.0.0.0')",
+                                                        "net.listen('0.0.0.0', {tls=true})",
+                                                        "trust_anchors.file = '/etc/kres/root.keys'",
+                                                        "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                                        "cache.storage = 'lmdb://var/lib/kres/cache'",
+                                                        "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                                               "type": "text"}]},
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -199,7 +205,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/stop".format(self.proxy_address, self.agent_id),
-                json=["mega_rotate"])
+                json={"containers": ["mega_rotate"]})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -224,7 +230,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/remove".format(self.proxy_address, self.agent_id),
-                json=["passivedns"])
+                json={"containers": ["passivedns"]})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -325,7 +331,8 @@ class Tester():
     def delete_rule(self):
         try:
             rec = requests.post(
-                "http://{}:8080/wsproxy/rest/message/{}/fwdelete".format(self.proxy_address, self.agent_id), json=["0"])
+                "http://{}:8080/wsproxy/rest/message/{}/fwdelete".format(self.proxy_address, self.agent_id),
+                json={"rules_ids": ["0"]})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -339,7 +346,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/fwmodify".format(self.proxy_address, self.agent_id),
-                json=["1", "active", "false"])
+                json={"rule": ["1", "active", "false"]})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -367,7 +374,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/dellogs".format(self.proxy_address, self.agent_id),
-                json=["docker-connector.log"])
+                json={"files": ["docker-connector.log"]})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -422,22 +429,22 @@ class Tester():
             self.remove_container()
         except Exception as e:
             self.logger.info(e)
-        try:
-            self.get_rules()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.get_rule_info()
-        except Exception:
-            pass
-        try:
-            self.delete_rule()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.modify_rule()
-        except Exception as e:
-            self.logger.info(e)
+        # try:
+        #     self.get_rules()
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     self.get_rule_info()
+        # except Exception:
+        #     pass
+        # try:
+        #     self.delete_rule()
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     self.modify_rule()
+        # except Exception as e:
+        #     self.logger.info(e)
         try:
             self.get_logs()
         except Exception as e:

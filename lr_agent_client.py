@@ -580,7 +580,7 @@ class LRAgentClient:
         try:
             address = os.getenv("KRESMAN_LISTENER")
         except KeyError:
-            address = "http:localhost:8080"
+            address = "http://localhost:8080"
         try:
             msg = requests.get("{}/updatenow".format(address))
         except Exception as e:

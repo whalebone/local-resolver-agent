@@ -161,7 +161,8 @@ class LRAgentClient:
         return response
 
     async def create_container(self, response: dict, request: dict) -> dict:
-        await self.send_acknowledgement(response)
+        if "cli" not in request:
+            await self.send_acknowledgement(response)
         status = {}
         # decoded_data = self.decode_base64_string(request["data"]["compose"])
         if "compose" in request["data"]:
@@ -223,7 +224,8 @@ class LRAgentClient:
         return response
 
     async def upgrade_container(self, response: dict, request: dict) -> dict:
-        await self.send_acknowledgement(response)
+        if "cli" not in request:
+            await self.send_acknowledgement(response)
         status = {}
         # decoded_data = self.decode_base64_string(request["data"]["compose"])
         if "compose" in request["data"]:
@@ -383,7 +385,8 @@ class LRAgentClient:
     #     return response
 
     async def stop_container(self, response: dict, request: dict) -> dict:
-        await self.send_acknowledgement(response)
+        if "cli" not in request:
+            await self.send_acknowledgement(response)
         status = {}
         try:
             for container in request["data"]["containers"]:
@@ -403,7 +406,8 @@ class LRAgentClient:
         return response
 
     async def remove_container(self, response: dict, request: dict) -> dict:
-        await self.send_acknowledgement(response)
+        if "cli" not in request:
+            await self.send_acknowledgement(response)
         status = {}
         try:
             for container in request["data"]["containers"]:

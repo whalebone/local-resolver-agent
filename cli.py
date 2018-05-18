@@ -10,15 +10,16 @@ class Cli:
     def __init__(self, cli_input: dict):
         self.cli_input = cli_input
 
-    def encode_base64_json(self, message: dict) -> str:
-        return base64.b64encode(json.dumps(message).encode("utf-8")).decode("utf-8")
+    # def encode_base64_json(self, message: dict) -> str:
+    #     return base64.b64encode(json.dumps(message).encode("utf-8")).decode("utf-8")
 
-    def create_params(self, action: str) -> str:
+    def create_params(self, action: str) -> dict:
         action_mapping = {"remove": {"containers": self.cli_input["args"]},
                           "stop": {"containers": self.cli_input["args"]},
-                          "create": {}, #"compose": self.cli_input["args"]
+                          "create": {},  # "compose": self.cli_input["args"]
                           "upgrade": {"services": self.cli_input["args"]}}
-        return self.encode_base64_json(action_mapping[action])
+        # return self.encode_base64_json(action_mapping[action])
+        return action_mapping[action]
 
     async def run_command(self):
         agent = LRAgentClient(None)

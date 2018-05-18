@@ -633,10 +633,15 @@ class LRAgentClient:
 
     def decode_base64_json(self, message: dict) -> dict:
         if "data" in message and message is not None:
-            try:
-                message["data"] = json.loads(base64.b64decode(message["data"].encode("utf-8")).decode("utf-8"))
-            except json.JSONDecodeError:
-                message["data"] = self.decode_base64_string(message["data"])
+            if not isinstance(message["data"], dict):
+                '''
+                 If data field is dict, it arrived from local services and is not encoded in base64
+                 Was therefore correctly decoded in process().
+                '''
+                try:
+                    message["data"] = json.loads(base64.b64decode(message["data"].encode("utf-8")).decode("utf-8"))
+                except json.JSONDecodeError:
+                    message["data"] = self.decode_base64_string(message["data"])
         return message
 
     def encode_base64_json(self, message: dict) -> dict:
@@ -647,7 +652,7 @@ class LRAgentClient:
     def decode_base64_string(self, b64_string: str) -> str:
         return base64.b64decode(b64_string.encode("utf-8")).decode("utf-8")
 
-    def getError(self, message: str, request: dict)-> dict:
+    def getError(self, message: str, request: dict) -> dict:
         error_response = {}
         if "requestId" in request and request["requestId"] is not None:
             error_response["requestId"] = request["requestId"]

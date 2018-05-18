@@ -5,6 +5,7 @@ import logging
 import websockets
 
 from lr_agent_client import LRAgentClient
+from lr_agent_local import LRAgentLocalClient
 from exception.exc import InitException
 from loggingtools.logger import build_logger
 
@@ -43,12 +44,20 @@ async def local_resolver_agent_app():
     while True:
         try:
             websocket = await connect()
-            client = LRAgentClient(websocket)
-            await client.validate_host()
-            asyncio.ensure_future(client.listen())
+            remote_client = LRAgentClient(websocket)
+            await remote_client.validate_host()
+            asyncio.ensure_future(remote_client.listen())
+            try:
+                local_client = LRAgentLocalClient(websocket, remote_client)
+            except Exception as e:
+                remote_client.send(
+                    {"action": "request", "data": {"message": "local api runtime error", "body": str(e)}})
+                logger.error("local api runtime error {}".format(e))
+            else:
+                asyncio.ensure_future(local_client.worker)
             while True:
-                await client.send_sys_info()
-                await client.validate_host()
+                await remote_client.send_sys_info()
+                await remote_client.validate_host()
                 await asyncio.sleep(interval)
         except Exception as e:
             logger.error('Generic error: {0}'.format(str(e)))

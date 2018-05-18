@@ -18,19 +18,14 @@ def validate_settings():
         proxy_address = os.environ['WHALEBONE_PROXY_ADDRESS']
     except KeyError:
         raise InitException('System env WHALEBONE_PROXY_ADDRESS must be set')
-    try:
-        client_cert_pass = os.environ['WHALEBONE_CLIENT_CERT_PASS']
-    except KeyError:
-        client_cert_pass = "password"  # remove for production
         # raise InitException('System env WHALEBONE_LR_CLIENT_CERT_PASS must be set')
-
     if not os.path.exists(client_cert) or os.stat(client_cert).st_size == 0:  # change to None or len()=0
         raise InitException('Client certificate {0} must exist and mustn\'t be empty'.format(client_cert))
-    return client_cert, proxy_address, client_cert_pass
+    return client_cert, proxy_address
 
 
 async def connect():
-    client_cert, proxy_address, client_cert_pass = validate_settings()
+    client_cert, proxy_address = validate_settings()
     ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ssl_context.load_cert_chain(client_cert)
     # sslContext.load_cert_chain(WHALEBONE_LR_CLIENT_CERT)

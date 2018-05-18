@@ -12,8 +12,10 @@ docker build -t whalebone/agent:testing-1 .
 ##### Messages:
 
 Message fields are: '**requestId**', '**data**', '**action**'.
-Data and action are always present, requestId is present only when the message way initiated by portal, messages initiated by agent don't have them.
+Data and action are always present, requestId is present only when the message was initiated by portal, messages initiated by agent don't have them.
 . Portal only receives what is in the key '**data**'. Data key needs to be decoded/encoded to BASE64 upon receiving/sending for Wsproxy compatibility,
+The **data** key in response is always present and it illustrates how the operation went for the given service/action, _success_ and _failure_ are it's values. 
+In case of failure **message** and **body** key are added, message is human readable situation evaluation and body is python error message.
 
 Sample message from agent:
 '''json

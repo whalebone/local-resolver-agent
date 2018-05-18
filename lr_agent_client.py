@@ -36,7 +36,8 @@ class LRAgentClient:
                 response = await self.process(request)
             except Exception as e:
                 request = json.loads(request)
-                response = {"requestId": request["requestId"], "action": request["action"], "body": str(e)}
+                response = {"requestId": request["requestId"], "action": request["action"],
+                            "data": {"status": "failure", "body": str(e)}}
                 self.logger.warning(e)
             try:
                 if response["action"] in self.async_actions:
@@ -52,11 +53,11 @@ class LRAgentClient:
             self.logger.warning(e)
         else:
             # try:
-                if message["action"] != "sysinfo":
-                    self.logger.info("Sending: {}".format(message))
-                await self.websocket.send(json.dumps(message))
-            # except Exception as e:
-            #     self.logger.warning("Error at sending {}".format(e))
+            if message["action"] != "sysinfo":
+                self.logger.info("Sending: {}".format(message))
+            await self.websocket.send(json.dumps(message))
+        # except Exception as e:
+        #     self.logger.warning("Error at sending {}".format(e))
 
     async def send_sys_info(self):
         try:
@@ -399,7 +400,7 @@ class LRAgentClient:
                 else:
                     status[container]["status"] = "success"
         except KeyError:
-            response["data"] = {"status": "failure", "body": "No containers specified in 'containers' key"}
+            response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
             return response
         del response["requestId"]
         response["data"] = status
@@ -420,7 +421,7 @@ class LRAgentClient:
                 else:
                     status[container]["status"] = "success"
         except KeyError:
-            response["data"] = {"status": "failure", "body": "No containers specified in 'containers' key"}
+            response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
             return response
         del response["requestId"]
         response["data"] = status
@@ -476,7 +477,7 @@ class LRAgentClient:
                 else:
                     status[rule] = {"status": "success", "rule": data}
         except KeyError:
-            response["data"] = {"status": "failure", "body": "No rules specified in 'rules' key."}
+            response["data"] = {"status": "failure", "message": "No rules specified in 'rules' key."}
             return response
         successful_rules = [rule for rule in status.keys() if status[rule]["status"] == "success"]
         if len(successful_rules) > 0:
@@ -511,7 +512,7 @@ class LRAgentClient:
                 else:
                     status[rule] = {"status": "success"}
         except KeyError:
-            response["data"] = {"status": "failure", "body": "No rules_ids specified in 'rules' key."}
+            response["data"] = {"status": "failure", "message": "No rules_ids specified in 'rules' key."}
             return response
         response["data"] = status
         return response
@@ -523,7 +524,7 @@ class LRAgentClient:
             self.logger.info(e)
             response["data"] = {"status": "failure", "body": str(e)}
         except KeyError:
-            response["data"] = {"status": "failure", "body": "No rule specified in 'rule' key."}
+            response["data"] = {"status": "failure", "message": "No rule specified in 'rule' key."}
             return response
         else:
             response["data"] = {"status": "success"}
@@ -571,7 +572,7 @@ class LRAgentClient:
                 else:
                     status[file] = {"status": "success"}
         except KeyError:
-            response["data"] = {"status": "failure", "body": "No files specified in 'files' key."}
+            response["data"] = {"status": "failure", "message": "No files specified in 'files' key."}
             return response
         response["data"] = status
         return response

@@ -22,6 +22,7 @@ class LRAgentLocalClient:
                 pass
             else:
                 try:
+                    msg = json.loads(msg)
                     msg["cli"] = "true"
                     response = await self.agent.process(msg)
                 except Exception as e:
@@ -29,5 +30,11 @@ class LRAgentLocalClient:
                     response = {"action": request["action"], "data": {"status": "failure", "body": str(e)}}
                     self.logger.warning(e)
                 else:
-                    await self.websocket.send(json.dumps(self.agent.encode_base64_json(response)))
-                await websocket.send(json.dumps(response))
+                    try:
+                        await self.websocket.send(json.dumps(self.agent.encode_base64_json(response)))
+                    except Exception as e:
+                        self.logger.warning(e)
+                try:
+                    await websocket.send(json.dumps(response))
+                except Exception as e:
+                    self.logger.info(e)

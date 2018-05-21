@@ -135,7 +135,7 @@ class LRAgentClient:
                         "logs": self.agent_log_files, "log": self.agent_all_logs,
                         "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
                         "test": self.agent_test_message, "updatecache": self.update_cache,
-                        "saveconfig": self.write_config}
+                        "saveconfig": self.write_config, "whitelistadd": self.whitelist_add}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
@@ -145,7 +145,8 @@ class LRAgentClient:
                             "fwmodify": [response, request], "fwdelete": [response, request],
                             "logs": [response], "log": [response, request],
                             "flog": [response, request], "dellogs": [response, request], "test": [response],
-                            "updatecache": [response], "saveconfig": [response, request]}
+                            "updatecache": [response], "saveconfig": [response, request],
+                            "whitelistadd": [response, request]}
 
         try:
             return await method_calls[request["action"]](*method_arguments[request["action"]])
@@ -616,6 +617,13 @@ class LRAgentClient:
                 else:
                     status[key] = {"status": "success", "message": "Config dump successful"}
         response["data"] = status
+        return response
+
+    async def whitelist_add(self, response: dict, request: dict) -> dict:
+        try:
+            response["data"] = request["data"]
+        except KeyError as e:
+            response["data"] = {"status": "failure", "body": str(e)}
         return response
 
     def save_file(self, location, file_type, content):

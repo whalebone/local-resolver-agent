@@ -1,6 +1,5 @@
 import websockets
-import asyncio
-import logging
+import os
 import json
 
 from loggingtools.logger import build_logger
@@ -11,7 +10,11 @@ class LRAgentLocalClient:
     def __init__(self, websocket, agent):
         self.agent = agent
         self.websocket = websocket
-        self.worker = websockets.serve(self.receive, 'localhost', 8765)
+        try:
+            port = int(os.environ(["LOCAL_API_PORT"]))
+        except KeyError:
+            port = 8765
+        self.worker = websockets.serve(self.receive, 'localhost', port)
         self.logger = build_logger("local-api", "/etc/whalebone/logs/")
 
     async def receive(self, websocket, path):

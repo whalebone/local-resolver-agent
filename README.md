@@ -8,6 +8,7 @@ docker build -t whalebone/agent:testing-1 .
 - LOCAL_RESOLVER_ADDRESS: (optional) resolver address, if not set localhost is used
 - PERIODIC_INTERVAL: (optional) sets period in seconds for periodic functions sending (sysinfo), if not set default value of 30 seconds will be used
 - KRESMAN_LISTENER: (optional) sets kresman listener for cache, if not set 'http:localhost:8080' is used
+- LOCAL_API_PORT: (optional) local api port, if not set default value of 8765 will be used
 
 ##### Messages:
 

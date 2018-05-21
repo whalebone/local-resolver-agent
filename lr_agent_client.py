@@ -183,16 +183,16 @@ class LRAgentClient:
                     self.write_config(response, request)
                 except Exception as e:
                     self.logger.info(e)
-            # if "resolver" in parsed_compose["services"]:
-            #     try:
-            #         if "compose" in request["data"]:
-            #             self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-            #         if "config" in request["data"]:
-            #             self.save_file("kres/kres.conf", "text", request["data"]["config"])
-            #         # if "rules" in request["data"]:
-            #         #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
-            #     except IOError as e:
-            #         status["dump"] = {"status": "failure", "body": str(e)}
+            if "resolver" in parsed_compose["services"]:
+                try:
+                    if "compose" in request["data"]:
+                        self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+                    # if "config" in request["data"]:
+                    #     self.save_file("kres/kres.conf", "text", request["data"]["config"])
+                    # if "rules" in request["data"]:
+                    #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
+                except IOError as e:
+                    status["dump"] = {"status": "failure", "body": str(e)}
             for service, config in parsed_compose["services"].items():
                 status[service] = {}
                 try:
@@ -269,16 +269,16 @@ class LRAgentClient:
                                 self.write_config(response, request)
                             except Exception as e:
                                 self.logger.info(e)
-                        # if "resolver" in parsed_compose["services"]:
-                        #     try:
-                        #         if "compose" in request["data"]:
-                        #             self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-                        #         if "config" in request["data"]:
-                        #             self.save_file("kres/kres.conf", "text", request["data"]["config"])
-                        #         # if "rules" in request["data"]:
-                        #         #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
-                        #     except IOError as e:
-                        #         status["dump"] = {"status": "failure", "body": str(e)}
+                        if "resolver" in parsed_compose["services"]:
+                            try:
+                                if "compose" in request["data"]:
+                                    self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+                                # if "config" in request["data"]:
+                                #     self.save_file("kres/kres.conf", "text", request["data"]["config"])
+                                # if "rules" in request["data"]:
+                                #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
+                            except IOError as e:
+                                status["dump"] = {"status": "failure", "body": str(e)}
                         try:
                             await self.dockerConnector.rename_container(service, "{}-old".format(
                                 service))  # tries to rename old agent

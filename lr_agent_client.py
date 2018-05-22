@@ -187,10 +187,6 @@ class LRAgentClient:
                 try:
                     if "compose" in request["data"]:
                         self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-                    # if "config" in request["data"]:
-                    #     self.save_file("kres/kres.conf", "text", request["data"]["config"])
-                    # if "rules" in request["data"]:
-                    #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
                 except IOError as e:
                     status["dump"] = {"status": "failure", "body": str(e)}
             for service, config in parsed_compose["services"].items():
@@ -273,10 +269,6 @@ class LRAgentClient:
                             try:
                                 if "compose" in request["data"]:
                                     self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-                                # if "config" in request["data"]:
-                                #     self.save_file("kres/kres.conf", "text", request["data"]["config"])
-                                # if "rules" in request["data"]:
-                                #     self.save_file("kres/firewall.conf", "json", request["data"]["rules"])
                             except IOError as e:
                                 status["dump"] = {"status": "failure", "body": str(e)}
                         try:
@@ -631,13 +623,13 @@ class LRAgentClient:
             with open("{}{}".format(self.folder, location), "w") as file:
                 if file_type == "yml":
                     yaml.dump(content, file, default_flow_style=False)
-                elif file_type == "json":
-                    json.dump(content, file)
-                else:
-                    for rule in content:
-                        file.write(rule + "\n")
+                # elif file_type == "json":
+                #     json.dump(content, file)
+                # else:
+                #     for rule in content:
+                #         file.write(rule + "\n")
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to save compose: {}".format(e))
             raise IOError(e)
 
     def decode_base64_json(self, message: dict) -> dict:

@@ -50,7 +50,7 @@ async def local_resolver_agent_app():
             try:
                 local_client = LRAgentLocalClient(websocket, remote_client)
             except Exception as e:
-                remote_client.send(
+                await remote_client.send(
                     {"action": "request", "data": {"message": "local api runtime error", "body": str(e)}})
                 logger.error("local api runtime error {}".format(e))
             else:

@@ -170,8 +170,14 @@ class LRAgentClient:
         if "compose" in request["data"]:
             decoded_data = request["data"]["compose"]
         else:
-            with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                decoded_data = yaml.load(compose)
+            try:
+                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                    decoded_data = yaml.load(compose)
+            except FileNotFoundError:
+                del response["requestId"]
+                response["data"] = {"status": "failure",
+                                    "message": "compose not supplied and local compose not present"}
+                return response
         try:
             parsed_compose = self.compose_parser.create_service(decoded_data)
         except ComposeException as e:
@@ -180,7 +186,7 @@ class LRAgentClient:
         else:
             if "config" in request["data"]:
                 try:
-                    self.write_config(response, request)
+                    await self.write_config(response, request)
                 except Exception as e:
                     self.logger.info(e)
             if "resolver" in parsed_compose["services"]:
@@ -229,8 +235,14 @@ class LRAgentClient:
         if "compose" in request["data"]:
             decoded_data = request["data"]["compose"]
         else:
-            with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                decoded_data = yaml.load(compose)
+            try:
+                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                    decoded_data = yaml.load(compose)
+            except FileNotFoundError:
+                del response["requestId"]
+                response["data"] = {"status": "failure",
+                                    "message": "compose not supplied and local compose not present"}
+                return response
         if "services" in request["data"]:
             services = request["data"]["services"]
         else:
@@ -262,7 +274,7 @@ class LRAgentClient:
                     else:
                         if "config" in request["data"]:
                             try:
-                                self.write_config(response, request)
+                                await self.write_config(response, request)
                             except Exception as e:
                                 self.logger.info(e)
                         if "resolver" in parsed_compose["services"]:
@@ -576,7 +588,7 @@ class LRAgentClient:
 
     async def update_cache(self, response: dict) -> dict:
         try:
-            address = os.getenv("KRESMAN_LISTENER")
+            address = os.environ["KRESMAN_LISTENER"]
         except KeyError:
             address = "http://localhost:8080"
         try:
@@ -590,10 +602,12 @@ class LRAgentClient:
                 response["data"] = {"status": "failure", "message": "Cache update failed"}
         return response
 
-    def write_config(self, response: dict, request: dict) -> dict:
+    async def write_config(self, response: dict, request: dict) -> dict:
         write_type = {"base64": "wb", "json": "w", "text": "w"}
         status = {}
-        for key, value in request["config"].items():
+        for key, value in request["data"]["config"].items():
+            if not os.path.exists("{}/{}".format(self.folder, key)):
+                os.mkdir("{}/{}".format(self.folder, key))
             for data in value:
                 try:
                     with open("{}/{}/{}".format(self.folder, key, data["path"]), write_type[data["type"]]) as file:
@@ -623,11 +637,13 @@ class LRAgentClient:
             with open("{}{}".format(self.folder, location), "w") as file:
                 if file_type == "yml":
                     yaml.dump(content, file, default_flow_style=False)
-                # elif file_type == "json":
-                #     json.dump(content, file)
-                # else:
-                #     for rule in content:
-                #         file.write(rule + "\n")
+                    if os.path.exists("{}{}".format(self.folder, location)):
+                        self.logger.warning("Dump passed at path {}{}".format(self.folder, location))
+                elif file_type == "json":
+                    json.dump(content, file)
+                else:
+                    for rule in content:
+                        file.write(rule + "\n")
         except Exception as e:
             self.logger.info("Failed to save compose: {}".format(e))
             raise IOError(e)

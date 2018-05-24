@@ -11,7 +11,7 @@ class LRAgentLocalClient:
         self.agent = agent
         self.websocket = websocket
         try:
-            port = int(os.environ(["LOCAL_API_PORT"]))
+            port = int(os.environ["LOCAL_API_PORT"])
         except KeyError:
             port = 8765
         self.worker = websockets.serve(self.receive, 'localhost', port)

@@ -223,7 +223,8 @@ class LRAgentClient:
                 #     status[service]["inject"] = "failure"
                 # else:
                 #     status[service]["inject"] = "success"
-            del response["requestId"]
+            if "requestId" in response:
+                del response["requestId"]
             response["data"] = status
         return response
 
@@ -355,7 +356,8 @@ class LRAgentClient:
                                             break
                                     else:
                                         await asyncio.sleep(2)
-            del response["requestId"]
+            if "requestId" in response:
+                del response["requestId"]
             response["data"] = status
         return response
 
@@ -407,7 +409,8 @@ class LRAgentClient:
         except KeyError:
             response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
             return response
-        del response["requestId"]
+        if "requestId" in response:
+            del response["requestId"]
         response["data"] = status
         return response
 
@@ -428,7 +431,8 @@ class LRAgentClient:
         except KeyError:
             response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
             return response
-        del response["requestId"]
+        if "requestId" in response:
+            del response["requestId"]
         response["data"] = status
         return response
 

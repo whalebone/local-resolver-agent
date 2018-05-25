@@ -1,4 +1,4 @@
-docker build -t whalebone/agent:testing-1 .
+docker build -t whalebone/agent:1.x .
 
 ##### Agent envs:
 - WHALEBONE_CLIENT_CRT_BASE64: base64 representation of client certificate
@@ -30,7 +30,9 @@ Sample message from agent:
 - /var/log/whalebone/ : /etc/whalebone/log/ - to access resolver log file
 - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config 
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
-- /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman
+- /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman (v1.2)
+- /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface (v1.2)
+
 
 ##### Useful Directories:
 - /opt/whalebone/ - code is stored here and in certs/ are cert and key files

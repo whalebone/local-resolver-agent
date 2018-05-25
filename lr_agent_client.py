@@ -120,9 +120,9 @@ class LRAgentClient:
 
         self.logger.info("Received: {}".format(request))
         response = {}
-        if "action" not in request or request["action"] is None:
+        if "action" not in request:
             return self.getError('Missing action in request', request)
-        if "requestId" in request and request["requestId"] is not None:
+        if "requestId" in request:
             response["requestId"] = request["requestId"]
         response["action"] = request["action"]
 
@@ -653,7 +653,7 @@ class LRAgentClient:
             raise IOError(e)
 
     def decode_base64_json(self, message: dict) -> dict:
-        if "data" in message and message is not None:
+        if "data" in message:
             if not isinstance(message["data"], dict):
                 '''
                  If data field is dict, it arrived from local services and is not encoded in base64
@@ -675,11 +675,11 @@ class LRAgentClient:
 
     def getError(self, message: str, request: dict) -> dict:
         error_response = {}
-        if "requestId" in request and request["requestId"] is not None:
+        if "requestId" in request:
             error_response["requestId"] = request["requestId"]
-        if "action" in request and request["action"] is not None:
+        if "action" in request:
             error_response["action"] = request["action"]
-        if "data" in request and request["data"] is not None:
+        if "data" in request:
             error_response["data"] = {"message": message, "body": request["data"]}
         else:
             error_response["data"] = message

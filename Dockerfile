@@ -19,5 +19,8 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 COPY . .
 RUN chown whalebone /opt/whalebone/ -R && chgrp whalebone /opt/whalebone/ -R && chmod g+s /opt/whalebone/ -R
 
+RUN mkdir /etc/whalebone/cli
+RUN cp cli.sh /etc/whalebone/cli/cli.sh
+
 #USER whalebone
 CMD ["/opt/whalebone/lr_agent.sh"]

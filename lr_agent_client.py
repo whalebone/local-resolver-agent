@@ -637,13 +637,11 @@ class LRAgentClient:
             with open("{}{}".format(self.folder, location), "w") as file:
                 if file_type == "yml":
                     yaml.dump(content, file, default_flow_style=False)
-                    if os.path.exists("{}{}".format(self.folder, location)):
-                        self.logger.warning("Dump passed at path {}{}".format(self.folder, location))
-                elif file_type == "json":
-                    json.dump(content, file)
-                else:
-                    for rule in content:
-                        file.write(rule + "\n")
+                # elif file_type == "json":
+                #     json.dump(content, file)
+                # else:
+                #     for rule in content:
+                #         file.write(rule + "\n")
         except Exception as e:
             self.logger.info("Failed to save compose: {}".format(e))
             raise IOError(e)

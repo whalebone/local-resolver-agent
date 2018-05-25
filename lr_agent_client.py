@@ -310,6 +310,8 @@ class LRAgentClient:
                                     inspect = await self.dockerConnector.inspect_config(service)
                                     if inspect["State"]["Running"] is True:
                                         try:
+                                            if service == "resolver":
+                                                await asyncio.sleep(2)
                                             await self.dockerConnector.remove_container(
                                                 "{}-old".format(service))  # tries to renomve old agent
                                         except ContainerException as e:

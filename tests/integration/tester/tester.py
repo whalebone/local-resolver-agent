@@ -66,14 +66,20 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": {"resolver": [{"path": "kres.conf",
-                                               "data": ["net.ipv6 = false", "net.listen('0.0.0.0')",
-                                                        "net.listen('0.0.0.0', {tls=true})",
-                                                        "trust_anchors.file = '/etc/kres/root.keys'",
-                                                        "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                                                        "cache.storage = 'lmdb://var/lib/kres/cache'",
-                                                        "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
-                                               "type": "text"}]}})
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"]
+                      # "config": {"resolver": [{"path": "kres.conf",
+                      #                          "data": ["net.ipv6 = false", "net.listen('0.0.0.0')",
+                      #                                   "net.listen('0.0.0.0', {tls=true})",
+                      #                                   "trust_anchors.file = '/etc/kres/root.keys'",
+                      #                                   "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                      #                                   "cache.storage = 'lmdb://var/lib/kres/cache'",
+                      #                                   "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      #                          "type": "text"}]}
+                      })
         except Exception as e:
             self.logger.info(e)
         else:
@@ -123,14 +129,19 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": {"resolver": [{"path": "kres.conf",
-                                               "data": ["net.ipv6 = false", "net.listen('0.0.0.0')",
-                                                        "net.listen('0.0.0.0', {tls=true})",
-                                                        "trust_anchors.file = '/etc/kres/root.keys'",
-                                                        "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                                                        "cache.storage = 'lmdb://var/lib/kres/cache'",
-                                                        "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
-                                               "type": "text"}]},
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      # "config": {"resolver": [{"path": "kres.conf",
+                      #                          "data": ["net.ipv6 = false", "net.listen('0.0.0.0')",
+                      #                                   "net.listen('0.0.0.0', {tls=true})",
+                      #                                   "trust_anchors.file = '/etc/kres/root.keys'",
+                      #                                   "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                      #                                   "cache.storage = 'lmdb://var/lib/kres/cache'",
+                      #                                   "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      #                          "type": "text"}]},
                       "services": services})
         except Exception as e:
             self.logger.warning(e)

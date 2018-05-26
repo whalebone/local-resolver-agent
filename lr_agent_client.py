@@ -184,15 +184,17 @@ class LRAgentClient:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            if "config" in request["data"]:
-                try:
-                    await self.write_config(response, request)
-                except Exception as e:
-                    self.logger.info(e)
+            # if "config" in request["data"]:
+            #     try:
+            #         await self.write_config(response, request)
+            #     except Exception as e:
+            #         self.logger.info(e)
             if "resolver" in parsed_compose["services"]:
                 try:
                     if "compose" in request["data"]:
                         self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+                    if "config" in request["data"]:
+                        self.save_file("resolver/kres.conf", "text", request["data"]["config"])
                 except IOError as e:
                     status["dump"] = {"status": "failure", "body": str(e)}
             for service, config in parsed_compose["services"].items():
@@ -273,15 +275,17 @@ class LRAgentClient:
                             else:
                                 status[service]["status"] = "success"
                     else:
-                        if "config" in request["data"]:
-                            try:
-                                await self.write_config(response, request)
-                            except Exception as e:
-                                self.logger.info(e)
+                        # if "config" in request["data"]:
+                        #     try:
+                        #         await self.write_config(response, request)
+                        #     except Exception as e:
+                        #         self.logger.info(e)
                         if "resolver" in parsed_compose["services"]:
                             try:
                                 if "compose" in request["data"]:
                                     self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+                                if "config" in request["data"]:
+                                    self.save_file("resolver/kres.conf", "text", request["data"]["config"])
                             except IOError as e:
                                 status["dump"] = {"status": "failure", "body": str(e)}
                         try:
@@ -643,11 +647,11 @@ class LRAgentClient:
             with open("{}{}".format(self.folder, location), "w") as file:
                 if file_type == "yml":
                     yaml.dump(content, file, default_flow_style=False)
-                # elif file_type == "json":
-                #     json.dump(content, file)
-                # else:
-                #     for rule in content:
-                #         file.write(rule + "\n")
+                elif file_type == "json":
+                    json.dump(content, file)
+                else:
+                    for rule in content:
+                        file.write(rule + "\n")
         except Exception as e:
             self.logger.info("Failed to save compose: {}".format(e))
             raise IOError(e)

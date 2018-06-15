@@ -261,6 +261,11 @@ class LRAgentClient:
                     if service not in ["lr-agent", "resolver"]:
                         status[service] = {}
                         try:
+                            await self.dockerConnector.pull_image(
+                                config['image'])  # pulls image before removal, upgrade is instant
+                        except Exception as e:
+                            self.logger.info("Failed to pull image before upgrade, {}".format(e))
+                        try:
                             await self.dockerConnector.remove_container(service)  # tries to remove old container
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "remove old container", "body": str(e)}

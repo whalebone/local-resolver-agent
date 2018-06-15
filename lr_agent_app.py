@@ -54,7 +54,7 @@ async def local_resolver_agent_app():
                     {"action": "request", "data": {"message": "local api runtime error", "body": str(e)}})
                 logger.error("local api runtime error {}".format(e))
             else:
-                asyncio.ensure_future(local_client.worker)
+                await local_client.start_api()
             while True:
                 await remote_client.send_sys_info()
                 await remote_client.validate_host()

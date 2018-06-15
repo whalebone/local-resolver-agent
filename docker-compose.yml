@@ -1,19 +1,21 @@
-version: '2'
+version: '3'
 services:
   lr-agent:
-    image: harbor.whalebone.io/whalebone/agent:testing-1
+    image: whalebone/agent:1
     name: lr-agent
     stdin_open: true
     tty: true
     network_mode: host
+    restart: always
     labels:
         lr-agent: "2.0"
     environment:
-      WHALEBONE_CLIENT_CRT_BASE64: ""
-      WHALEBONE_CLIENT_KEY_BASE64: ""
-      WHALEBONE_CLIENT_CERT_PASS: "password"
-      LOGGING_LEVEL: "so much"
-      LOCAL_RESOLVER_ADDRESS: 'localhost'
-      WHALEBONE_PROXY_ADDRESS: "wss://localhost:8443/wsproxy/ws"
+      WHALEBONE_CLIENT_CRT_BASE64: "WHALEBONE_CLIENT_CRT_BASE64"
+      WHALEBONE_CLIENT_KEY_BASE64: "WHALEBONE_CLIENT_KEY_BASE64"
+      WHALEBONE_PROXY_ADDRESS: "WHALEBONE_PROXY_ADDRESS"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /var/log/whalebone/:/etc/whalebone/log/
+      - /etc/whalebone/resolver/:/etc/whalebone/resolver/
+      - /var/log/whalebone/agent/:/etc/whalebone/logs/
+      - /var/sinkhole/:/etc/whalebone/kresman

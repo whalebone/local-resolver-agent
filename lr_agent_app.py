@@ -5,6 +5,7 @@ import logging
 import websockets
 
 from lr_agent_client import LRAgentClient
+from lr_agent_local import LRAgentLocalClient
 from exception.exc import InitException
 from loggingtools.logger import build_logger
 
@@ -18,19 +19,14 @@ def validate_settings():
         proxy_address = os.environ['WHALEBONE_PROXY_ADDRESS']
     except KeyError:
         raise InitException('System env WHALEBONE_PROXY_ADDRESS must be set')
-    try:
-        client_cert_pass = os.environ['WHALEBONE_CLIENT_CERT_PASS']
-    except KeyError:
-        client_cert_pass = "password"  # remove for production
         # raise InitException('System env WHALEBONE_LR_CLIENT_CERT_PASS must be set')
-
     if not os.path.exists(client_cert) or os.stat(client_cert).st_size == 0:  # change to None or len()=0
         raise InitException('Client certificate {0} must exist and mustn\'t be empty'.format(client_cert))
-    return client_cert, proxy_address, client_cert_pass
+    return client_cert, proxy_address
 
 
 async def connect():
-    client_cert, proxy_address, client_cert_pass = validate_settings()
+    client_cert, proxy_address = validate_settings()
     ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ssl_context.load_cert_chain(client_cert)
     # sslContext.load_cert_chain(WHALEBONE_LR_CLIENT_CERT)
@@ -44,16 +40,24 @@ async def local_resolver_agent_app():
     try:
         interval = int(os.environ['PERIODIC_INTERVAL'])
     except KeyError:
-        interval = 30
+        interval = 60
     while True:
         try:
             websocket = await connect()
-            client = LRAgentClient(websocket)
-            await client.validate_host()
-            asyncio.ensure_future(client.listen())
+            remote_client = LRAgentClient(websocket)
+            await remote_client.validate_host()
+            asyncio.ensure_future(remote_client.listen())
+            try:
+                local_client = LRAgentLocalClient(websocket, remote_client)
+            except Exception as e:
+                await remote_client.send(
+                    {"action": "request", "data": {"message": "local api runtime error", "body": str(e)}})
+                logger.error("local api runtime error {}".format(e))
+            else:
+                await local_client.start_api()
             while True:
-                await client.send_sys_info()
-                await client.validate_host()
+                await remote_client.send_sys_info()
+                await remote_client.validate_host()
                 await asyncio.sleep(interval)
         except Exception as e:
             logger.error('Generic error: {0}'.format(str(e)))

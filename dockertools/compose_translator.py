@@ -47,7 +47,7 @@ def parse_envs(envs):
     for name, value in envs.items():
         if name in file_mapping:
             envs[name] = read_file(file_mapping[name])
-        if name == "DNS_INTERFACE":
+        if name == "DNS_INTERFACE" and value == "":
             for interface in netifaces.gateways()["default"].values():
                 envs["DNS_INTERFACE"] = interface[1]
     return envs

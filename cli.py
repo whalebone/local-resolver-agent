@@ -14,10 +14,11 @@ class Cli:
     #     return base64.b64encode(json.dumps(message).encode("utf-8")).decode("utf-8")
 
     def create_params(self, action: str) -> dict:
-        action_mapping = {"remove": {"containers": self.cli_input["args"]},
-                          "stop": {"containers": self.cli_input["args"]},
+        arg_list = list(filter(None, self.cli_input["args"]))
+        action_mapping = {"remove": {"containers": arg_list},
+                          "stop": {"containers": arg_list},
                           "create": {},  # "compose": self.cli_input["args"]
-                          "upgrade": {"services": self.cli_input["args"]}}
+                          "upgrade": {"services": arg_list}}
         # return self.encode_base64_json(action_mapping[action])
         return action_mapping[action]
 

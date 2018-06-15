@@ -1,4 +1,4 @@
-docker build -t whalebone/agent:testing-1 .
+docker build -t whalebone/agent:1.x .
 
 ##### Agent envs:
 - WHALEBONE_CLIENT_CRT_BASE64: base64 representation of client certificate
@@ -8,6 +8,7 @@ docker build -t whalebone/agent:testing-1 .
 - LOCAL_RESOLVER_ADDRESS: (optional) resolver address, if not set localhost is used
 - PERIODIC_INTERVAL: (optional) sets period in seconds for periodic functions sending (sysinfo), if not set default value of 30 seconds will be used
 - KRESMAN_LISTENER: (optional) sets kresman listener for cache, if not set 'http:localhost:8080' is used
+- LOCAL_API_PORT: (optional) local api port, if not set default value of 8765 will be used
 
 ##### Messages:
 
@@ -29,7 +30,9 @@ Sample message from agent:
 - /var/log/whalebone/ : /etc/whalebone/log/ - to access resolver log file
 - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config 
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
-- /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman
+- /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman (v1.2)
+- /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface (v1.2)
+
 
 ##### Useful Directories:
 - /opt/whalebone/ - code is stored here and in certs/ are cert and key files

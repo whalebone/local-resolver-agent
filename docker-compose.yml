@@ -1,14 +1,14 @@
 version: '3'
 services:
   lr-agent:
-    image: whalebone/agent:1
+    image: whalebone/agent:1.2
     name: lr-agent
     stdin_open: true
     tty: true
     network_mode: host
     restart: always
     labels:
-        lr-agent: "2.0"
+        lr-agent: "1.2"
     environment:
       WHALEBONE_CLIENT_CRT_BASE64: "WHALEBONE_CLIENT_CRT_BASE64"
       WHALEBONE_CLIENT_KEY_BASE64: "WHALEBONE_CLIENT_KEY_BASE64"
@@ -16,6 +16,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/log/whalebone/:/etc/whalebone/log/
-      - /etc/whalebone/resolver/:/etc/whalebone/resolver/
+      - /etc/whalebone/kres/:/etc/whalebone/resolver/
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/sinkhole/:/etc/whalebone/kresman

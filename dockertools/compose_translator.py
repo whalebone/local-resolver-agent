@@ -25,10 +25,12 @@ def create_docker_run_kwargs(service_compose_fragmet):
         }
         if 'log_opt' in service_compose_fragmet and service_compose_fragmet['log_opt'] is not None:
             kwargs['log_config']['config'] = service_compose_fragmet['log_opt']
+        # deprecated can be safely deleted
 
     if 'logging' in service_compose_fragmet and service_compose_fragmet['logging']['driver'] is not None:
         kwargs['log_config'] = {
-            'type': service_compose_fragmet['logging']['driver']
+            'type': service_compose_fragmet['logging']['driver'],
+            'config': service_compose_fragmet['logging']['options']
         }
         if 'log_opt' in service_compose_fragmet and service_compose_fragmet['log_opt'] is not None:
             kwargs['log_config']['config'] = service_compose_fragmet['logging']['options']
@@ -100,7 +102,7 @@ def read_file(file_name:str)->str:
 
 
 SUPPORTED_PARAMETERS_V1 = {
-    'image': None,  # not part of kwargs #
+    'image': None,  # not part of kwargs
     'net': {'fn': parse_value, 'name': 'network_mode'},  # <1
     'network_mode': parse_value,
     'ports': parse_ports,

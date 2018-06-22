@@ -47,14 +47,14 @@ async def local_resolver_agent_app():
             remote_client = LRAgentClient(websocket)
             await remote_client.validate_host()
             asyncio.ensure_future(remote_client.listen())
-            try:
-                local_client = LRAgentLocalClient(websocket, remote_client)
-            except Exception as e:
-                await remote_client.send(
-                    {"action": "request", "data": {"message": "local api runtime error", "body": str(e)}})
-                logger.error("local api runtime error {}".format(e))
-            else:
-                await local_client.start_api()
+            # try:
+            #     local_client = LRAgentLocalClient(websocket, remote_client)
+            # except Exception as e:
+            #     await remote_client.send(
+            #         {"action": "request", "data": {"message": "local api runtime error", "body": str(e)}})
+            #     logger.error("local api runtime error {}".format(e))
+            # else:
+            #     await local_client.start_api()
             while True:
                 await remote_client.send_sys_info()
                 await remote_client.validate_host()

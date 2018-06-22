@@ -31,20 +31,24 @@ class LRAgentClient:
 
     async def listen(self):
         while True:
-            request = await self.websocket.recv()
             try:
-                response = await self.process(request)
-            except Exception as e:
-                request = json.loads(request)
-                response = {"requestId": request["requestId"], "action": request["action"],
-                            "data": {"status": "failure", "body": str(e)}}
-                self.logger.warning(e)
-            try:
-                if response["action"] in self.async_actions:
-                    self.process_response(response)
-            except Exception as e:
-                self.logger.info("General error at error dumping, {}".format(e))
-            await self.send(response)
+                request = await self.websocket.recv()
+            except asyncio.IncompleteReadError:
+                pass
+            else:
+                try:
+                    response = await self.process(request)
+                except Exception as e:
+                    request = json.loads(request)
+                    response = {"requestId": request["requestId"], "action": request["action"],
+                                "data": {"status": "failure", "body": str(e)}}
+                    self.logger.warning(e)
+                try:
+                    if response["action"] in self.async_actions:
+                        self.process_response(response)
+                except Exception as e:
+                    self.logger.info("General error at error dumping, {}".format(e))
+                await self.send(response)
 
     async def send(self, message: dict):
         try:

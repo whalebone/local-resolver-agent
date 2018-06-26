@@ -6,6 +6,7 @@ from typing import Dict, Any, Union
 import yaml
 import os
 import requests
+import websockets
 
 from dockertools.docker_connector import DockerConnector
 from sysinfo.sys_info import get_system_info
@@ -40,14 +41,17 @@ class LRAgentClient:
                     response = await self.process(request)
                 except Exception as e:
                     request = json.loads(request)
-                    response = {"requestId": request["requestId"], "action": request["action"],
-                                "data": {"status": "failure", "body": str(e)}}
+                    response = {"data": {"status": "failure", "body": str(e)}}
+                    for field in ["requestId", "action"]:
+                        if field in request:
+                            response[field] = request[field]
                     self.logger.warning(e)
                 try:
                     if response["action"] in self.async_actions:
                         self.process_response(response)
                 except Exception as e:
                     self.logger.info("General error at error dumping, {}".format(e))
+
                 await self.send(response)
 
     async def send(self, message: dict):
@@ -56,12 +60,9 @@ class LRAgentClient:
         except Exception as e:
             self.logger.warning(e)
         else:
-            # try:
             if message["action"] != "sysinfo":
                 self.logger.info("Sending: {}".format(message))
             await self.websocket.send(json.dumps(message))
-        # except Exception as e:
-        #     self.logger.warning("Error at sending {}".format(e))
 
     async def send_sys_info(self):
         try:
@@ -139,7 +140,8 @@ class LRAgentClient:
                         "logs": self.agent_log_files, "log": self.agent_all_logs,
                         "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
                         "test": self.agent_test_message, "updatecache": self.update_cache,
-                        "saveconfig": self.write_config, "whitelistadd": self.whitelist_add}
+                        "saveconfig": self.write_config, "whitelistadd": self.whitelist_add,
+                        "localtest": self.local_api_check}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
@@ -150,7 +152,7 @@ class LRAgentClient:
                             "logs": [response], "log": [response, request],
                             "flog": [response, request], "dellogs": [response, request], "test": [response],
                             "updatecache": [response], "saveconfig": [response, request],
-                            "whitelistadd": [response, request]}
+                            "whitelistadd": [response, request], "localtest": [response]}
 
         try:
             return await method_calls[request["action"]](*method_arguments[request["action"]])
@@ -650,6 +652,23 @@ class LRAgentClient:
         except KeyError as e:
             response["data"] = {"status": "failure", "body": str(e)}
         return response
+
+    async def local_api_check(self, response: dict):
+        try:
+            port = os.environ["LOCAL_API_PORT"]
+        except KeyError:
+            port = "8765"
+        async with websockets.connect('ws://localhost:{}'.format(port)) as websocket:
+            try:
+                await websocket.send(json.dumps({"action": "test"}))
+                resp = await websocket.recv()
+            except Exception as e:
+                self.logger.info("Local api healthcheck failed, {}".format(e))
+                response["data"] = {"status": "failure", "body": str(e)}
+            else:
+                if json.loads(resp)["data"]["status"] == "success":
+                    response["data"] = {"status": "success", "message": "Local api is up"}
+            return response
 
     def save_file(self, location, file_type, content):
         try:

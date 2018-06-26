@@ -46,11 +46,12 @@ class LRAgentClient:
                         if field in request:
                             response[field] = request[field]
                     self.logger.warning(e)
-                try:
-                    if response["action"] in self.async_actions:
-                        self.process_response(response)
-                except Exception as e:
-                    self.logger.info("General error at error dumping, {}".format(e))
+                else:
+                    try:
+                        if response["action"] in self.async_actions:
+                            self.process_response(response)
+                    except Exception as e:
+                        self.logger.info("General error at error dumping, {}".format(e))
 
                 await self.send(response)
 

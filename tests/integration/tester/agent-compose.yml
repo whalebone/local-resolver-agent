@@ -6,6 +6,12 @@ services:
     stdin_open: true
     tty: true
     network_mode: host
+    restart: always
+    logging:
+        driver: json-file
+        options:
+          max-size: "10m"
+          max-file: "1"
     labels:
         lr-agent: "2.0"
     environment:

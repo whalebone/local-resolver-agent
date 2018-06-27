@@ -10,9 +10,9 @@ services:
     labels:
         lr-agent: "1.2.1"
     environment:
-      WHALEBONE_CLIENT_CRT_BASE64: "WHALEBONE_CLIENT_CRT_BASE64"
-      WHALEBONE_CLIENT_KEY_BASE64: "WHALEBONE_CLIENT_KEY_BASE64"
-      WHALEBONE_PROXY_ADDRESS: "WHALEBONE_PROXY_ADDRESS"
+      CLIENT_CRT_BASE64: "WHALEBONE_CLIENT_CRT_BASE64"
+      CLIENT_KEY_BASE64: "WHALEBONE_CLIENT_KEY_BASE64"
+      PROXY_ADDRESS: "WHALEBONE_PROXY_ADDRESS"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/log/whalebone/:/etc/whalebone/log/

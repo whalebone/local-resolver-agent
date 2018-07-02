@@ -1,6 +1,6 @@
-#FROM python:3.5
+#FROM python:3.6
 
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 RUN apt-get update -y && \
     apt-get upgrade -y && \
     apt-get install -y python3-pip build-essential python3-dev nano

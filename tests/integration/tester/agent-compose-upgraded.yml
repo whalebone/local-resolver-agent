@@ -1,12 +1,11 @@
 version: '3'
 services:
   lr-agent:
-    image: whalebone/agent:1.2.2
+    image: whalebone/agent:1.2.3
     name: lr-agent
     stdin_open: true
     tty: true
     network_mode: host
-    restart: always
     logging:
         driver: json-file
         options:

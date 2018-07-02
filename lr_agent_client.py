@@ -263,13 +263,16 @@ class LRAgentClient:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            for service, config in parsed_compose["services"].items():
-                if service in services or len(services) == 0:
+            ordered_services=list(parsed_compose["services"].keys()) # creates list of services from compose
+            ordered_services.append(ordered_services.pop(ordered_services.index("lr-agent"))) # puts agent at the end of the list
+            for service in ordered_services:
+            # for service, config in parsed_compose["services"].items():
+                if service in services or not services:
                     if service not in ["lr-agent", "resolver"]:
                         status[service] = {}
                         try:
                             await self.dockerConnector.pull_image(
-                                config['image'])  # pulls image before removal, upgrade is instant
+                                parsed_compose["services"][service]['image'])  # pulls image before removal, upgrade is instant
                         except Exception as e:
                             self.logger.info("Failed to pull image before upgrade, {}".format(e))
                         try:
@@ -279,7 +282,7 @@ class LRAgentClient:
                             self.logger.info(e)
                         else:
                             try:
-                                await self.dockerConnector.start_service(config)  # tries to start new container
+                                await self.dockerConnector.start_service(parsed_compose["services"][service])  # tries to start new container
                             except ContainerException as e:
                                 status[service] = {"status": "failure", "message": "start of new container",
                                                    "body": str(e)}
@@ -309,7 +312,7 @@ class LRAgentClient:
                         else:
                             status[service] = {}
                             try:
-                                await self.dockerConnector.start_service(config)  # tries to start new agent
+                                await self.dockerConnector.start_service(parsed_compose["services"][service])  # tries to start new agent
                             except ContainerException as e:
                                 status[service] = {"status": "failure", "message": "start of new service",
                                                    "body": str(e)}

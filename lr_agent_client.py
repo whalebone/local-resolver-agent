@@ -1,7 +1,6 @@
 import json
 import asyncio
 import base64
-from typing import Dict, Any, Union
 
 import yaml
 import os
@@ -31,29 +30,33 @@ class LRAgentClient:
         self.error_stash = {}
 
     async def listen(self):
-        while True:
+        # while True:
+        #     try:
+        #         request = await self.websocket.recv()
+        #     except asyncio.IncompleteReadError:
+        #         pass
+        #     else:
+        #         try:
+        #             response = await self.process(request)
+        #         except Exception as e:
+        async for request in self.websocket:
             try:
-                request = await self.websocket.recv()
-            except asyncio.IncompleteReadError:
-                pass
+                response = await self.process(request)
+            except Exception as e:
+                request = json.loads(request)
+                response = {"data": {"status": "failure", "body": str(e)}}
+                for field in ["requestId", "action"]:
+                    if field in request:
+                        response[field] = request[field]
+                self.logger.warning(e)
             else:
                 try:
-                    response = await self.process(request)
+                    if response["action"] in self.async_actions:
+                        self.process_response(response)
                 except Exception as e:
-                    request = json.loads(request)
-                    response = {"data": {"status": "failure", "body": str(e)}}
-                    for field in ["requestId", "action"]:
-                        if field in request:
-                            response[field] = request[field]
-                    self.logger.warning(e)
-                else:
-                    try:
-                        if response["action"] in self.async_actions:
-                            self.process_response(response)
-                    except Exception as e:
-                        self.logger.info("General error at error dumping, {}".format(e))
+                    self.logger.info("General error at error dumping, {}".format(e))
 
-                await self.send(response)
+            await self.send(response)
 
     async def send(self, message: dict):
         try:

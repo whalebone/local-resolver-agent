@@ -266,16 +266,19 @@ class LRAgentClient:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            ordered_services=list(parsed_compose["services"].keys()) # creates list of services from compose
-            ordered_services.append(ordered_services.pop(ordered_services.index("lr-agent"))) # puts agent at the end of the list
+            ordered_services = list(parsed_compose["services"].keys())  # creates list of services from compose
+            if "lr-agent" in ordered_services:
+                ordered_services.append(ordered_services.pop(
+                    ordered_services.index("lr-agent")))  # puts agent at the end of the list if present
             for service in ordered_services:
-            # for service, config in parsed_compose["services"].items():
+                # for service, config in parsed_compose["services"].items():
                 if service in services or not services:
                     if service not in ["lr-agent", "resolver"]:
                         status[service] = {}
                         try:
                             await self.dockerConnector.pull_image(
-                                parsed_compose["services"][service]['image'])  # pulls image before removal, upgrade is instant
+                                parsed_compose["services"][service][
+                                    'image'])  # pulls image before removal, upgrade is instant
                         except Exception as e:
                             self.logger.info("Failed to pull image before upgrade, {}".format(e))
                         try:

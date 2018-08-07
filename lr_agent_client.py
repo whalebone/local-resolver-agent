@@ -210,7 +210,11 @@ class LRAgentClient:
             for service, config in parsed_compose["services"].items():
                 status[service] = {}
                 try:
-                    await self.dockerConnector.start_service(config)
+                    if service in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
+                        await self.dockerConnector.remove_container(service)
+                        await self.dockerConnector.start_service(config)
+                    else:
+                        await self.dockerConnector.start_service(config)
                 except ContainerException as e:
                     status[service] = {"status": "failure", "body": str(e)}
                     self.logger.info(e)
@@ -282,7 +286,9 @@ class LRAgentClient:
                         except Exception as e:
                             self.logger.info("Failed to pull image before upgrade, {}".format(e))
                         try:
-                            await self.dockerConnector.remove_container(service)  # tries to remove old container
+                            if service in [container.name for container in
+                                           self.dockerConnector.get_containers(stopped=True)]:
+                                await self.dockerConnector.remove_container(service)  # tries to remove old container
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "remove old container", "body": str(e)}
                             self.logger.info(e)
@@ -310,22 +316,39 @@ class LRAgentClient:
                             except IOError as e:
                                 status["dump"] = {"status": "failure", "body": str(e)}
                         try:
-                            await self.dockerConnector.rename_container(service, "{}-old".format(
-                                service))  # tries to rename old agent
+                            if "{}-old".format(
+                                    service) in [container.name for container in
+                                                 self.dockerConnector.get_containers(stopped=True)]:
+                                await self.dockerConnector.remove_container("{}-old".format(
+                                    service))
+                                await self.dockerConnector.rename_container(service, "{}-old".format(
+                                    service))  # tries to rename old agent
+                            else:
+                                await self.dockerConnector.rename_container(service, "{}-old".format(
+                                    service))  # tries to rename old agent
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "rename old service", "body": str(e)}
                             self.logger.info(e)
                         else:
                             status[service] = {}
                             try:
-                                await self.dockerConnector.start_service(parsed_compose["services"][service])  # tries to start new agent
+                                if service not in [container.name for container in
+                                                   self.dockerConnector.get_containers(stopped=True)]:
+                                    await self.dockerConnector.start_service(
+                                        parsed_compose["services"][service])  # tries to start new agent
+                                else:
+                                    await self.dockerConnector.remove_container(service)
+                                    await self.dockerConnector.start_service(
+                                        parsed_compose["services"][service])  # tries to start new agent
                             except ContainerException as e:
                                 status[service] = {"status": "failure", "message": "start of new service",
                                                    "body": str(e)}
                                 self.logger.info(e)
                                 try:
-                                    await self.dockerConnector.rename_container("{}-old".format(service),
-                                                                                service)  # tries to rename old agent
+                                    if "{}-old".format(service) in [container.name for container in
+                                                                    self.dockerConnector.get_containers(stopped=True)]:
+                                        await self.dockerConnector.rename_container("{}-old".format(service),
+                                                                                    service)  # tries to rename old agent
                                 except ContainerException as e:
                                     status[service] = {"status": "failure", "message": "rename rollback",
                                                        "body": str(e)}
@@ -337,15 +360,21 @@ class LRAgentClient:
                                         try:
                                             if service == "resolver":
                                                 await asyncio.sleep(2)
-                                            await self.dockerConnector.remove_container(
-                                                "{}-old".format(service))  # tries to renomve old agent
+                                            if "{}-old".format(service) in [container.name for container in
+                                                                            self.dockerConnector.get_containers(
+                                                                                stopped=True)]:
+                                                await self.dockerConnector.remove_container(
+                                                    "{}-old".format(service))  # tries to renomve old agent
                                         except ContainerException as e:
                                             status[service] = {"status": "failure", "message": "removal of old service",
                                                                "body": str(e)}
                                             self.logger.info(e)
                                             try:
-                                                await self.dockerConnector.remove_container(
-                                                    service)  # tries to rename new agent
+                                                if service in [container.name for container in
+                                                               self.dockerConnector.get_containers(
+                                                                   stopped=True)]:
+                                                    await self.dockerConnector.remove_container(
+                                                        service)  # tries to rename new agent
                                             except ContainerException as e:
                                                 status[service] = {"status": "failure",
                                                                    "message": "removal of old and new service",
@@ -353,8 +382,11 @@ class LRAgentClient:
                                                 self.logger.info(e)
                                             else:
                                                 try:
-                                                    await self.dockerConnector.rename_container(
-                                                        "{}-old".format(service), service)  # tries to rename old agent
+                                                    if "{}-old".format(service) in [container.name for container in
+                                                                   self.dockerConnector.get_containers(
+                                                                       stopped=True)]:
+                                                        await self.dockerConnector.rename_container(
+                                                            "{}-old".format(service), service)  # tries to rename old agent
                                                 except ContainerException as e:
                                                     status[service] = {"status": "failure",
                                                                        "message": "removal and rename of old agent",

@@ -8,7 +8,7 @@ def get_system_info(docker_connector, error_stash: dict):
     sysInfo = {
         'hostname': platform.node(),
         'system': platform.system(),
-        'platform': platform.platform(),
+        'platform': get_platform(),
         'cpu': {
             'count': psutil.cpu_count(),
             'usage': psutil.cpu_percent()
@@ -42,3 +42,12 @@ def get_ifaces():
         interfaces.append(iface)
     return interfaces
 
+
+def get_platform():
+    try:
+        with open("/etc/os-release", "r") as file:
+            for line in file:
+                if line.startswith("PRETTY"):
+                    return line.split("\"")[1]
+    except Exception:
+        return "Unknown"

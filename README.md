@@ -6,9 +6,10 @@ docker build -t whalebone/agent:1.x .
 - WHALEBONE_PROXY_ADDRESS: proxy address (wss://wsproxy:8443/wsproxy/ws)
 - LOGGING_LEVEL: (optional) if set debug option is enabled, accepts whatever value you supply
 - LOCAL_RESOLVER_ADDRESS: (optional) resolver address, if not set localhost is used
-- PERIODIC_INTERVAL: (optional) sets period in seconds for periodic functions sending (sysinfo), if not set default value of 30 seconds will be used
+- PERIODIC_INTERVAL: (optional) sets period in seconds for periodic functions sending (sysinfo), if not set default value of 60 seconds will be used
 - KRESMAN_LISTENER: (optional) sets kresman listener for cache, if not set 'http:localhost:8080' is used
 - LOCAL_API_PORT: (optional) local api port, if not set default value of 8765 will be used
+- KEEP_ALIVE: (optional) specifies the time between keepalive pings
 
 ##### Messages:
 

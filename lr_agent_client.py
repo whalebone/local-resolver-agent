@@ -30,33 +30,39 @@ class LRAgentClient:
         self.error_stash = {}
 
     async def listen(self):
-        # while True:
-        #     try:
-        #         request = await self.websocket.recv()
-        #     except asyncio.IncompleteReadError:
-        #         pass
-        #     else:
-        #         try:
-        #             response = await self.process(request)
-        #         except Exception as e:
-        async for request in self.websocket:
+        # async for request in self.websocket:
+        while True:
             try:
-                response = await self.process(request)
-            except Exception as e:
-                request = json.loads(request)
-                response = {"data": {"status": "failure", "body": str(e)}}
-                for field in ["requestId", "action"]:
-                    if field in request:
-                        response[field] = request[field]
-                self.logger.warning(e)
+                request = await asyncio.wait_for(self.websocket.recv(), timeout=10)
+            except asyncio.TimeoutError:
+                try:
+                    pong_waiter = await self.websocket.ping()
+                    await asyncio.wait_for(pong_waiter, timeout=10)
+                except asyncio.TimeoutError:
+                    # pass
+                    # self.logger.info("Failed to receive pong")
+                    raise Exception("Failed to receive pong")
             else:
                 try:
-                    if response["action"] in self.async_actions:
-                        self.process_response(response)
+                    response = await self.process(request)
                 except Exception as e:
-                    self.logger.info("General error at error dumping, {}".format(e))
+                    request = json.loads(request)
+                    response = {"data": {"status": "failure", "body": str(e)}}
+                    for field in ["requestId", "action"]:
+                        if field in request:
+                            response[field] = request[field]
+                    self.logger.warning(e)
+                else:
+                    try:
+                        if response["action"] in self.async_actions:
+                            self.process_response(response)
+                    except Exception as e:
+                        self.logger.info("General error at error dumping, {}".format(e))
+                await self.send(response)
 
-            await self.send(response)
+    # async for request in self.websocket:
+
+
 
     async def send(self, message: dict):
         try:
@@ -210,11 +216,7 @@ class LRAgentClient:
             for service, config in parsed_compose["services"].items():
                 status[service] = {}
                 try:
-                    if service in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
-                        await self.dockerConnector.remove_container(service)
-                        await self.dockerConnector.start_service(config)
-                    else:
-                        await self.dockerConnector.start_service(config)
+                    await self.dockerConnector.start_service(config)
                 except ContainerException as e:
                     status[service] = {"status": "failure", "body": str(e)}
                     self.logger.info(e)

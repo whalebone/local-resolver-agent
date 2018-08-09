@@ -28,16 +28,20 @@ class LRAgentClient:
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade"]
         self.error_stash = {}
+        try:
+            self.alive = int(os.environ['KEEP_ALIVE'])
+        except KeyError:
+            self.alive = 10
 
     async def listen(self):
         # async for request in self.websocket:
         while True:
             try:
-                request = await asyncio.wait_for(self.websocket.recv(), timeout=10)
+                request = await asyncio.wait_for(self.websocket.recv(), timeout=self.alive)
             except asyncio.TimeoutError:
                 try:
                     pong_waiter = await self.websocket.ping()
-                    await asyncio.wait_for(pong_waiter, timeout=10)
+                    await asyncio.wait_for(pong_waiter, timeout=self.alive)
                 except asyncio.TimeoutError:
                     # pass
                     # self.logger.info("Failed to receive pong")

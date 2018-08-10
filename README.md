@@ -1,15 +1,15 @@
-docker build -t whalebone/agent:1.x .
+docker build -t whalebone/agent:1.x.x .
 
 ##### Agent envs:
-- WHALEBONE_CLIENT_CRT_BASE64: base64 representation of client certificate
-- WHALEBONE_CLIENT_KEY_BASE64: base64 representation of client private key
-- WHALEBONE_PROXY_ADDRESS: proxy address (wss://wsproxy:8443/wsproxy/ws)
+- CLIENT_CRT_BASE64: base64 representation of client certificate
+- CLIENT_KEY_BASE64: base64 representation of client private key
+- PROXY_ADDRESS: proxy address (wss://wsproxy:8443/wsproxy/ws)
 - LOGGING_LEVEL: (optional) if set debug option is enabled, accepts whatever value you supply
 - LOCAL_RESOLVER_ADDRESS: (optional) resolver address, if not set localhost is used
 - PERIODIC_INTERVAL: (optional) sets period in seconds for periodic functions sending (sysinfo), if not set default value of 60 seconds will be used
 - KRESMAN_LISTENER: (optional) sets kresman listener for cache, if not set 'http:localhost:8080' is used
 - LOCAL_API_PORT: (optional) local api port, if not set default value of 8765 will be used
-- KEEP_ALIVE: (optional) specifies the time between keepalive pings
+- KEEP_ALIVE: (optional) specifies the time between keepalive pings, if not set 10s is used
 
 ##### Messages:
 
@@ -20,10 +20,10 @@ The **data** key in response is always present and it illustrates how the operat
 In case of failure **message** and **body** key are added, message is human readable situation evaluation and body is python error message.
 
 Sample message from agent:
-'''json
+
 {"requestId": '4as6c4as6d4wf', "action": create,
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": "some text"}}       
-'''
+
 
 
 ##### Used volumes:

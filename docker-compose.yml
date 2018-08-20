@@ -1,21 +1,27 @@
 version: '3'
 services:
   lr-agent:
-    image: whalebone/agent:1.2
+    image: whalebone/agent:1.2.2
     name: lr-agent
     stdin_open: true
     tty: true
     network_mode: host
     restart: always
+    logging:
+        driver: json-file
+        options:
+          max-size: "10m"
+          max-file: "1"
     labels:
-        lr-agent: "1.2"
+        lr-agent: "1.2.2"
     environment:
-      WHALEBONE_CLIENT_CRT_BASE64: "WHALEBONE_CLIENT_CRT_BASE64"
-      WHALEBONE_CLIENT_KEY_BASE64: "WHALEBONE_CLIENT_KEY_BASE64"
-      WHALEBONE_PROXY_ADDRESS: "WHALEBONE_PROXY_ADDRESS"
+      CLIENT_CRT_BASE64: ""
+      CLIENT_KEY_BASE64: ""
+      PROXY_ADDRESS: "wss://agentapi.whalebone.io:443/wsproxy/ws"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/log/whalebone/:/etc/whalebone/log/
       - /etc/whalebone/kres/:/etc/whalebone/resolver/
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/sinkhole/:/etc/whalebone/kresman
+      - /etc/os-release:/etc/os-release:ro

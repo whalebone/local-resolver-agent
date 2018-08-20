@@ -1,11 +1,11 @@
 import json
 import asyncio
 import base64
-from typing import Dict, Any, Union
 
 import yaml
 import os
 import requests
+import websockets
 
 from dockertools.docker_connector import DockerConnector
 from sysinfo.sys_info import get_system_info
@@ -28,23 +28,45 @@ class LRAgentClient:
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade"]
         self.error_stash = {}
+        try:
+            self.alive = int(os.environ['KEEP_ALIVE'])
+        except KeyError:
+            self.alive = 10
 
     async def listen(self):
+        # async for request in self.websocket:
         while True:
-            request = await self.websocket.recv()
             try:
-                response = await self.process(request)
-            except Exception as e:
-                request = json.loads(request)
-                response = {"requestId": request["requestId"], "action": request["action"],
-                            "data": {"status": "failure", "body": str(e)}}
-                self.logger.warning(e)
-            try:
-                if response["action"] in self.async_actions:
-                    self.process_response(response)
-            except Exception as e:
-                self.logger.info("General error at error dumping, {}".format(e))
-            await self.send(response)
+                request = await asyncio.wait_for(self.websocket.recv(), timeout=self.alive)
+            except asyncio.TimeoutError:
+                try:
+                    pong_waiter = await self.websocket.ping()
+                    await asyncio.wait_for(pong_waiter, timeout=self.alive)
+                except asyncio.TimeoutError:
+                    # pass
+                    # self.logger.info("Failed to receive pong")
+                    raise Exception("Failed to receive pong")
+            else:
+                try:
+                    response = await self.process(request)
+                except Exception as e:
+                    request = json.loads(request)
+                    response = {"data": {"status": "failure", "body": str(e)}}
+                    for field in ["requestId", "action"]:
+                        if field in request:
+                            response[field] = request[field]
+                    self.logger.warning(e)
+                else:
+                    try:
+                        if response["action"] in self.async_actions:
+                            self.process_response(response)
+                    except Exception as e:
+                        self.logger.info("General error at error dumping, {}".format(e))
+                await self.send(response)
+
+    # async for request in self.websocket:
+
+
 
     async def send(self, message: dict):
         try:
@@ -52,12 +74,9 @@ class LRAgentClient:
         except Exception as e:
             self.logger.warning(e)
         else:
-            # try:
             if message["action"] != "sysinfo":
                 self.logger.info("Sending: {}".format(message))
             await self.websocket.send(json.dumps(message))
-        # except Exception as e:
-        #     self.logger.warning("Error at sending {}".format(e))
 
     async def send_sys_info(self):
         try:
@@ -135,7 +154,8 @@ class LRAgentClient:
                         "logs": self.agent_log_files, "log": self.agent_all_logs,
                         "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
                         "test": self.agent_test_message, "updatecache": self.update_cache,
-                        "saveconfig": self.write_config, "whitelistadd": self.whitelist_add}
+                        "saveconfig": self.write_config, "whitelistadd": self.whitelist_add,
+                        "localtest": self.local_api_check}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
@@ -146,7 +166,7 @@ class LRAgentClient:
                             "logs": [response], "log": [response, request],
                             "flog": [response, request], "dellogs": [response, request], "test": [response],
                             "updatecache": [response], "saveconfig": [response, request],
-                            "whitelistadd": [response, request]}
+                            "whitelistadd": [response, request], "localtest": [response]}
 
         try:
             return await method_calls[request["action"]](*method_arguments[request["action"]])
@@ -256,23 +276,31 @@ class LRAgentClient:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            for service, config in parsed_compose["services"].items():
-                if service in services or len(services) == 0:
+            ordered_services = list(parsed_compose["services"].keys())  # creates list of services from compose
+            if "lr-agent" in ordered_services:
+                ordered_services.append(ordered_services.pop(
+                    ordered_services.index("lr-agent")))  # puts agent at the end of the list if present
+            for service in ordered_services:
+                # for service, config in parsed_compose["services"].items():
+                if service in services or not services:
                     if service not in ["lr-agent", "resolver"]:
                         status[service] = {}
                         try:
                             await self.dockerConnector.pull_image(
-                                config['image'])  # pulls image before removal, upgrade is instant
+                                parsed_compose["services"][service][
+                                    'image'])  # pulls image before removal, upgrade is instant
                         except Exception as e:
                             self.logger.info("Failed to pull image before upgrade, {}".format(e))
                         try:
-                            await self.dockerConnector.remove_container(service)  # tries to remove old container
+                            if service in [container.name for container in
+                                           self.dockerConnector.get_containers(stopped=True)]:
+                                await self.dockerConnector.remove_container(service)  # tries to remove old container
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "remove old container", "body": str(e)}
                             self.logger.info(e)
                         else:
                             try:
-                                await self.dockerConnector.start_service(config)  # tries to start new container
+                                await self.dockerConnector.start_service(parsed_compose["services"][service])  # tries to start new container
                             except ContainerException as e:
                                 status[service] = {"status": "failure", "message": "start of new container",
                                                    "body": str(e)}
@@ -294,22 +322,39 @@ class LRAgentClient:
                             except IOError as e:
                                 status["dump"] = {"status": "failure", "body": str(e)}
                         try:
-                            await self.dockerConnector.rename_container(service, "{}-old".format(
-                                service))  # tries to rename old agent
+                            if "{}-old".format(
+                                    service) in [container.name for container in
+                                                 self.dockerConnector.get_containers(stopped=True)]:
+                                await self.dockerConnector.remove_container("{}-old".format(
+                                    service))
+                                await self.dockerConnector.rename_container(service, "{}-old".format(
+                                    service))  # tries to rename old agent
+                            else:
+                                await self.dockerConnector.rename_container(service, "{}-old".format(
+                                    service))  # tries to rename old agent
                         except ContainerException as e:
                             status[service] = {"status": "failure", "message": "rename old service", "body": str(e)}
                             self.logger.info(e)
                         else:
                             status[service] = {}
                             try:
-                                await self.dockerConnector.start_service(config)  # tries to start new agent
+                                if service not in [container.name for container in
+                                                   self.dockerConnector.get_containers(stopped=True)]:
+                                    await self.dockerConnector.start_service(
+                                        parsed_compose["services"][service])  # tries to start new agent
+                                else:
+                                    await self.dockerConnector.remove_container(service)
+                                    await self.dockerConnector.start_service(
+                                        parsed_compose["services"][service])  # tries to start new agent
                             except ContainerException as e:
                                 status[service] = {"status": "failure", "message": "start of new service",
                                                    "body": str(e)}
                                 self.logger.info(e)
                                 try:
-                                    await self.dockerConnector.rename_container("{}-old".format(service),
-                                                                                service)  # tries to rename old agent
+                                    if "{}-old".format(service) in [container.name for container in
+                                                                    self.dockerConnector.get_containers(stopped=True)]:
+                                        await self.dockerConnector.rename_container("{}-old".format(service),
+                                                                                    service)  # tries to rename old agent
                                 except ContainerException as e:
                                     status[service] = {"status": "failure", "message": "rename rollback",
                                                        "body": str(e)}
@@ -321,15 +366,21 @@ class LRAgentClient:
                                         try:
                                             if service == "resolver":
                                                 await asyncio.sleep(2)
-                                            await self.dockerConnector.remove_container(
-                                                "{}-old".format(service))  # tries to renomve old agent
+                                            if "{}-old".format(service) in [container.name for container in
+                                                                            self.dockerConnector.get_containers(
+                                                                                stopped=True)]:
+                                                await self.dockerConnector.remove_container(
+                                                    "{}-old".format(service))  # tries to renomve old agent
                                         except ContainerException as e:
                                             status[service] = {"status": "failure", "message": "removal of old service",
                                                                "body": str(e)}
                                             self.logger.info(e)
                                             try:
-                                                await self.dockerConnector.remove_container(
-                                                    service)  # tries to rename new agent
+                                                if service in [container.name for container in
+                                                               self.dockerConnector.get_containers(
+                                                                   stopped=True)]:
+                                                    await self.dockerConnector.remove_container(
+                                                        service)  # tries to rename new agent
                                             except ContainerException as e:
                                                 status[service] = {"status": "failure",
                                                                    "message": "removal of old and new service",
@@ -337,8 +388,11 @@ class LRAgentClient:
                                                 self.logger.info(e)
                                             else:
                                                 try:
-                                                    await self.dockerConnector.rename_container(
-                                                        "{}-old".format(service), service)  # tries to rename old agent
+                                                    if "{}-old".format(service) in [container.name for container in
+                                                                   self.dockerConnector.get_containers(
+                                                                       stopped=True)]:
+                                                        await self.dockerConnector.rename_container(
+                                                            "{}-old".format(service), service)  # tries to rename old agent
                                                 except ContainerException as e:
                                                     status[service] = {"status": "failure",
                                                                        "message": "removal and rename of old agent",
@@ -646,6 +700,23 @@ class LRAgentClient:
         except KeyError as e:
             response["data"] = {"status": "failure", "body": str(e)}
         return response
+
+    async def local_api_check(self, response: dict):
+        try:
+            port = os.environ["LOCAL_API_PORT"]
+        except KeyError:
+            port = "8765"
+        async with websockets.connect('ws://localhost:{}'.format(port)) as websocket:
+            try:
+                await websocket.send(json.dumps({"action": "test"}))
+                resp = await websocket.recv()
+            except Exception as e:
+                self.logger.info("Local api healthcheck failed, {}".format(e))
+                response["data"] = {"status": "failure", "body": str(e)}
+            else:
+                if json.loads(resp)["data"]["status"] == "success":
+                    response["data"] = {"status": "success", "message": "Local api is up"}
+            return response
 
     def save_file(self, location, file_type, content):
         try:

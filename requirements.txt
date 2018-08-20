@@ -1,6 +1,6 @@
-asyncio
 docker == 3.0.1
 psutil
-websockets
+websockets == 4.0.1
+websocket-client == 0.47
 pyaml
 netifaces

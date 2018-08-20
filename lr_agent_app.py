@@ -12,13 +12,13 @@ from loggingtools.logger import build_logger
 
 def validate_settings():
     try:
-        client_cert = os.environ['WHALEBONE_LR_CLIENT_CERT']
+        client_cert = os.environ['LR_CLIENT_CERT']
     except KeyError:
-        raise InitException('System env WHALEBONE_LR_CLIENT_CERT must be set')
+        raise InitException('System env LR_CLIENT_CERT must be set')
     try:
-        proxy_address = os.environ['WHALEBONE_PROXY_ADDRESS']
+        proxy_address = os.environ['PROXY_ADDRESS']
     except KeyError:
-        raise InitException('System env WHALEBONE_PROXY_ADDRESS must be set')
+        raise InitException('System env PROXY_ADDRESS must be set')
         # raise InitException('System env WHALEBONE_LR_CLIENT_CERT_PASS must be set')
     if not os.path.exists(client_cert) or os.stat(client_cert).st_size == 0:  # change to None or len()=0
         raise InitException('Client certificate {0} must exist and mustn\'t be empty'.format(client_cert))
@@ -47,20 +47,19 @@ async def local_resolver_agent_app():
             remote_client = LRAgentClient(websocket)
             await remote_client.validate_host()
             asyncio.ensure_future(remote_client.listen())
-            try:
-                local_client = LRAgentLocalClient(websocket, remote_client)
-            except Exception as e:
-                await remote_client.send(
-                    {"action": "request", "data": {"message": "local api runtime error", "body": str(e)}})
-                logger.error("local api runtime error {}".format(e))
-            else:
-                await local_client.start_api()
+            # try:
+            #     dummy_client = LRAgentClient(None)
+            #     local_client = LRAgentLocalClient(dummy_client)
+            # except Exception as e:
+            #     logger.error("local api runtime error {}".format(e))
+            # else:
+            #     await local_client.start_api()
             while True:
                 await remote_client.send_sys_info()
                 await remote_client.validate_host()
                 await asyncio.sleep(interval)
         except Exception as e:
-            logger.error('Generic error: {0}'.format(str(e)))
+            logger.error('Generic error: {}'.format(str(e)))
             logger.error('Retrying in 10 secs...')
             try:
                 await websocket.close()

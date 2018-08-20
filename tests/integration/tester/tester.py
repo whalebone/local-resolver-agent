@@ -54,6 +54,12 @@ class Tester():
         for k, v in compose["services"].items():
             if "volumes" in v:
                 compose["services"][k]["volumes"] = self.parse_volumes(v["volumes"])
+            if 'logging' in v:
+                compose["services"][k]['log_config'] = {
+                    'type': v['logging']['driver'],
+                    'config': v['logging']['options']
+                }
+                del compose["services"][k]['logging']
         try:
             self.docker_client.images.pull(compose["services"]["lr-agent"]["image"])
         except Exception:

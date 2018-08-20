@@ -45,7 +45,6 @@ async def local_resolver_agent_app():
         try:
             websocket = await connect()
             remote_client = LRAgentClient(websocket)
-            await remote_client.validate_host()
             asyncio.ensure_future(remote_client.listen())
             # try:
             #     dummy_client = LRAgentClient(None)
@@ -55,8 +54,8 @@ async def local_resolver_agent_app():
             # else:
             #     await local_client.start_api()
             while True:
-                await remote_client.send_sys_info()
                 await remote_client.validate_host()
+                await remote_client.send_sys_info()
                 await asyncio.sleep(interval)
         except Exception as e:
             logger.error('Generic error: {}'.format(str(e)))

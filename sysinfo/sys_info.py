@@ -1,6 +1,6 @@
 import psutil
 import platform
-
+from dns import resolver
 
 def get_system_info(docker_connector, error_stash: dict):
     mem = psutil.virtual_memory()
@@ -14,8 +14,8 @@ def get_system_info(docker_connector, error_stash: dict):
             'usage': psutil.cpu_percent()
         },
         'memory': {
-            'total': mem.total >> 30,
-            'free': mem.free >> 30,
+            'total': round(mem.total / (1024.0 ** 3), 1),
+            'available': round(mem.available / (1024.0 ** 3), 1),
             'usage': mem.percent,
         },
         'hdd': {
@@ -24,6 +24,7 @@ def get_system_info(docker_connector, error_stash: dict):
             'usage': du.percent,
         },
         "docker": docker_connector.docker_version(),
+        # "check": {"resolve": check_resolving(), "port": check_port()},
         "containers": {container.name: container.status for container in docker_connector.get_containers(stopped=True)},
         "error_messages": error_stash,
         'interfaces': get_ifaces()
@@ -51,3 +52,34 @@ def get_platform():
                     return line.split("\"")[1]
     except Exception:
         return "Unknown"
+
+
+def check_resolving():
+    domains = ["google.com", "microsoft.com", "apple.com", "facebook.com"]
+    res = resolver.Resolver()
+    res.nameservers = ["127.0.0.1"]
+    for domain in domains:
+        try:
+            res.query(domain)
+            return "ok"
+        except Exception:
+            pass
+    return "fail"
+
+
+def check_port():
+    ports = {"SocketKind.SOCK_DGRAM": 53, "SocketKind.SOCK_STREAM": 53}
+    for proc in psutil.process_iter():
+        if proc.name() == "kresd":
+            for con in proc.connections():
+                port, prot = con.laddr[1], str(con.type)
+                try:
+                    if ports[prot] == port:
+                        del ports[prot]
+                except KeyError:
+                    pass
+
+    if len(ports) == 0:
+        return "ok"
+    else:
+        return "fail"

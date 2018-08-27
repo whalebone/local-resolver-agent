@@ -2,10 +2,11 @@ import psutil
 import platform
 from dns import resolver
 
+
 def get_system_info(docker_connector, error_stash: dict):
     mem = psutil.virtual_memory()
     du = psutil.disk_usage('/')
-    sysInfo = {
+    return {
         'hostname': platform.node(),
         'system': platform.system(),
         'platform': get_platform(),
@@ -14,22 +15,22 @@ def get_system_info(docker_connector, error_stash: dict):
             'usage': psutil.cpu_percent()
         },
         'memory': {
-            'total': round(mem.total / (1024.0 ** 3), 1),
-            'available': round(mem.available / (1024.0 ** 3), 1),
+            'total': to_gigabytes(mem.total),
+            'available': to_gigabytes(mem.available),
             'usage': mem.percent,
         },
         'hdd': {
-            'total': du.total >> 30,
-            'free': du.free >> 30,
+            'total': to_gigabytes(du.total),
+            'free': to_gigabytes(du.free),
             'usage': du.percent,
         },
         "docker": docker_connector.docker_version(),
         # "check": {"resolve": check_resolving(), "port": check_port()},
-        "containers": {container.name: container.status for container in docker_connector.get_containers(stopped=True)},
+        "containers": {container.name: container.status for container in docker_connector.get_containers()},
+        "images": get_images(docker_connector),
         "error_messages": error_stash,
         'interfaces': get_ifaces()
     }
-    return sysInfo
 
 
 def get_ifaces():
@@ -52,6 +53,20 @@ def get_platform():
                     return line.split("\"")[1]
     except Exception:
         return "Unknown"
+
+
+def get_images(docker_connector):
+    containers = {}
+    for container in docker_connector.get_containers():
+        try:
+            containers[container.name] = container.image.tags[0]
+        except IndexError:
+            pass
+    return containers
+
+
+def to_gigabytes(stat):
+    return round(stat / (1024.0 ** 3), 1)
 
 
 def check_resolving():

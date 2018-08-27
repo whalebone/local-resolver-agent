@@ -34,11 +34,9 @@ def get_system_info(docker_connector, error_stash: dict):
 
 
 def get_ifaces():
-    interfaces = list()
+    interfaces = []
     for iface_name, iface_addr_info_list in psutil.net_if_addrs().items():
-        iface = dict()
-        iface['name'] = iface_name
-        iface['addresses'] = list()
+        iface = {'name': iface_name, 'addresses': []}
         for addr_info in iface_addr_info_list:
             iface['addresses'].append(addr_info.address)
         interfaces.append(iface)

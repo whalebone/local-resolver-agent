@@ -29,17 +29,17 @@ def get_system_info(docker_connector, error_stash: dict):
         "containers": {container.name: container.status for container in docker_connector.get_containers()},
         "images": get_images(docker_connector),
         "error_messages": error_stash,
-        'interfaces': get_ifaces()
+        'interfaces': get_interfaces()
     }
 
 
-def get_ifaces():
+def get_interfaces():
     interfaces = []
-    for iface_name, iface_addr_info_list in psutil.net_if_addrs().items():
-        iface = {'name': iface_name, 'addresses': []}
-        for addr_info in iface_addr_info_list:
-            iface['addresses'].append(addr_info.address)
-        interfaces.append(iface)
+    for interface_name, interface_info_list in psutil.net_if_addrs().items():
+        interface = {'name': interface_name, 'addresses': []}
+        for addr_info in interface_info_list:
+            interface['addresses'].append(addr_info.address)
+        interfaces.append(interface)
     return interfaces
 
 

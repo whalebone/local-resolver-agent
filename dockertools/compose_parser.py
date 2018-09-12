@@ -4,10 +4,8 @@ from exception.exc import ComposeException
 
 SUPPORTED_VERSIONS = ['1', '3']
 
-class ComposeParser:
 
-    # def __init__(self, docker_connector):
-    #     self.dockerConnector = docker_connector
+class ComposeParser:
 
     def create_service(self, compose_yaml):
         compose = self.parse(compose_yaml)
@@ -33,6 +31,6 @@ class ComposeParser:
     def validate(self, parsed_compose):
         if parsed_compose['version'] not in SUPPORTED_VERSIONS:
             raise ComposeException("Compose version '{0}' not supported. Supported versions: {1}"
-                                       .format(parsed_compose['version'], SUPPORTED_VERSIONS))
+                                   .format(parsed_compose['version'], SUPPORTED_VERSIONS))
         if 'services' not in parsed_compose:
             raise ComposeException("Missing section 'services'")

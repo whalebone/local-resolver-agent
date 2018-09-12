@@ -1,47 +1,44 @@
 import base64
 import netifaces
 
+
 def create_docker_run_kwargs(service_compose_fragmet):
     kwargs = {}
-
-    for compose_param_name in SUPPORTED_PARAMETERS_V1:
-        param_def = SUPPORTED_PARAMETERS_V1[compose_param_name]
-        if param_def is None or compose_param_name not in service_compose_fragmet:
-            # skip this param since it has some specific or not specified in compose
-            continue
+    # for compose_param_name in SUPPORTED_PARAMETERS_V1:
+    #     param_def = SUPPORTED_PARAMETERS_V1[compose_param_name]
+    #     if param_def is None or compose_param_name not in service_compose_fragmet:
+    #         # skip this param since it has some specific or not specified in compose
+    #         continue
+    for name, definition in service_compose_fragmet.items():
+        param_def = SUPPORTED_PARAMETERS_V1[name]
+        # if param_def is not None:
         if isinstance(param_def, dict):
             parse_fn = param_def['fn']
             kwarg_param_name = param_def['name']
+            # docker-compose key has different name than the kwarg of run method,'name' is kwarg key and fn fuction for value
         else:
             parse_fn = param_def
-            kwarg_param_name = compose_param_name
-        kwarg_param_value = parse_fn(service_compose_fragmet[compose_param_name])
-        if kwarg_param_value is not None:
-            kwargs[kwarg_param_name] = kwarg_param_value
-
-    if 'log_driver' in service_compose_fragmet and service_compose_fragmet['log_driver'] is not None:
-        kwargs['log_config'] = {
-            'type': service_compose_fragmet['log_driver']
-        }
-        if 'log_opt' in service_compose_fragmet and service_compose_fragmet['log_opt'] is not None:
-            kwargs['log_config']['config'] = service_compose_fragmet['log_opt']
-        # deprecated can be safely deleted
-
-    if 'logging' in service_compose_fragmet and service_compose_fragmet['logging']['driver'] is not None:
-        kwargs['log_config'] = {
-            'type': service_compose_fragmet['logging']['driver'],
-            'config': service_compose_fragmet['logging']['options']
-        }
-        if 'log_opt' in service_compose_fragmet and service_compose_fragmet['log_opt'] is not None:
-            kwargs['log_config']['config'] = service_compose_fragmet['logging']['options']
+            kwarg_param_name = name
+        kwargs[kwarg_param_name] = parse_fn(service_compose_fragmet[name])
+            # kwarg_param_value = parse_fn(service_compose_fragmet[name])
+            # if kwarg_param_value is not None:
+            # kwargs[kwarg_param_name] = kwarg_param_value
+    # if 'logging' in service_compose_fragmet:
+    #     kwargs['log_config'] = {
+    #         'type': service_compose_fragmet['logging']['driver'],
+    #         'config': service_compose_fragmet['logging']['options']
+    #     }
+        # if 'log_opt' in service_compose_fragmet:
+        #     kwargs['log_config']['config'] = service_compose_fragmet['logging']['options']
     return kwargs
 
 
 def parse_value(value):
-    if isinstance(value, float):
-        return int(value)
-    else:
-        return value
+    return value
+
+
+def parse_logging(logging):
+    return {"type": logging["driver"], "config": logging["options"]}
 
 
 def parse_envs(envs):
@@ -56,36 +53,34 @@ def parse_envs(envs):
 
 
 def parse_ports(ports_list):
-    if ports_list is None or len(ports_list) == 0:
-        return None
-    ports_dict = dict()
+    # if len(ports_list) == 0:
+    #     return None
+    ports_dict = {}
     for port in ports_list:
         port_def = port.split(':')
-        if len(port_def) != 2:
-            raise Exception("Invalid format of 'ports' definition: {0}".format(port))
         try:
             ports_dict[port_def[1]] = int(port_def[0])
-        except ValueError:
+        except IndexError:
             raise Exception("Invalid format of 'ports' definition: {0}".format(port))
     return ports_dict
 
 
 def parse_volumes(volumes_list):
-    if volumes_list is None or len(volumes_list) == 0:
-        return None
-    volumes_dict = dict()
+    # if len(volumes_list) == 0:
+    #     return None
+    volumes = {}
     for volume in volumes_list:
         volume_def = volume.split(':')
-        if len(volume_def) < 2 or len(volume_def) > 3:
+        try:
+            volumes[volume_def[0]] = {
+                'bind': volume_def[1], 'mode': "rw"
+            }
+        except IndexError:
             raise Exception("Invalid format(short syntax supported only) of 'volumes' definition: {0}".format(volume))
-        volumes_dict[volume_def[0]] = {
-            'bind': volume_def[1]
-        }
-        if len(volume_def) == 3:
-            volumes_dict[volume_def[0]]['mode'] = volume_def[2]
         else:
-            volumes_dict[volume_def[0]]['mode'] = 'rw'
-    return volumes_dict
+            if len(volume_def) == 3:
+                volumes[volume_def[0]]['mode'] = volume_def[2]
+    return volumes
 
 
 def parse_restart_policy(restart_policy):
@@ -102,9 +97,11 @@ def read_file(file_name:str)->str:
 
 
 SUPPORTED_PARAMETERS_V1 = {
-    'image': None,  # not part of kwargs
+    'image': parse_value,  # not part of kwargs
     'net': {'fn': parse_value, 'name': 'network_mode'},  # <1
     'network_mode': parse_value,
+    'dns': parse_value,
+    'pid_mode': parse_value,
     'ports': parse_ports,
     'volumes': parse_volumes,
     'labels': parse_value,
@@ -115,7 +112,7 @@ SUPPORTED_PARAMETERS_V1 = {
     'restart': {'fn': parse_restart_policy, 'name': 'restart_policy'},
     'cpu_shares': parse_value,  # <1
     'name': parse_value,
-    'logging': None,
-    'log_driver': None,  # special formatting together with log_opt <1
-    'log_opt': None,  # special formatting together with log_driver <
+    'logging': {'fn': parse_logging, 'name': 'log_config'}
+    # 'log_driver': None,  # special formatting together with log_opt <1
+    # 'log_opt': None,  # special formatting together with log_driver <
 }

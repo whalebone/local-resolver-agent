@@ -31,7 +31,7 @@ class DockerConnector:
         kwargs = create_docker_run_kwargs(parsed_compose)
         await self.pull_image(parsed_compose['image'])
         try:
-            self.docker_client.containers.run(parsed_compose['image'], detach=True, **kwargs)
+            self.docker_client.containers.run(detach=True, **kwargs)
         except Exception as e:
             raise ContainerException(e)
 

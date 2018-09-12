@@ -25,7 +25,7 @@ def get_system_info(docker_connector, error_stash: dict):
             'usage': du.percent,
         },
         "docker": docker_connector.docker_version(),
-        "check": {"resolve": check_resolving(), "port": check_port()},
+        "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},
         "containers": {container.name: container.status for container in docker_connector.get_containers()},
         "images": get_images(docker_connector),
         "error_messages": error_stash,
@@ -80,22 +80,13 @@ def check_resolving():
     return "fail"
 
 
-def check_port():
-    ports = {"SocketKind.SOCK_DGRAM": 53, "SocketKind.SOCK_STREAM": 53}
-    try:
-        for proc in psutil.process_iter():
-            if proc.name() == "kresd":
-                for con in proc.connections():
-                    port, prot = con.laddr[1], str(con.type)
-                    try:
-                        if ports[prot] == port:
-                            del ports[prot]
-                    except KeyError:
-                        pass
-
-        if len(ports) == 0:
-            return "ok"
-        else:
-            return "failed"
-    except Exception:
-        pass
+def check_port(docker_connector):
+    res = docker_connector.get_container("resolver")
+    if res != "":
+        try:
+            if "kresd" in res.exec_run(["sh", "-c", "netstat -tupan | grep kresd | grep 53"]).output.decode(
+                    "utf-8"):
+                return "ok"
+        except Exception:
+            pass
+    return "fail"

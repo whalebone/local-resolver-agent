@@ -34,6 +34,18 @@ class DockerConnector:
             self.logger.info(e)
             return ""
 
+    def container_exec(self, name: str, command: list):
+        service = self.get_container(name)
+        if service != "":
+            try:
+                result = service.exec_run(command)
+            except Exception as e:
+                self.logger.info(e)
+            else:
+                return result.output.decode("utf-8")
+        else:
+            return ""
+
     async def start_service(self, parsed_compose: dict):
         kwargs = create_docker_run_kwargs(parsed_compose)
         await self.pull_image(parsed_compose['image'])

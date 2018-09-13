@@ -1,7 +1,7 @@
 version: '3'
 services:
     resolver:
-      image: whalebone/kres:2.4.1-1-fedora28-compact
+      image: whalebone/kres:2.4.1-5-fedora28-compact
       labels:
          resolver: "2.0"
       logging:

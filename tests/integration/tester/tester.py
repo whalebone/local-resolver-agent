@@ -633,32 +633,32 @@ class Tester():
             self.save_config()
         except Exception as e:
             self.logger.info(e)
-        time.sleep(60)
-        loop = asyncio.get_event_loop()
-        try:
-            loop.run_until_complete(self.local_test_remove())
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            loop.run_until_complete(self.local_test_create())
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            loop.run_until_complete(self.local_test_restart())
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            loop.run_until_complete(self.local_test_rename())
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            loop.run_until_complete(self.local_test_stop())
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            loop.run_until_complete(self.local_test_sysinfo())
-        except Exception as e:
-            self.logger.info(e)
+        # time.sleep(60)
+        # loop = asyncio.get_event_loop()
+        # try:
+        #     loop.run_until_complete(self.local_test_remove())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_create())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_restart())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_rename())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_stop())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_sysinfo())
+        # except Exception as e:
+        #     self.logger.info(e)
 
 if __name__ == '__main__':
     tester = Tester()

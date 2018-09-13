@@ -25,7 +25,7 @@ def get_system_info(docker_connector, error_stash: dict):
             'usage': du.percent,
         },
         "docker": docker_connector.docker_version(),
-        "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},
+        # "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},
         "containers": {container.name: container.status for container in docker_connector.get_containers()},
         "images": get_images(docker_connector),
         "error_messages": error_stash,
@@ -64,7 +64,7 @@ def get_images(docker_connector):
 
 
 def to_gigabytes(stat):
-    return round(stat / (1024.0 ** 3), 1)
+    return round(stat / (1024**3), 1)
 
 
 def check_resolving():
@@ -80,13 +80,11 @@ def check_resolving():
     return "fail"
 
 
-def check_port(docker_connector):
-    res = docker_connector.get_container("resolver")
-    if res != "":
-        try:
-            if "kresd" in res.exec_run(["sh", "-c", "netstat -tupan | grep kresd | grep 53"]).output.decode(
-                    "utf-8"):
-                return "ok"
-        except Exception:
-            pass
+def check_port(docker_connector, service: str = "resolver"):
+    try:
+        if "kresd" in docker_connector.container_exec(service,
+                                                      ["sh", "-c", "netstat -tupan | grep kresd | grep 53"]):
+            return "ok"
+    except Exception:
+        pass
     return "fail"

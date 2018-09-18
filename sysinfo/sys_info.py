@@ -25,7 +25,7 @@ def get_system_info(docker_connector, error_stash: dict):
             'usage': du.percent,
         },
         "docker": docker_connector.docker_version(),
-        # "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},
+        "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},
         "containers": {container.name: container.status for container in docker_connector.get_containers()},
         "images": get_images(docker_connector),
         "error_messages": error_stash,
@@ -71,6 +71,8 @@ def check_resolving():
     domains = ["google.com", "microsoft.com", "apple.com", "facebook.com"]
     res = resolver.Resolver()
     res.nameservers = ["127.0.0.1"]
+    res.timeout = 1
+    res.lifetime = 1
     for domain in domains:
         try:
             res.query(domain)

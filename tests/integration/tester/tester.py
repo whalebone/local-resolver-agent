@@ -140,14 +140,6 @@ class Tester():
                                  "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
-                      # "config": {"resolver": [{"path": "kres.conf",
-                      #                          "data": ["net.ipv6 = false", "net.listen('0.0.0.0')",
-                      #                                   "net.listen('0.0.0.0', {tls=true})",
-                      #                                   "trust_anchors.file = '/etc/kres/root.keys'",
-                      #                                   "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                      #                                   "cache.storage = 'lmdb://var/lib/kres/cache'",
-                      #                                   "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
-                      #                          "type": "text"}]},
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -555,6 +547,108 @@ class Tester():
                     if key == "hdd":
                         self.logger.info("hdd: " + str(value))
 
+    def upgrade_resolver_config(self):
+        compose = self.compose_reader("resolver-compose-upgraded.yml")
+        services = ["resolver"]
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/oidnboisdnb/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/gponmgn/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "services": services})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            while True:
+                if self.redis.exists("upgrade"):
+                    status = self.redis_output(self.redis.lpop("upgrade"))
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "failure":
+                            self.logger.info("{} upgrade successful with failed check(config)".format(key))
+                            # for config in self.view_config():
+                            #     if config["name"] in services and config["labels"][key] == "3.0":
+                            #         self.logger.info("{} upgrade config check successful".format(key))
+                            #     else:
+                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                    break
+                else:
+                    time.sleep(3)
+
+    def upgrade_resolver_redirect(self):
+        compose = self.compose_reader("resolver-compose-upgraded.yml")
+        services = ["resolver"]
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "policy.forward('127.0.0.1')",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "services": services})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            while True:
+                if self.redis.exists("upgrade"):
+                    status = self.redis_output(self.redis.lpop("upgrade"))
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "failure":
+                            self.logger.info("{} upgrade successful with failed check(redirect)".format(key))
+                            # for config in self.view_config():
+                            #     if config["name"] in services and config["labels"][key] == "3.0":
+                            #         self.logger.info("{} upgrade config check successful".format(key))
+                            #     else:
+                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                    break
+                else:
+                    time.sleep(3)
+
+    def upgrade_resolver_image(self):
+        compose = self.compose_reader("resolver-compose-invalid.yml")
+        services = ["resolver"]
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "services": services})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            while True:
+                if self.redis.exists("upgrade"):
+                    status = self.redis_output(self.redis.lpop("upgrade"))
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "failure":
+                            self.logger.info("{} upgrade successful with failed check(image)".format(key))
+                            # for config in self.view_config():
+                            #     if config["name"] in services and config["labels"][key] == "3.0":
+                            #         self.logger.info("{} upgrade config check successful".format(key))
+                            #     else:
+                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                    break
+                else:
+                    time.sleep(3)
 
     def run_test(self):
         time.sleep(10)
@@ -631,6 +725,19 @@ class Tester():
             self.logger.info(e)
         try:
             self.save_config()
+        except Exception as e:
+            self.logger.info(e)
+
+        try:
+            self.upgrade_resolver_config()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.upgrade_resolver_redirect()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.upgrade_resolver_image()
         except Exception as e:
             self.logger.info(e)
         # time.sleep(60)

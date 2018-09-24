@@ -93,7 +93,7 @@ class DockerConnector:
         except Exception as e:
             raise ContainerException(e)
 
-    async def inspect_config(self, container_name: str):
+    def inspect_config(self, container_name: str):
         try:
             return self.api_client.inspect_container(container_name)
         except Exception as e:

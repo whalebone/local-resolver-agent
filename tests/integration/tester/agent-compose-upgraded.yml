@@ -5,8 +5,8 @@ services:
     name: lr-agent
     stdin_open: true
     tty: true
-    pid_mode: "host"
-    privileged: true
+#    pid_mode: "host"
+#    privileged: true
     dns:
       - localhost
     network_mode: host
@@ -20,7 +20,6 @@ services:
     environment:
       CLIENT_CRT_BASE64: ""
       CLIENT_KEY_BASE64: ""
-      LOGGING_LEVEL: "so much"
       PROXY_ADDRESS: "wss://localhost:8443/wsproxy/ws"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -29,3 +28,4 @@ services:
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/sinkhole/:/etc/whalebone/kresman
       - /etc/os-release:/etc/os-release:ro
+      - /:/opt/host/:ro

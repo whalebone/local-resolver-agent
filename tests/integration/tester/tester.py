@@ -555,9 +555,9 @@ class Tester():
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
                       "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/oidnboisdnb/root.keys'",
+                                 "trust_anchors.file = '/etc/kres/root.keys'", "sdovosdvio",
                                  "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                                 "cache.storage = 'lmdb:///var/lib/gponmgn/cache'",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
                       "services": services})
         except Exception as e:
@@ -650,6 +650,21 @@ class Tester():
                 else:
                     time.sleep(3)
 
+    def pack_data(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/datacollect".format(self.proxy_address, self.agent_id),
+                data="https://hooks.slack.com/services/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")
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            self.logger.info(rec)
+            if rec["status"] == "failure":
+                self.logger.info("Failed to pack data")
+            else:
+                self.logger.info("Pack data success")
+
     def run_test(self):
         time.sleep(10)
         try:
@@ -738,6 +753,10 @@ class Tester():
             self.logger.info(e)
         try:
             self.upgrade_resolver_image()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.pack_data()
         except Exception as e:
             self.logger.info(e)
         # time.sleep(60)

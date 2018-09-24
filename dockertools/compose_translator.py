@@ -102,6 +102,7 @@ SUPPORTED_PARAMETERS_V1 = {
     'network_mode': parse_value,
     'dns': parse_value,
     'pid_mode': parse_value,
+    'mem_limit': parse_value, # <1
     'ports': parse_ports,
     'volumes': parse_volumes,
     'labels': parse_value,

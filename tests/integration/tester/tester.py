@@ -434,7 +434,7 @@ class Tester():
                     self.logger.info("Config dump failed {}".format(value))
 
     async def local_test_remove(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             # remove all services
             try:
                 request = json.dumps({"action": "remove", "data": {
@@ -452,7 +452,7 @@ class Tester():
                         self.logger.info("{} failed to remove".format(key))
 
     async def local_test_create(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 # compose = self.compose_reader("resolver-compose.yml")
                 # request = json.dumps(
@@ -480,7 +480,7 @@ class Tester():
                         self.logger.info("{} failed to start".format(key))
 
     async def local_test_restart(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 request = json.dumps({"action": "upgrade", "data": {"services": ["passivedns", "logrotate"]}})
                 await websocket.send(request)
@@ -496,7 +496,7 @@ class Tester():
                         self.logger.info("{} failed to restart".format(key))
 
     async def local_test_rename(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 request = json.dumps({"action": "rename", "data": {"passivedns": "megarotate"}})
                 await websocket.send(request)
@@ -512,7 +512,7 @@ class Tester():
                         self.logger.info("{} failed to rename".format(key))
 
     async def local_test_stop(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 request = json.dumps({"action": "stop", "data": {"containers": ["megarotate"]}})
                 await websocket.send(request)
@@ -528,7 +528,7 @@ class Tester():
                         self.logger.info("{} failed to stop".format(key))
 
     async def local_test_sysinfo(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 request = json.dumps({"action": "sysinfo"})
                 await websocket.send(request)

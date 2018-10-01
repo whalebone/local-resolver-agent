@@ -51,8 +51,6 @@ class LRAgentClient:
                     pong_waiter = await self.websocket.ping()
                     await asyncio.wait_for(pong_waiter, timeout=self.alive)
                 except asyncio.TimeoutError:
-                    # pass
-                    # self.logger.info("Failed to receive pong")
                     raise Exception("Failed to receive pong")
             else:
                 try:
@@ -133,12 +131,11 @@ class LRAgentClient:
                     self.logger.info("Error at process_response during key clearance, {}".format(e))
 
     async def process(self, request_json):
-        # request = json.loads(request_json) # rewrite
         try:
             request = self.decode_base64_json(json.loads(request_json))
         except Exception as e:
-            self.logger.info(e, request)
-            return {"requestId": request["requestId"], "action": request["action"],
+            self.logger.info("Failed to parse request: {}, {}".format(e, request_json))
+            return {"action": "request",
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
 
         self.logger.info("Received: {}".format(request))
@@ -191,7 +188,6 @@ class LRAgentClient:
         if "cli" not in request:
             await self.send_acknowledgement(response)
         status = {}
-        # decoded_data = self.decode_base64_string(request["data"]["compose"])
         decoded_data = self.upgrade_load_compose(request, response)
         if "status" in decoded_data:
             return decoded_data

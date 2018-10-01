@@ -1,6 +1,11 @@
 docker build -t whalebone/agent:1.x.x .
 
-##### Agent envs:
+Docs:
+----------
+[Docs](https://github.com/whalebone/wsproxy/wiki)
+
+Agent envs:
+----------
 - CLIENT_CRT_BASE64: base64 representation of client certificate
 - CLIENT_KEY_BASE64: base64 representation of client private key
 - PROXY_ADDRESS: proxy address (wss://wsproxy:8443/wsproxy/ws)
@@ -11,7 +16,8 @@ docker build -t whalebone/agent:1.x.x .
 - LOCAL_API_PORT: (optional) local api port, if not set default value of 8765 will be used
 - KEEP_ALIVE: (optional) specifies the time between keepalive pings, if not set 10s is used
 
-##### Messages:
+Messages:
+----------
 
 Message fields are: '**requestId**', '**data**', '**action**'.
 Data and action are always present, requestId is present only when the message was initiated by portal, messages initiated by agent don't have them.
@@ -26,7 +32,8 @@ Sample message from agent:
 
 
 
-##### Used volumes:
+Used volumes:
+----------
 - /var/run/docker.sock : /var/run/docker.sock - to access docker api
 - /var/log/whalebone/ : /etc/whalebone/log/ - to access resolver log file
 - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config 
@@ -35,7 +42,8 @@ Sample message from agent:
 - /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface (v1.2)
 
 
-##### Useful Directories:
+Useful Directories:
+----------
 - /opt/whalebone/ - code is stored here and in certs/ are cert and key files
 - /etc/whalebone/compose - resolver docker-compose is here
 - /etc/whalebone/logs - agent logs are here

@@ -4,32 +4,15 @@ import netifaces
 
 def create_docker_run_kwargs(service_compose_fragmet):
     kwargs = {}
-    # for compose_param_name in SUPPORTED_PARAMETERS_V1:
-    #     param_def = SUPPORTED_PARAMETERS_V1[compose_param_name]
-    #     if param_def is None or compose_param_name not in service_compose_fragmet:
-    #         # skip this param since it has some specific or not specified in compose
-    #         continue
     for name, definition in service_compose_fragmet.items():
         param_def = SUPPORTED_PARAMETERS_V1[name]
-        # if param_def is not None:
         if isinstance(param_def, dict):
             parse_fn = param_def['fn']
             kwarg_param_name = param_def['name']
-            # docker-compose key has different name than the kwarg of run method,'name' is kwarg key and fn fuction for value
         else:
             parse_fn = param_def
             kwarg_param_name = name
         kwargs[kwarg_param_name] = parse_fn(service_compose_fragmet[name])
-            # kwarg_param_value = parse_fn(service_compose_fragmet[name])
-            # if kwarg_param_value is not None:
-            # kwargs[kwarg_param_name] = kwarg_param_value
-    # if 'logging' in service_compose_fragmet:
-    #     kwargs['log_config'] = {
-    #         'type': service_compose_fragmet['logging']['driver'],
-    #         'config': service_compose_fragmet['logging']['options']
-    #     }
-        # if 'log_opt' in service_compose_fragmet:
-        #     kwargs['log_config']['config'] = service_compose_fragmet['logging']['options']
     return kwargs
 
 
@@ -53,8 +36,6 @@ def parse_envs(envs):
 
 
 def parse_ports(ports_list):
-    # if len(ports_list) == 0:
-    #     return None
     ports_dict = {}
     for port in ports_list:
         port_def = port.split(':')
@@ -66,8 +47,6 @@ def parse_ports(ports_list):
 
 
 def parse_volumes(volumes_list):
-    # if len(volumes_list) == 0:
-    #     return None
     volumes = {}
     for volume in volumes_list:
         volume_def = volume.split(':')

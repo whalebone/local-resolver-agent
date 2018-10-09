@@ -6,6 +6,7 @@ import yaml
 import os
 import requests
 import websockets
+import time
 
 from shutil import copyfile, copytree, rmtree
 from cryptography import x509
@@ -295,15 +296,16 @@ class LRAgentClient:
                                 else:
                                     try:
                                         if service == "resolver":
-                                            print("Ports new: {}".format(self.dockerConnector.container_exec("resolver",
-                                                                                                             ["sh",
-                                                                                                              "-c",
-                                                                                                              "netstat -tupan | grep kresd | grep 53"])))
-                                            print("Ports old: {}".format(
-                                                self.dockerConnector.container_exec("resolver-old", ["sh", "-c",
-                                                                                                     "netstat -tupan | grep kresd | grep 53"])))
-                                            if check_port(self.dockerConnector) != "ok" and check_port(
-                                                    self.dockerConnector, "resolver-old") != "ok":
+                                            for interval in range(10):
+                                                if check_port(self.dockerConnector) == "ok" and check_port(
+                                                        self.dockerConnector, "resolver-old") == "ok":
+                                                    break
+                                                await asyncio.sleep(1)
+                                            else:
+                                                try:
+                                                    self.save_file("resolver/kres.conf", "text", old_config)
+                                                except Exception as e:
+                                                    self.logger.warning("Failed to back up to old config".format(e))
                                                 raise ContainerException("New resolver is not healthy rollback")
                                             stop = await self.upgrade_worker_method("resolver-old", "resolver-old",
                                                                                     self.dockerConnector.stop_container,

@@ -251,8 +251,7 @@ class LRAgentClient:
                     status[service] = {}
                     if service not in ["lr-agent", "resolver"]:
                         await self.upgrade_pull_image(parsed_compose["services"][service]['image'])
-                        remove = await self.upgrade_worker_method(service,
-                                                                  service,
+                        remove = await self.upgrade_worker_method(service, service,
                                                                   self.dockerConnector.remove_container,
                                                                   "remove old container")
                         if remove == {}:
@@ -265,8 +264,7 @@ class LRAgentClient:
                             status[service] = remove
                     else:
                         if service == "resolver" and check_port(self.dockerConnector) == "fail":
-                            remove = await self.upgrade_worker_method(service,
-                                                                      service,
+                            remove = await self.upgrade_worker_method(service, service,
                                                                       self.dockerConnector.remove_container,
                                                                         "Failed to remove unhealthy container")
                             if remove == {}:
@@ -287,8 +285,7 @@ class LRAgentClient:
                                 start = await self.upgrade_start_service(service, parsed_compose["services"][service])
                                 if start != "success":
                                     status[service] = start
-                                    rename = await self.upgrade_worker_method(service,
-                                                                                "{}-old".format(service),
+                                    rename = await self.upgrade_worker_method(service, "{}-old".format(service),
                                                                               self.dockerConnector.rename_container,
                                                                                 "rename rollback")
                                     if rename != {}:
@@ -297,8 +294,8 @@ class LRAgentClient:
                                     try:
                                         if service == "resolver":
                                             for interval in range(10):
-                                                if check_port(self.dockerConnector) == "ok" and check_port(
-                                                        self.dockerConnector, "resolver-old") == "ok":
+                                                if check_port(self.dockerConnector) == "ok" and \
+                                                        check_port(self.dockerConnector, "resolver-old") == "ok":
                                                     break
                                                 await asyncio.sleep(1)
                                             else:
@@ -362,8 +359,7 @@ class LRAgentClient:
                                                                                   self.dockerConnector.remove_container,
                                                                                   "removal of old and new service")
                                         if remove == {}:
-                                            rename = await self.upgrade_worker_method(service,
-                                                                                      "{}-old".format(service),
+                                            rename = await self.upgrade_worker_method(service, "{}-old".format(service),
                                                                                       self.dockerConnector.rename_container,
                                                                                       "removal and rename of old agent")
                                             if rename != {}:

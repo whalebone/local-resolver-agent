@@ -38,8 +38,8 @@ Used volumes:
 - /var/log/whalebone/ : /etc/whalebone/log/ - to access resolver log file
 - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config 
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
-- /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman (v1.2)
-- /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface (v1.2)
+- /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 
+- /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
 
 
 Useful Directories:

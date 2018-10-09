@@ -5,10 +5,6 @@ services:
     name: lr-agent
     stdin_open: true
     tty: true
-#    pid_mode: "host"
-#    privileged: true
-    dns:
-      - localhost
     network_mode: host
     logging:
         driver: json-file

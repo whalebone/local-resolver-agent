@@ -45,7 +45,7 @@ def get_interfaces():
 
 def get_platform():
     try:
-        with open("/etc/os-release", "r") as file:
+        with open("/opt/host/etc/os-release", "r") as file:
             for line in file:
                 if line.startswith("PRETTY"):
                     return line.split("\"")[1]

@@ -109,17 +109,20 @@ class LRAgentClient:
                             except Exception as e:
                                 self.logger.warning(
                                     "Service: {} is offline, automatic start failed due to: {}".format(service, e))
+                            else:
+                                if service in self.error_stash:
+                                    del self.error_stash[service]
             except Exception as e:
                 self.logger.warning(e)
 
     def process_response(self, response: dict):
-        for service, error_mesage in response["data"].items():
-            if error_mesage["status"] == "failure":
+        for service, error_message in response["data"].items():
+            if error_message["status"] == "failure":
                 try:
                     if service not in self.error_stash:
-                        self.error_stash[service] = {response["action"]: error_mesage["body"]}
+                        self.error_stash[service] = {response["action"]: error_message["body"]}
                     else:
-                        self.error_stash[service].update({response["action"]: error_mesage["body"]})
+                        self.error_stash[service].update({response["action"]: error_message["body"]})
                 except KeyError as e:
                     self.logger.info("Error at process_response during key ingest, key not found {}".format(e))
             else:

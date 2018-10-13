@@ -68,7 +68,7 @@ class LRAgentClient:
                         if response["action"] in self.async_actions:
                             self.process_response(response)
                     except Exception as e:
-                        self.logger.info("General error at error dumping, {}".format(e))
+                        self.logger.info("Error during exception persistance, {}".format(e))
                 await self.send(response)
 
     async def send(self, message: dict):
@@ -119,20 +119,14 @@ class LRAgentClient:
         for service, error_message in response["data"].items():
             if error_message["status"] == "failure":
                 try:
-                    if service not in self.error_stash:
-                        self.error_stash[service] = {response["action"]: error_message["body"]}
-                    else:
-                        self.error_stash[service].update({response["action"]: error_message["body"]})
-                except KeyError as e:
-                    self.logger.info("Error at process_response during key ingest, key not found {}".format(e))
+                    self.error_stash[service] = {response["action"]: error_message["body"]}
+                except KeyError:
+                    self.error_stash[service].update({response["action"]: error_message["body"]})
             else:
-                try:
-                    if service in self.error_stash and response["action"] in self.error_stash[service]:
-                        del self.error_stash[service][response["action"]]
-                        if len(self.error_stash[service]) == 0:
-                            del self.error_stash[service]
-                except KeyError as e:
-                    self.logger.info("Error at process_response during key clearance, {}".format(e))
+                if service in self.error_stash and response["action"] in self.error_stash[service]:
+                    del self.error_stash[service][response["action"]]
+                    if len(self.error_stash[service]) == 0:
+                        del self.error_stash[service]
 
     async def process(self, request_json):
         try:

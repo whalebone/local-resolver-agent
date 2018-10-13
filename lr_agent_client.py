@@ -113,21 +113,21 @@ class LRAgentClient:
                 self.logger.warning(e)
 
     def process_response(self, response: dict):
-        for key, value in response["data"].items():
-            if value["status"] == "failure":
+        for service, error_mesage in response["data"].items():
+            if error_mesage["status"] == "failure":
                 try:
-                    if key not in self.error_stash:
-                        self.error_stash[key] = {response["action"]: value["body"]}
+                    if service not in self.error_stash:
+                        self.error_stash[service] = {response["action"]: error_mesage["body"]}
                     else:
-                        self.error_stash[key].update({response["action"]: value["body"]})
+                        self.error_stash[service].update({response["action"]: error_mesage["body"]})
                 except KeyError as e:
                     self.logger.info("Error at process_response during key ingest, key not found {}".format(e))
             else:
                 try:
-                    if key in self.error_stash and response["action"] in self.error_stash[key]:
-                        del self.error_stash[key][response["action"]]
-                        if len(self.error_stash[key]) == 0:
-                            del self.error_stash[key]
+                    if service in self.error_stash and response["action"] in self.error_stash[service]:
+                        del self.error_stash[service][response["action"]]
+                        if len(self.error_stash[service]) == 0:
+                            del self.error_stash[service]
                 except KeyError as e:
                     self.logger.info("Error at process_response during key clearance, {}".format(e))
 

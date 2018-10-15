@@ -152,7 +152,7 @@ class Tester():
                         if value["status"] == "success":
                             self.logger.info("{} upgrade successful".format(key))
                             for config in self.view_config():
-                                if config["name"] in services and config["labels"][key] == "3.0":
+                                if config["name"] in services and config["labels"][config["name"]] == "3.0":
                                     self.logger.info("{} upgrade config check successful".format(key))
                                 else:
                                     self.logger.warning("{} upgrade config check unsuccessful".format(key))
@@ -218,11 +218,11 @@ class Tester():
                 else:
                     self.logger.info("{} rename failed".format(key))
 
-    def stop_container(self):
+    def stop_container(self, container: str):
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/stop".format(self.proxy_address, self.agent_id),
-                json={"containers": ["mega_rotate"]})
+                json={"containers": [container]})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -703,7 +703,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         try:
-            self.stop_container()
+            self.stop_container("mega_rotate")
         except Exception as e:
             self.logger.info(e)
         try:
@@ -758,6 +758,14 @@ class Tester():
         time.sleep(5)
         try:
             self.pack_data()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.stop_container("resolver")
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.upgrade_resolver()
         except Exception as e:
             self.logger.info(e)
         # time.sleep(60)

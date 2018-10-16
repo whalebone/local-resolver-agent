@@ -151,11 +151,40 @@ class Tester():
                     for key, value in status.items():
                         if value["status"] == "success":
                             self.logger.info("{} upgrade successful".format(key))
-                            for config in self.view_config():
-                                if config["name"] in services and config["labels"][config["name"]] == "3.0":
-                                    self.logger.info("{} upgrade config check successful".format(key))
-                                else:
-                                    self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                    for config in self.view_config():
+                        if config["name"] in services and config["labels"][config["name"]] == "3.0":
+                            self.logger.info("{} upgrade config check successful".format(config["name"]))
+                        elif config["name"] in services and config["labels"][config["name"]] != "3.0":
+                            self.logger.warning("{} upgrade config label check unsuccessful".format(config["name"]))
+                    break
+                else:
+                    time.sleep(3)
+
+    def upgrade_all(self):
+        compose = self.compose_reader("docker-compose.yml")
+        services = []
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "services": services})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            while True:
+                if self.redis.exists("upgrade"):
+                    status = self.redis_output(self.redis.lpop("upgrade"))
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "success":
+                            self.logger.info("{} upgrade successful".format(key))
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
                     break
@@ -380,7 +409,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-local-api.log"]
+            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-main.log"]
             rec = json.loads(rec.text)
             if set(rec) == set(files):
                 self.logger.info("Log files are identical")
@@ -756,10 +785,10 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         time.sleep(5)
-        try:
-            self.pack_data()
-        except Exception as e:
-            self.logger.info(e)
+        # try:
+        #     self.pack_data()
+        # except Exception as e:
+        #     self.logger.info(e)
         try:
             self.stop_container("resolver")
         except Exception as e:

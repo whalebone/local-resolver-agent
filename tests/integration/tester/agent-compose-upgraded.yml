@@ -19,9 +19,8 @@ services:
       PROXY_ADDRESS: "wss://localhost:8443/wsproxy/ws"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /var/log/whalebone/:/etc/whalebone/log/
       - /etc/whalebone/kres/:/etc/whalebone/resolver/
+      - /etc/whalebone/cli/:/etc/whalebone/cli/
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/sinkhole/:/etc/whalebone/kresman
-      - /etc/os-release:/etc/os-release:ro
       - /:/opt/host/:ro

@@ -109,9 +109,9 @@ class LRAgentClient:
                             except Exception as e:
                                 self.logger.warning(
                                     "Service: {} is offline, automatic start failed due to: {}".format(service, e))
-                            else:
-                                if service in self.error_stash:
-                                    del self.error_stash[service]
+                                continue
+                        if service in self.error_stash:
+                            del self.error_stash[service]
             except Exception as e:
                 self.logger.warning(e)
 

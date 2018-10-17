@@ -6,9 +6,18 @@ import yaml
 import os
 import requests
 import websockets
+import time
+
+from shutil import copyfile, copytree, rmtree
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.x509.oid import NameOID
+from subprocess import call
+import zipfile
+from datetime import datetime
 
 from dockertools.docker_connector import DockerConnector
-from sysinfo.sys_info import get_system_info
+from sysinfo.sys_info import get_system_info, check_port, check_resolving
 from exception.exc import ContainerException, ComposeException
 from dockertools.compose_parser import ComposeParser
 from loggingtools.logger import build_logger
@@ -43,8 +52,6 @@ class LRAgentClient:
                     pong_waiter = await self.websocket.ping()
                     await asyncio.wait_for(pong_waiter, timeout=self.alive)
                 except asyncio.TimeoutError:
-                    # pass
-                    # self.logger.info("Failed to receive pong")
                     raise Exception("Failed to receive pong")
             else:
                 try:
@@ -61,12 +68,8 @@ class LRAgentClient:
                         if response["action"] in self.async_actions:
                             self.process_response(response)
                     except Exception as e:
-                        self.logger.info("General error at error dumping, {}".format(e))
+                        self.logger.info("Error during exception persistance, {}".format(e))
                 await self.send(response)
-
-    # async for request in self.websocket:
-
-
 
     async def send(self, message: dict):
         try:
@@ -102,39 +105,35 @@ class LRAgentClient:
                     for service, config in parsed_compose["services"].items():
                         if service not in active_services:
                             try:
-                                await self.dockerConnector.start_service(config)
+                                await self.upgrade_start_service(service, config)
                             except Exception as e:
                                 self.logger.warning(
                                     "Service: {} is offline, automatic start failed due to: {}".format(service, e))
+                                continue
+                        if service in self.error_stash:
+                            del self.error_stash[service]
             except Exception as e:
                 self.logger.warning(e)
 
     def process_response(self, response: dict):
-        for key, value in response["data"].items():
-            if value["status"] == "failure":
+        for service, error_message in response["data"].items():
+            if error_message["status"] == "failure":
                 try:
-                    if key not in self.error_stash:
-                        self.error_stash[key] = {response["action"]: value["body"]}
-                    else:
-                        self.error_stash[key].update({response["action"]: value["body"]})
-                except KeyError as e:
-                    self.logger.info("Error at process_response during key ingest, key not found {}".format(e))
+                    self.error_stash[service] = {response["action"]: error_message["body"]}
+                except KeyError:
+                    self.error_stash[service].update({response["action"]: error_message["body"]})
             else:
-                try:
-                    if key in self.error_stash and response["action"] in self.error_stash[key]:
-                        del self.error_stash[key][response["action"]]
-                        if len(self.error_stash[key]) == 0:
-                            del self.error_stash[key]
-                except KeyError as e:
-                    self.logger.info("Error at process_response during key clearance, {}".format(e))
+                if service in self.error_stash and response["action"] in self.error_stash[service]:
+                    del self.error_stash[service][response["action"]]
+                    if len(self.error_stash[service]) == 0:
+                        del self.error_stash[service]
 
     async def process(self, request_json):
-        request = json.loads(request_json)
         try:
-            request = self.decode_base64_json(request)
+            request = self.decode_base64_json(json.loads(request_json))
         except Exception as e:
-            self.logger.info(e, request)
-            return {"requestId": request["requestId"], "action": request["action"],
+            self.logger.info("Failed to parse request: {}, {}".format(e, request_json))
+            return {"action": "request",
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
 
         self.logger.info("Received: {}".format(request))
@@ -155,7 +154,7 @@ class LRAgentClient:
                         "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
                         "test": self.agent_test_message, "updatecache": self.update_cache,
                         "saveconfig": self.write_config, "whitelistadd": self.whitelist_add,
-                        "localtest": self.local_api_check}
+                        "localtest": self.local_api_check, "datacollect": self.pack_files}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request],
                             "rename": [response, request], "containers": [response],
@@ -166,7 +165,8 @@ class LRAgentClient:
                             "logs": [response], "log": [response, request],
                             "flog": [response, request], "dellogs": [response, request], "test": [response],
                             "updatecache": [response], "saveconfig": [response, request],
-                            "whitelistadd": [response, request], "localtest": [response]}
+                            "whitelistadd": [response, request], "localtest": [response],
+                            "datacollect": [response, request]}
 
         try:
             return await method_calls[request["action"]](*method_arguments[request["action"]])
@@ -186,37 +186,19 @@ class LRAgentClient:
         if "cli" not in request:
             await self.send_acknowledgement(response)
         status = {}
-        # decoded_data = self.decode_base64_string(request["data"]["compose"])
-        if "compose" in request["data"]:
-            decoded_data = request["data"]["compose"]
-        else:
-            try:
-                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                    decoded_data = yaml.load(compose)
-            except FileNotFoundError:
-                del response["requestId"]
-                response["data"] = {"status": "failure",
-                                    "message": "compose not supplied and local compose not present"}
-                return response
+        decoded_data = self.upgrade_load_compose(request, response)
+        if "status" in decoded_data:
+            return decoded_data
         try:
             parsed_compose = self.compose_parser.create_service(decoded_data)
         except ComposeException as e:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            # if "config" in request["data"]:
-            #     try:
-            #         await self.write_config(response, request)
-            #     except Exception as e:
-            #         self.logger.info(e)
             if "resolver" in parsed_compose["services"]:
-                try:
-                    if "compose" in request["data"]:
-                        self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-                    if "config" in request["data"]:
-                        self.save_file("resolver/kres.conf", "text", request["data"]["config"])
-                except IOError as e:
-                    status["dump"] = {"status": "failure", "body": str(e)}
+                result = self.upgrade_save_files(request, decoded_data, ["compose", "config"])
+                if result != {}:
+                    status["dump"] = result
             for service, config in parsed_compose["services"].items():
                 status[service] = {}
                 try:
@@ -228,23 +210,6 @@ class LRAgentClient:
                     status[service]["status"] = "success"
                     if service == "resolver":
                         await self.update_cache({})
-
-                # if service == "resolver":
-                #     try:
-                #         request = {"action": "request", "data": {"message": "rules missing"}}
-                #         await self.send(request)
-                #     except Exception as e:
-                #         status[service]["inject_request"] = {"status": "failure", "body": str(e)}
-                #     else:
-                #         status[service]["inject_request"] = "success"
-
-                # try:
-                #     self.firewall_connector.inject_all_rules()
-                # except ConnectionError as e:
-                #     self.logger.info(e)
-                #     status[service]["inject"] = "failure"
-                # else:
-                #     status[service]["inject"] = "success"
             if "requestId" in response:
                 del response["requestId"]
             response["data"] = status
@@ -254,177 +219,236 @@ class LRAgentClient:
         if "cli" not in request:
             await self.send_acknowledgement(response)
         status = {}
-        # decoded_data = self.decode_base64_string(request["data"]["compose"])
-        if "compose" in request["data"]:
-            decoded_data = request["data"]["compose"]
-        else:
-            try:
-                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                    decoded_data = yaml.load(compose)
-            except FileNotFoundError:
-                del response["requestId"]
-                response["data"] = {"status": "failure",
-                                    "message": "compose not supplied and local compose not present"}
-                return response
-        if "services" in request["data"]:
-            services = request["data"]["services"]
-        else:
-            services = []
+        decoded_data = self.upgrade_load_compose(request, response)
+        if "status" in decoded_data:
+            return decoded_data
         try:
             parsed_compose = self.compose_parser.create_service(decoded_data)
         except ComposeException as e:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            ordered_services = list(parsed_compose["services"].keys())  # creates list of services from compose
-            if "lr-agent" in ordered_services:
-                ordered_services.append(ordered_services.pop(
-                    ordered_services.index("lr-agent")))  # puts agent at the end of the list if present
-            for service in ordered_services:
-                # for service, config in parsed_compose["services"].items():
-                if service in services or not services:
-                    if service not in ["lr-agent", "resolver"]:
-                        status[service] = {}
-                        try:
-                            await self.dockerConnector.pull_image(
-                                parsed_compose["services"][service][
-                                    'image'])  # pulls image before removal, upgrade is instant
-                        except Exception as e:
-                            self.logger.info("Failed to pull image before upgrade, {}".format(e))
-                        try:
-                            if service in [container.name for container in
-                                           self.dockerConnector.get_containers(stopped=True)]:
-                                await self.dockerConnector.remove_container(service)  # tries to remove old container
-                        except ContainerException as e:
-                            status[service] = {"status": "failure", "message": "remove old container", "body": str(e)}
-                            self.logger.info(e)
+            if "services" in request["data"]:
+                services = request["data"]["services"]
+            else:
+                services = list(parsed_compose["services"].keys())
+            if "lr-agent" in services:
+                services.append(services.pop(services.index("lr-agent")))
+            if "resolver" in services:
+                try:
+                    old_config = self.load_file("resolver/kres.conf")
+                except IOError as e:
+                    status["load"] = {"status": "failure", "body": str(e)}
+                result = self.upgrade_save_files(request, decoded_data, ["config"])
+                if result != {}:
+                    status["dump"] = result
+            for service in services:
+                status[service] = {}
+                if service not in ["lr-agent", "resolver"]:
+                    await self.upgrade_pull_image(parsed_compose["services"][service]['image'])
+                    remove = await self.upgrade_worker_method(service, service,
+                                                              self.dockerConnector.remove_container,
+                                                              "remove old container")
+                    if remove == {}:
+                        start = await self.upgrade_start_service(service, parsed_compose["services"][service])
+                        if isinstance(start, str):
+                            status[service]["status"] = start
                         else:
-                            try:
-                                await self.dockerConnector.start_service(parsed_compose["services"][service])  # tries to start new container
-                            except ContainerException as e:
-                                status[service] = {"status": "failure", "message": "start of new container",
-                                                   "body": str(e)}
-                                self.logger.info(e)
+                            status[service] = start
+                    else:
+                        status[service] = remove
+                else:
+                    if service == "resolver" and check_port(self.dockerConnector) == "fail":
+                        remove = await self.upgrade_worker_method(service, service,
+                                                                  self.dockerConnector.remove_container,
+                                                                  "Failed to remove unhealthy container")
+                        if remove == {}:
+                            start = await self.upgrade_start_service(service, parsed_compose["services"][service],
+                                                                     "Failed to create new container from unhealthy")
+                            if start != "success":
+                                status[service] = start
                             else:
                                 status[service]["status"] = "success"
-                    else:
-                        # if "config" in request["data"]:
-                        #     try:
-                        #         await self.write_config(response, request)
-                        #     except Exception as e:
-                        #         self.logger.info(e)
-                        if "resolver" in parsed_compose["services"]:
-                            try:
-                                if "compose" in request["data"]:
-                                    self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-                                if "config" in request["data"]:
-                                    self.save_file("resolver/kres.conf", "text", request["data"]["config"])
-                            except IOError as e:
-                                status["dump"] = {"status": "failure", "body": str(e)}
-                        try:
-                            if "{}-old".format(
-                                    service) in [container.name for container in
-                                                 self.dockerConnector.get_containers(stopped=True)]:
-                                await self.dockerConnector.remove_container("{}-old".format(
-                                    service))
-                                await self.dockerConnector.rename_container(service, "{}-old".format(
-                                    service))  # tries to rename old agent
-                            else:
-                                await self.dockerConnector.rename_container(service, "{}-old".format(
-                                    service))  # tries to rename old agent
-                        except ContainerException as e:
-                            status[service] = {"status": "failure", "message": "rename old service", "body": str(e)}
-                            self.logger.info(e)
                         else:
-                            status[service] = {}
-                            try:
-                                if service not in [container.name for container in
-                                                   self.dockerConnector.get_containers(stopped=True)]:
-                                    await self.dockerConnector.start_service(
-                                        parsed_compose["services"][service])  # tries to start new agent
-                                else:
-                                    await self.dockerConnector.remove_container(service)
-                                    await self.dockerConnector.start_service(
-                                        parsed_compose["services"][service])  # tries to start new agent
-                            except ContainerException as e:
-                                status[service] = {"status": "failure", "message": "start of new service",
-                                                   "body": str(e)}
-                                self.logger.info(e)
+                            status[service] = remove
+
+                    else:
+                        rename = await self.upgrade_rename_service(service)
+                        if rename != "success":
+                            status[service] = rename
+                        else:
+                            start = await self.upgrade_start_service(service, parsed_compose["services"][service])
+                            if start != "success":
+                                status[service] = start
+                                rename = await self.upgrade_worker_method(service, "{}-old".format(service),
+                                                                          self.dockerConnector.rename_container,
+                                                                          "rename rollback")
+                                if rename != {}:
+                                    status[service] = rename
+                            else:
                                 try:
-                                    if "{}-old".format(service) in [container.name for container in
-                                                                    self.dockerConnector.get_containers(stopped=True)]:
-                                        await self.dockerConnector.rename_container("{}-old".format(service),
-                                                                                    service)  # tries to rename old agent
+                                    if service == "resolver":
+                                        for interval in range(10):
+                                            if check_port(self.dockerConnector) == "ok" and \
+                                                    check_port(self.dockerConnector, "resolver-old") == "ok":
+                                                break
+                                            await asyncio.sleep(1)
+                                        else:
+                                            try:
+                                                self.save_file("resolver/kres.conf", "text", old_config)
+                                            except Exception as e:
+                                                self.logger.warning("Failed to back up to old config".format(e))
+                                            raise ContainerException("New resolver is not healthy rollback")
+                                        stop = await self.upgrade_worker_method("resolver-old", "resolver-old",
+                                                                                self.dockerConnector.stop_container,
+                                                                                "Failed to stop old resolver")
+                                        if stop != {}:
+                                            raise ContainerException("Failed to stop old resolver")
+                                        else:
+                                            if check_resolving() == "fail":
+                                                try:
+                                                    self.save_file("resolver/kres.conf", "text", old_config)
+                                                except Exception as e:
+                                                    self.logger.warning("Failed to back up to old config".format(e))
+                                                restart = await self.upgrade_worker_method("resolver-old",
+                                                                                           "resolver-old",
+                                                                                           self.dockerConnector.restart_container,
+                                                                                           "failed to restart old resolver")
+                                                if restart == {}:
+                                                    try:
+                                                        await self.upgrade_worker_method(service, service,
+                                                                                         self.dockerConnector.remove_container,
+                                                                                         "Filed to remove new resolver.")
+                                                        await self.upgrade_worker_method(service, "resolver-old",
+                                                                                         self.dockerConnector.rename_container,
+                                                                                         "Filed to remove new resolver.")
+                                                    except Exception as e:
+                                                        self.logger.warning(
+                                                            "Failure during healthcheck rollback, {}".format(e))
+                                                    self.logger.warning(
+                                                        "New resolver is unhealthy, resolving failed")
+                                                    status[service] = {"status": "failure",
+                                                                       "message": "New resolver is unhealthy, resolving failed",
+                                                                       "body": "Resolving healthcheck failed"}
+                                                else:
+                                                    status[service] = restart
+                                    inspect = self.dockerConnector.inspect_config(service)
+                                    if inspect["State"]["Running"] is True:
+                                        remove = await self.upgrade_worker_method("{}-old".format(service),
+                                                                                  "{}-old".format(service),
+                                                                                  self.dockerConnector.remove_container,
+                                                                                  "Failed to remove old {}".format(
+                                                                                      service))
+                                        if remove != {}:
+                                            raise ContainerException(
+                                                "Failed to remove old {}, with error {}".format(service, e))
+
+                                    else:
+                                        raise ContainerException("New {} is not running".format(service))
                                 except ContainerException as e:
-                                    status[service] = {"status": "failure", "message": "rename rollback",
+                                    status[service] = {"status": "failure", "message": "removal of old service",
                                                        "body": str(e)}
                                     self.logger.info(e)
-                            else:
-                                while True:
-                                    inspect = await self.dockerConnector.inspect_config(service)
-                                    if inspect["State"]["Running"] is True:
-                                        try:
-                                            if service == "resolver":
-                                                await asyncio.sleep(2)
-                                            if "{}-old".format(service) in [container.name for container in
-                                                                            self.dockerConnector.get_containers(
-                                                                                stopped=True)]:
-                                                await self.dockerConnector.remove_container(
-                                                    "{}-old".format(service))  # tries to renomve old agent
-                                        except ContainerException as e:
-                                            status[service] = {"status": "failure", "message": "removal of old service",
-                                                               "body": str(e)}
-                                            self.logger.info(e)
-                                            try:
-                                                if service in [container.name for container in
-                                                               self.dockerConnector.get_containers(
-                                                                   stopped=True)]:
-                                                    await self.dockerConnector.remove_container(
-                                                        service)  # tries to rename new agent
-                                            except ContainerException as e:
-                                                status[service] = {"status": "failure",
-                                                                   "message": "removal of old and new service",
-                                                                   "body": str(e)}
-                                                self.logger.info(e)
-                                            else:
-                                                try:
-                                                    if "{}-old".format(service) in [container.name for container in
-                                                                   self.dockerConnector.get_containers(
-                                                                       stopped=True)]:
-                                                        await self.dockerConnector.rename_container(
-                                                            "{}-old".format(service), service)  # tries to rename old agent
-                                                except ContainerException as e:
-                                                    status[service] = {"status": "failure",
-                                                                       "message": "removal and rename of old agent",
-                                                                       "body": str(e)}
-                                                    self.logger.info(e)
-                                            break
-                                        else:
-                                            # try:
-                                            #     request = {"action": "request", "data": {"message": "rules missing"}}
-                                            #     await self.send(request)
-                                            # except Exception as e:
-                                            #     status[service]["inject_request"] = {"status": "failure",
-                                            #                                          "body": str(e)}
-                                            # else:
-                                            #     status[service]["inject_request"] = "success"
-                                            # try:
-                                            #     self.firewall_connector.inject_all_rules()
-                                            # except ConnectionError as e:
-                                            #     self.logger.info(e)
-                                            #     status[service]["inject"] = "failure"
-                                            # else:
-                                            #     status[service]["inject"] = "success"
-                                            status[service]["status"] = "success"
-                                            if service == "resolver":
-                                                await self.update_cache({})
-                                            break
+                                    remove = await self.upgrade_worker_method(service, service,
+                                                                              self.dockerConnector.remove_container,
+                                                                              "removal of old and new service")
+                                    if remove == {}:
+                                        rename = await self.upgrade_worker_method(service, "{}-old".format(service),
+                                                                                  self.dockerConnector.rename_container,
+                                                                                  "removal and rename of old agent")
+                                        if rename != {}:
+                                            status[service] = rename
                                     else:
-                                        await asyncio.sleep(2)
+                                        status[service] = remove
+
+                                else:
+                                    if "status" not in status[service]:
+                                        status[service]["status"] = "success"
+                                        if service == "resolver":
+                                            await self.update_cache({})
+            try:
+                if all(state["status"] == "success" for state in status.values()):
+                    result = self.upgrade_save_files(request, decoded_data, ["compose"])
+                    if result != {}:
+                        status["dump"] = result
+            except Exception as e:
+                self.logger.warning("Failed to check status {}".format(e))
             if "requestId" in response:
                 del response["requestId"]
             response["data"] = status
         return response
+
+    def upgrade_save_files(self, request: dict, decoded_data, keys: list) -> dict:
+        try:
+            if "compose" in keys:
+                if "compose" in request["data"]:
+                    self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+            if "config" in keys:
+                if "config" in request["data"]:
+                    self.save_file("resolver/kres.conf", "text", request["data"]["config"])
+        except IOError as e:
+            return {"status": "failure", "body": str(e)}
+        else:
+            return {}
+
+    def upgrade_load_compose(self, request: dict, response: dict):
+        if "compose" in request["data"]:
+            return request["data"]["compose"]
+        else:
+            try:
+                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                    return yaml.load(compose)
+            except FileNotFoundError:
+                del response["requestId"]
+                response["data"] = {"status": "failure",
+                                    "message": "compose not supplied and local compose not present"}
+                return response
+
+    async def upgrade_pull_image(self, name: str):
+        try:
+            await self.dockerConnector.pull_image(name)  # pulls image before removal, upgrade is instant
+        except Exception as e:
+            self.logger.info("Failed to pull image before upgrade, {}".format(e))
+
+    async def upgrade_worker_method(self, service: str, name: str, action, error_message: str):
+        try:
+            if name in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
+                if service != name:
+                    await action(name, service)
+                else:
+                    await action(service)
+        except ContainerException as e:
+            self.logger.info(e)
+            return {"status": "failure", "message": error_message, "body": str(e)}
+        else:
+            return {}
+
+    async def upgrade_rename_service(self, service: str):
+        try:
+            if "{}-old".format(service) in [container.name for container in
+                                            self.dockerConnector.get_containers(stopped=True)]:
+                await self.dockerConnector.remove_container("{}-old".format(service))
+                await self.dockerConnector.rename_container(service, "{}-old".format(service))
+            else:
+                await self.dockerConnector.rename_container(service, "{}-old".format(service))
+        except ContainerException as e:
+            self.logger.warning("Failed to rename {} service, error {}".format(service, e))
+            return {"status": "failure", "message": "rename of new container", "body": str(e)}
+        else:
+            return "success"
+
+    async def upgrade_start_service(self, service: str, compose: dict, error_message: str= "start of new container"):
+        try:
+            if service not in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
+                await self.dockerConnector.start_service(compose)  # tries to start new service
+            else:
+                await self.dockerConnector.remove_container(service)  # deletes orphaned service
+                await self.dockerConnector.start_service(compose)  # tries to start new service
+        except ContainerException as e:
+            self.logger.warning("Failed to create {} service, error {}".format(service, e))
+            return {"status": "failure", "message": error_message, "body": str(e)}
+        else:
+            return "success"
 
     async def rename_container(self, response: dict, request: dict) -> dict:
         status = {}
@@ -671,6 +695,110 @@ class LRAgentClient:
                 response["data"] = {"status": "failure", "message": "Cache update failed"}
         return response
 
+    async def pack_files(self, response: dict, request: dict) -> dict:
+        folder = "{}/{}".format(self.folder, "temp")
+        try:
+            os.mkdir(folder)
+        except FileExistsError:
+            rmtree(folder)
+            os.mkdir(folder)
+        actions = {"release": {"action": "copy", "command": copyfile("/etc/os-release", "{}/release".format(folder))},
+                   "etc": {"action": "copy", "command": copytree("/opt/host/etc/whalebone/", "{}/etc".format(folder))},
+                   "log": {"action": "copy", "command": copytree("/opt/host/var/log/whalebone/", "{}/logs".format(folder))},
+                   "agent_log": {"action": "copy",
+                                 "command": copytree("/etc/whalebone/logs/", "{}/agent-logs".format(folder))},
+                   "syslog": {"action": "copy", "command": copyfile("/opt/host/var/log/syslog", "{}/syslog".format(folder))},
+                   "list": {"action": "list", "command": ["ls", "-lh", "/opt/host/opt/whalebone/"], "path": "{}/ls_opt".format(folder)},
+                   "df": {"action": "list", "command": ["df", "-h"], "path": "{}/df".format(folder)},
+                   "netstat": {"action": "list", "command": ["netstat", "-tupan"], "path": "{}/netstat".format(folder)},
+                   "ip": {"action": "list", "command": ["ifconfig"], "path": "{}/ifconfig".format(folder)},
+                   "docker_logs": {"action": "list", "command": ["journalctl", "-u", "docker.service"],
+                                   "path": "{}/docker.service".format(folder)},
+                   "ps": {"action": "list", "command": ["ps", "-aux"], "path": "{}/ps".format(folder)},
+                   "list_containers": {"action": "docker", "command": self.docker_ps(),
+                                       "path": "{}/docker_ps".format(folder)},
+                   }
+        with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+            parsed_compose = self.compose_parser.create_service(yaml.load(compose))
+            for service in parsed_compose["services"]:
+                try:
+                    actions["{}_service".format(service)] = {"action": "docker",
+                                                             "command": self.dockerConnector.container_logs(service,
+                                                                                                            tail=1000).decode(
+                                                                 "utf-8"),
+                                                             "path": "{}/docker.{}.logs".format(folder, service)}
+                    actions["{}_inspect".format(service)] = {"action": "docker",
+                                                             "command": json.dumps(
+                                                                 self.dockerConnector.inspect_config(service)),
+                                                             "path": "{}/docker.{}.inspect".format(folder, service)}
+                except Exception as e:
+                    self.logger.info("Service {} not found, {}".format(service, e))
+
+        for action, specification in actions.items():
+            try:
+                if specification["action"] == "copy":
+                    specification["command"]
+                elif specification["action"] == "docker":
+                    with open(specification["path"], "w") as file:
+                        file.write(specification["command"])
+                else:
+                    with open(specification["path"], "w") as file:
+                        call(specification["command"], stdout=file)
+            except Exception as e:
+                self.logger.info("Failed to perform pack of {} action, {}".format(action, e))
+
+        customer_id, resolver_id = "unknown", "unknown"
+        try:
+            with open("/opt/whalebone/certs/client.crt", "r") as file:
+                cert = x509.load_pem_x509_certificate(file.read().encode("utf-8"), default_backend())
+        except FileNotFoundError as e:
+            self.logger.info("Failed to load cert {}".format(e))
+        else:
+            for name, attr in {"customer_id": NameOID.LOCALITY_NAME, "resolver_id": NameOID.COMMON_NAME}.items():
+                try:
+                    locals()[name] = cert.subject.get_attributes_for_oid(attr)[0].value
+                except Exception as err:
+                    self.logger.info("Failed to get parameter {}, error: {}".format(name, err))
+
+        logs_zip = "/opt/whalebone/{}-{}-{}-wblogs.zip".format(customer_id, datetime.now().strftime("%Y-%m-%d_%H:%M:%S"), resolver_id)
+        try:
+            zip_file = zipfile.ZipFile(logs_zip, "w", zipfile.ZIP_DEFLATED)
+        except zipfile.BadZipFile as ze:
+            self.logger.info("Error when creating zip file")
+            response["data"] = {"status": "failure", "message": "Zip pack failed", "body": str(ze)}
+        else:
+            for root, dirs, files in os.walk(folder):
+                for file in files:
+                    zip_file.write(os.path.join(root, file))
+            zip_file.close()
+
+            try:
+                files = {'upload_file': open(logs_zip, 'rb')}
+                req = requests.post("https://transfer.whalebone.io", files=files)
+            except Exception as e:
+                self.logger.info("Failed to send files to transfer,whalebone.io, {}".format(e))
+                response["data"] = {"status": "failure", "message": "Data upload failed", "body": str(e)}
+            else:
+                if req.ok:
+                    try:
+                        requests.post(request["data"], json={"text": "New customer log archive was uploaded:\n{}".format(
+                            req.content.decode("utf-8"))})
+                    except Exception as e:
+                        self.logger.info("Failed to send notification to Slack, {}".format(e))
+                    else:
+                        response["data"] = {"status": "success", "message": "Data uploaded"}
+            try:
+                rmtree(folder)
+            except Exception:
+                pass
+            return response
+
+    def docker_ps(self) -> str:
+        result = []
+        for container in [container for container in self.dockerConnector.get_containers(stopped=True)]:
+            result.append("{} {} {}\n".format(container.image.tags[0], container.status, container.name))
+        return "".join(result)
+
     async def write_config(self, response: dict, request: dict) -> dict:
         write_type = {"base64": "wb", "json": "w", "text": "w"}
         status = {}
@@ -718,7 +846,7 @@ class LRAgentClient:
                     response["data"] = {"status": "success", "message": "Local api is up"}
             return response
 
-    def save_file(self, location, file_type, content):
+    def save_file(self, location: str, file_type: str, content):
         try:
             with open("{}{}".format(self.folder, location), "w") as file:
                 if file_type == "yml":
@@ -730,6 +858,14 @@ class LRAgentClient:
                         file.write(rule + "\n")
         except Exception as e:
             self.logger.info("Failed to save compose: {}".format(e))
+            raise IOError(e)
+
+    def load_file(self, location: str) -> list:
+        try:
+            with open("{}{}".format(self.folder, location), "r") as file:
+                return file.read().splitlines()
+        except Exception as e:
+            self.logger.info("Failed to load content: {}".format(e))
             raise IOError(e)
 
     def decode_base64_json(self, message: dict) -> dict:

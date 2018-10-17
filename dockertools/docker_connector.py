@@ -27,11 +27,30 @@ class DockerConnector:
             self.logger.info(e)
             return []
 
+    def get_container(self, name: str):
+        try:
+            return self.docker_client.containers.get(name)
+        except Exception as e:
+            self.logger.info(e)
+            return ""
+
+    def container_exec(self, name: str, command: list):
+        service = self.get_container(name)
+        if service != "":
+            try:
+                result = service.exec_run(command)
+            except Exception as e:
+                self.logger.info(e)
+            else:
+                return result.output.decode("utf-8")
+        else:
+            return ""
+
     async def start_service(self, parsed_compose: dict):
         kwargs = create_docker_run_kwargs(parsed_compose)
         await self.pull_image(parsed_compose['image'])
         try:
-            self.docker_client.containers.run(parsed_compose['image'], detach=True, **kwargs)
+            self.docker_client.containers.run(detach=True, **kwargs)
         except Exception as e:
             raise ContainerException(e)
 
@@ -40,7 +59,7 @@ class DockerConnector:
             return self.api_client.version()
         except Exception as e:
             self.logger.info(e)
-            return "docker version unavailable"
+            return {}
 
     def container_logs(self, name: str, timestamps: bool = False, tail: int = "all", since: str = None):
         if since is not None:
@@ -74,7 +93,7 @@ class DockerConnector:
         except Exception as e:
             raise ContainerException(e)
 
-    async def inspect_config(self, container_name: str):
+    def inspect_config(self, container_name: str):
         try:
             return self.api_client.inspect_container(container_name)
         except Exception as e:

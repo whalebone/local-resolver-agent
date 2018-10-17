@@ -1,7 +1,7 @@
 version: '3'
 services:
     resolver:
-      image: whalebone/kres:2.1
+      image: whalebone/kres:2.4.1-5-fedora28-compact
       labels:
          resolver: "3.0"
       logging:
@@ -15,13 +15,15 @@ services:
       - /etc/whalebone/kres:/etc/kres/
       - /var/log/whalebone/:/var/log/whalebone/
       - /var/lib/kres:/var/lib/kres
+      - /var/lib/kres/tty:/tty/tty
+      - /var/whalebone/:/var/whalebone/
       restart: always
       environment:
          SINKIP: '159.100.251.128'
          SINKIPV6: '::1'
          SINKTTL: 1
     kresman:
-      image: whalebone/kresman:2.0
+      image: whalebone/kresman:2.3.2
       labels:
          kresman: "2.0"
       restart: always

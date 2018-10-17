@@ -1,22 +1,22 @@
 version: '3'
 services:
     resolver:
-      image: whalebone/kres:2.4.1-5-fedora28-compact
+      image: whalebone/kres:2.4.1-66-fedora28-compact
       labels:
-         resolver: "2.0"
+         resolver: "3.0"
       logging:
         driver: json-file
         options:
           max-size: "10m"
           max-file: "1"
       tty: true
+      network_mode: host
       volumes:
       - /etc/whalebone/kres:/etc/kres/
       - /var/log/whalebone/:/var/log/whalebone/
       - /var/lib/kres:/var/lib/kres
       - /var/lib/kres/tty:/tty/tty
       - /var/whalebone/:/var/whalebone/
-      network_mode: host
       restart: always
       environment:
          SINKIP: '159.100.251.128'
@@ -74,14 +74,14 @@ services:
     logrotate:
       image: whalebone/logrotate:local-1
       labels:
-         logrotate: "2.0"
+         logrotate: "3.0"
       volumes:
       - /var/log/whalebone:/var/log/whalebone
       environment:
         LOGS_DIRECTORIES: "/var/log/whalebone"
         LOGROTATE_SIZE: "1G"
         LOGROTATE_COMPRESSION: "compress"
-        LOGROTATE_CRONSCHEDULE: "* * * * * *"
+        LOGROTATE_CRONSCHEDULE: "0 */10 * * * *"
         LOGROTATE_COPIES: 5
       restart: always
       network_mode: host

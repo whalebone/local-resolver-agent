@@ -140,14 +140,6 @@ class Tester():
                                  "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
-                      # "config": {"resolver": [{"path": "kres.conf",
-                      #                          "data": ["net.ipv6 = false", "net.listen('0.0.0.0')",
-                      #                                   "net.listen('0.0.0.0', {tls=true})",
-                      #                                   "trust_anchors.file = '/etc/kres/root.keys'",
-                      #                                   "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                      #                                   "cache.storage = 'lmdb://var/lib/kres/cache'",
-                      #                                   "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
-                      #                          "type": "text"}]},
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -159,11 +151,40 @@ class Tester():
                     for key, value in status.items():
                         if value["status"] == "success":
                             self.logger.info("{} upgrade successful".format(key))
-                            for config in self.view_config():
-                                if config["name"] in services and config["labels"][key] == "3.0":
-                                    self.logger.info("{} upgrade config check successful".format(key))
-                                else:
-                                    self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                    for config in self.view_config():
+                        if config["name"] in services and config["labels"][config["name"]] == "3.0":
+                            self.logger.info("{} upgrade config check successful".format(config["name"]))
+                        elif config["name"] in services and config["labels"][config["name"]] != "3.0":
+                            self.logger.warning("{} upgrade config label check unsuccessful".format(config["name"]))
+                    break
+                else:
+                    time.sleep(3)
+
+    def upgrade_all(self):
+        compose = self.compose_reader("docker-compose.yml")
+        services = []
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "services": services})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            while True:
+                if self.redis.exists("upgrade"):
+                    status = self.redis_output(self.redis.lpop("upgrade"))
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "success":
+                            self.logger.info("{} upgrade successful".format(key))
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
                     break
@@ -226,11 +247,11 @@ class Tester():
                 else:
                     self.logger.info("{} rename failed".format(key))
 
-    def stop_container(self):
+    def stop_container(self, container: str):
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/stop".format(self.proxy_address, self.agent_id),
-                json={"containers": ["mega_rotate"]})
+                json={"containers": [container]})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -388,7 +409,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-local-api.log"]
+            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-main.log"]
             rec = json.loads(rec.text)
             if set(rec) == set(files):
                 self.logger.info("Log files are identical")
@@ -442,7 +463,7 @@ class Tester():
                     self.logger.info("Config dump failed {}".format(value))
 
     async def local_test_remove(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             # remove all services
             try:
                 request = json.dumps({"action": "remove", "data": {
@@ -460,7 +481,7 @@ class Tester():
                         self.logger.info("{} failed to remove".format(key))
 
     async def local_test_create(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 # compose = self.compose_reader("resolver-compose.yml")
                 # request = json.dumps(
@@ -488,7 +509,7 @@ class Tester():
                         self.logger.info("{} failed to start".format(key))
 
     async def local_test_restart(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 request = json.dumps({"action": "upgrade", "data": {"services": ["passivedns", "logrotate"]}})
                 await websocket.send(request)
@@ -504,7 +525,7 @@ class Tester():
                         self.logger.info("{} failed to restart".format(key))
 
     async def local_test_rename(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 request = json.dumps({"action": "rename", "data": {"passivedns": "megarotate"}})
                 await websocket.send(request)
@@ -520,7 +541,7 @@ class Tester():
                         self.logger.info("{} failed to rename".format(key))
 
     async def local_test_stop(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 request = json.dumps({"action": "stop", "data": {"containers": ["megarotate"]}})
                 await websocket.send(request)
@@ -536,7 +557,7 @@ class Tester():
                         self.logger.info("{} failed to stop".format(key))
 
     async def local_test_sysinfo(self):
-        async with websockets.connect('ws://localhost:8765') as websocket:
+        async with websockets.connect('ws://localhost:8888') as websocket:
             try:
                 request = json.dumps({"action": "sysinfo"})
                 await websocket.send(request)
@@ -555,6 +576,123 @@ class Tester():
                     if key == "hdd":
                         self.logger.info("hdd: " + str(value))
 
+    def upgrade_resolver_config(self):
+        compose = self.compose_reader("resolver-compose-upgraded.yml")
+        services = ["resolver"]
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/onvsodnv/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/slvnjdsnv/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "services": services})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            while True:
+                if self.redis.exists("upgrade"):
+                    status = self.redis_output(self.redis.lpop("upgrade"))
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "failure":
+                            self.logger.info("{} upgrade successful with failed check(config)".format(key))
+                            # for config in self.view_config():
+                            #     if config["name"] in services and config["labels"][key] == "3.0":
+                            #         self.logger.info("{} upgrade config check successful".format(key))
+                            #     else:
+                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                    break
+                else:
+                    time.sleep(3)
+
+    def upgrade_resolver_redirect(self):
+        compose = self.compose_reader("resolver-compose-upgraded.yml")
+        services = ["resolver"]
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "policy.forward('127.0.0.1')",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "services": services})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            while True:
+                if self.redis.exists("upgrade"):
+                    status = self.redis_output(self.redis.lpop("upgrade"))
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "failure":
+                            self.logger.info("{} upgrade successful with failed check(redirect)".format(key))
+                            # for config in self.view_config():
+                            #     if config["name"] in services and config["labels"][key] == "3.0":
+                            #         self.logger.info("{} upgrade config check successful".format(key))
+                            #     else:
+                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                    break
+                else:
+                    time.sleep(3)
+
+    def upgrade_resolver_image(self):
+        compose = self.compose_reader("resolver-compose-invalid.yml")
+        services = ["resolver"]
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": compose,
+                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                                 "trust_anchors.file = '/etc/kres/root.keys'",
+                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "services": services})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            while True:
+                if self.redis.exists("upgrade"):
+                    status = self.redis_output(self.redis.lpop("upgrade"))
+                    self.logger.info(status)
+                    for key, value in status.items():
+                        if value["status"] == "failure":
+                            self.logger.info("{} upgrade successful with failed check(image)".format(key))
+                            # for config in self.view_config():
+                            #     if config["name"] in services and config["labels"][key] == "3.0":
+                            #         self.logger.info("{} upgrade config check successful".format(key))
+                            #     else:
+                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                        else:
+                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                    break
+                else:
+                    time.sleep(3)
+
+    def pack_data(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/datacollect".format(self.proxy_address, self.agent_id),
+                data="https://hooks.slack.com/services/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")
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = json.loads(rec.text)
+            self.logger.info(rec)
+            if rec["status"] == "failure":
+                self.logger.info("Failed to pack data")
+            else:
+                self.logger.info("Pack data success")
 
     def run_test(self):
         time.sleep(10)
@@ -594,7 +732,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         try:
-            self.stop_container()
+            self.stop_container("mega_rotate")
         except Exception as e:
             self.logger.info(e)
         try:
@@ -633,32 +771,58 @@ class Tester():
             self.save_config()
         except Exception as e:
             self.logger.info(e)
-        time.sleep(60)
-        loop = asyncio.get_event_loop()
+
         try:
-            loop.run_until_complete(self.local_test_remove())
+            self.upgrade_resolver_config()
         except Exception as e:
             self.logger.info(e)
         try:
-            loop.run_until_complete(self.local_test_create())
+            self.upgrade_resolver_redirect()
         except Exception as e:
             self.logger.info(e)
         try:
-            loop.run_until_complete(self.local_test_restart())
+            self.upgrade_resolver_image()
+        except Exception as e:
+            self.logger.info(e)
+        time.sleep(5)
+        # try:
+        #     self.pack_data()
+        # except Exception as e:
+        #     self.logger.info(e)
+        try:
+            self.stop_container("resolver")
         except Exception as e:
             self.logger.info(e)
         try:
-            loop.run_until_complete(self.local_test_rename())
+            self.upgrade_resolver()
         except Exception as e:
             self.logger.info(e)
-        try:
-            loop.run_until_complete(self.local_test_stop())
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            loop.run_until_complete(self.local_test_sysinfo())
-        except Exception as e:
-            self.logger.info(e)
+        # time.sleep(60)
+        # loop = asyncio.get_event_loop()
+        # try:
+        #     loop.run_until_complete(self.local_test_remove())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_create())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_restart())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_rename())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_stop())
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     loop.run_until_complete(self.local_test_sysinfo())
+        # except Exception as e:
+        #     self.logger.info(e)
 
 if __name__ == '__main__':
     tester = Tester()

@@ -10,13 +10,13 @@ from loggingtools.logger import build_logger
 
 class LRAgentLocalClient:
 
-    def __init__(self, websocket, agent):
+    def __init__(self, agent):
         self.agent = agent
-        self.websocket = websocket
+        # self.websocket = websocket
         try:
             self.port = int(os.environ["LOCAL_API_PORT"])
         except KeyError:
-            self.port = 8765
+            self.port = 8888
         self.logger = build_logger("local-api", "/etc/whalebone/logs/")
 
     async def start_api(self):
@@ -28,6 +28,7 @@ class LRAgentLocalClient:
                     self.logger.info("Unable to init worker, {}".format(e))
                 else:
                     asyncio.ensure_future(worker)
+                    # await worker
                     self.logger.info("Local api created")
                     break
             else:
@@ -60,11 +61,11 @@ class LRAgentLocalClient:
                     request = json.loads(msg)
                     response = {"action": request["action"], "data": {"status": "failure", "body": str(e)}}
                     self.logger.warning(e)
-                else:
-                    try:
-                        await self.websocket.send(json.dumps(self.agent.encode_base64_json(response)))
-                    except Exception as e:
-                        self.logger.warning(e)
+                # else:
+                #     try:
+                #         await self.websocket.send(json.dumps(self.agent.encode_base64_json(response)))
+                #     except Exception as e:
+                #         self.logger.warning(e)
                 try:
                     response["data"] = json.loads(base64.b64decode(response["data"].encode("utf-8")).decode("utf-8"))
                     self.logger.info("Sending: {}".format(msg))

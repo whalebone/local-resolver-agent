@@ -59,7 +59,7 @@ class DockerConnector:
             return self.api_client.version()
         except Exception as e:
             self.logger.info(e)
-            return "docker version unavailable"
+            return {}
 
     def container_logs(self, name: str, timestamps: bool = False, tail: int = "all", since: str = None):
         if since is not None:

@@ -94,7 +94,18 @@ class LRAgentClient:
         await self.send(message)
 
     async def validate_host(self):
-        if not os.path.exists("{}compose/docker-compose.yml".format(self.folder)):
+        if os.path.exists("{}compose/upgrade.json".format(self.folder)):
+            with open("{}compose/upgrade.json".format(self.folder), "r") as upgrade:
+                request = json.loads(upgrade.read())
+            try:
+                response = await self.upgrade_container({"action": "upgrade"}, request)
+            except Exception as e:
+                self.logger.warning("Failed to resume upgrade, {}".format(e))
+            else:
+                self.logger.info("Done persisted upgrade with response: {}".format(response))
+                self.process_response(response)
+            os.remove("{}compose/upgrade.json".format(self.folder))
+        elif not os.path.exists("{}compose/docker-compose.yml".format(self.folder)):
             request = {"action": "request", "data": {"message": "compose missing"}}
             await self.send(request)
         else:
@@ -219,27 +230,32 @@ class LRAgentClient:
         if "cli" not in request:
             await self.send_acknowledgement(response)
         status = {}
-        decoded_data = self.upgrade_load_compose(request, response)
-        if "status" in decoded_data:
-            return decoded_data
+        compose = self.upgrade_load_compose(request, response)
+        if "status" in compose:
+            return compose
         try:
-            parsed_compose = self.compose_parser.create_service(decoded_data)
+            parsed_compose = self.compose_parser.create_service(compose)
         except ComposeException as e:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            if "services" in request["data"]:
+            if len(request["data"]["services"]) > 0:
                 services = request["data"]["services"]
             else:
                 services = list(parsed_compose["services"].keys())
             if "lr-agent" in services:
-                services.append(services.pop(services.index("lr-agent")))
+                if len(services) != 1:
+                    request["data"]["services"] = [service for service in services if service != "lr-agent"]
+                    request["data"]["compose"] = json.dumps(
+                        {key: value for key, value in parsed_compose["services"].items() if key != "lr-agent"})
+                    self.save_file("compose/upgrade.json".format(self.folder), "json", request)
+                    services = ["lr-agent"]
             if "resolver" in services:
                 try:
                     old_config = self.load_file("resolver/kres.conf")
                 except IOError as e:
                     status["load"] = {"status": "failure", "body": str(e)}
-                result = self.upgrade_save_files(request, decoded_data, ["config"])
+                result = self.upgrade_save_files(request, compose, ["config"])
                 if result != {}:
                     status["dump"] = result
             for service in services:
@@ -368,7 +384,7 @@ class LRAgentClient:
                                             await self.update_cache({})
             try:
                 if all(state["status"] == "success" for state in status.values()):
-                    result = self.upgrade_save_files(request, decoded_data, ["compose"])
+                    result = self.upgrade_save_files(request, compose, ["compose"])
                     if result != {}:
                         status["dump"] = result
             except Exception as e:
@@ -393,11 +409,11 @@ class LRAgentClient:
 
     def upgrade_load_compose(self, request: dict, response: dict):
         if "compose" in request["data"]:
-            return request["data"]["compose"]
+            return request["data"]["compose"]  # str
         else:
             try:
                 with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                    return yaml.load(compose)
+                    return compose.read()  # str
             except FileNotFoundError:
                 del response["requestId"]
                 response["data"] = {"status": "failure",
@@ -449,6 +465,20 @@ class LRAgentClient:
             return {"status": "failure", "message": error_message, "body": str(e)}
         else:
             return "success"
+
+    # def upgrade_agent_persistence(self, compose: dict, request: dict, services: list):
+    #     try:
+    #         backed_compose, backed_services = {}.update(compose), [].extend(services)
+    #         del backed_compose["services"]["lr-agent"]
+    #         backed_services.remove("lr-agent")
+    #         request["data"]["services"] = backed_services
+    #         request["data"]["compose"] = json.dumps(backed_compose)
+    #     except IOError as ie:
+    #         self.logger.warning("Failed to persist upgrade request, {}".format(ie))
+    #     except KeyError as ke:
+    #         self.logger.warning("Unexpected exception during upgrade persistence: {}".format(ke))
+    #     else:
+    #         self.save_file("compose/upgrade.json".format(self.folder), "json", request)
 
     async def rename_container(self, response: dict, request: dict) -> dict:
         status = {}
@@ -857,7 +887,7 @@ class LRAgentClient:
                     for rule in content:
                         file.write(rule + "\n")
         except Exception as e:
-            self.logger.info("Failed to save compose: {}".format(e))
+            self.logger.info("Failed to save file: {}".format(e))
             raise IOError(e)
 
     def load_file(self, location: str) -> list:

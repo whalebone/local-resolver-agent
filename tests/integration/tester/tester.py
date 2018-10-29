@@ -162,9 +162,9 @@ class Tester():
                 else:
                     time.sleep(3)
 
-    def upgrade_all(self):
+    def upgrade_all(self,services):
         compose = self.compose_reader("docker-compose.yml")
-        services = []
+        # services = []
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
@@ -178,18 +178,7 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            while True:
-                if self.redis.exists("upgrade"):
-                    status = self.redis_output(self.redis.lpop("upgrade"))
-                    self.logger.info(status)
-                    for key, value in status.items():
-                        if value["status"] == "success":
-                            self.logger.info("{} upgrade successful".format(key))
-                        else:
-                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
-                    break
-                else:
-                    time.sleep(3)
+            self.logger.info("Upgrade Received")
 
     def upgrade_agent(self):
         compose = self.compose_reader("agent-compose-upgraded.yml")
@@ -797,6 +786,15 @@ class Tester():
             self.upgrade_resolver()
         except Exception as e:
             self.logger.info(e)
+        try:
+            self.upgrade_all([])
+        except Exception as e:
+            self.logger.info(e)
+        # time.sleep(10)
+        # try:
+        #     self.upgrade_all(["lr-agent", "resolver", "kresman"])
+        # except Exception as e:
+        #     self.logger.info(e)
         # time.sleep(60)
         # loop = asyncio.get_event_loop()
         # try:

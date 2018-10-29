@@ -260,6 +260,9 @@ class LRAgentClient:
                     status["dump"] = result
             for service in services:
                 status[service] = {}
+                if service not in parsed_compose["services"]:
+                    status[service] = {"status": "failure", "message": "{} not present in compose".format(service)}
+                    continue
                 if service not in ["lr-agent", "resolver"]:
                     await self.upgrade_pull_image(parsed_compose["services"][service]['image'])
                     remove = await self.upgrade_worker_method(service, service,

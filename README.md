@@ -31,6 +31,11 @@ Sample message from agent:
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": "some text"}}       
 
 
+Testing:
+----------
+Testing is initiated by docker-compose file in tests/integration/ folder. Test result will be display in the logs 
+of _current_directory__tester_1 container. Wsproxy is required from Whalebone, the rest can be downloaded/built.
+
 
 Used volumes:
 ----------
@@ -48,3 +53,4 @@ Useful Directories:
 - /etc/whalebone/compose - resolver docker-compose is here
 - /etc/whalebone/logs - agent logs are here
 - /etc/whalebone/kres - resolver config si stored here and exposed to the world
+

@@ -39,6 +39,7 @@ Used volumes:
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 
 - /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
+- /etc/whalebone/agent/ : /etc/whalebone/compose/ - docker compose and upgrade is exposed
 
 
 Useful Directories:
@@ -46,5 +47,4 @@ Useful Directories:
 - /opt/whalebone/ - code is stored here and in certs/ are cert and key files
 - /etc/whalebone/compose - resolver docker-compose is here
 - /etc/whalebone/logs - agent logs are here
-- /etc/whalebone/log - resolver log is mounted here
 - /etc/whalebone/kres - resolver config si stored here and exposed to the world

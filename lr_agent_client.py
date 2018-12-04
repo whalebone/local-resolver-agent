@@ -6,8 +6,8 @@ import yaml
 import os
 import requests
 import websockets
-import time
 
+from collections import deque
 from shutil import copyfile, copytree, rmtree
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -729,18 +729,18 @@ class LRAgentClient:
         return response
 
     async def pack_files(self, response: dict, request: dict) -> dict:
-        folder = "{}/{}".format(self.folder, "temp")
+        folder = "{}{}".format(self.folder, "temp")
         try:
             os.mkdir(folder)
         except FileExistsError:
             rmtree(folder)
             os.mkdir(folder)
-        actions = {"release": {"action": "copy", "command": copyfile("/etc/os-release", "{}/release".format(folder))},
-                   "etc": {"action": "copy", "command": copytree("/opt/host/etc/whalebone/", "{}/etc".format(folder))},
-                   "log": {"action": "copy", "command": copytree("/opt/host/var/log/whalebone/", "{}/logs".format(folder))},
-                   "agent_log": {"action": "copy",
-                                 "command": copytree("/etc/whalebone/logs/", "{}/agent-logs".format(folder))},
-                   "syslog": {"action": "copy", "command": copyfile("/opt/host/var/log/syslog", "{}/syslog".format(folder))},
+        actions = {"release": {"action": "copy_file", "command": ("/etc/os-release", "{}/release".format(folder))},
+                   "etc": {"action": "copy_dir", "command": ("/opt/host/etc/whalebone/", "{}/etc".format(folder))},
+                   "log": {"action": "copy_dir", "command": ("/opt/host/var/log/whalebone/", "{}/logs".format(folder))},
+                   "agent_log": {"action": "copy_dir",
+                                 "command": ("/etc/whalebone/logs/", "{}/agent-logs".format(folder))},
+                   "syslog": {"action": "copy_file", "command": ("/opt/host/var/log/syslog", "{}/syslog".format(folder))},
                    "list": {"action": "list", "command": ["ls", "-lh", "/opt/host/opt/whalebone/"], "path": "{}/ls_opt".format(folder)},
                    "df": {"action": "list", "command": ["df", "-h"], "path": "{}/df".format(folder)},
                    "netstat": {"action": "list", "command": ["netstat", "-tupan"], "path": "{}/netstat".format(folder)},
@@ -769,8 +769,10 @@ class LRAgentClient:
 
         for action, specification in actions.items():
             try:
-                if specification["action"] == "copy":
-                    specification["command"]
+                if specification["action"] == "copy_file":
+                    copyfile(*specification["command"])
+                elif specification["action"] == "copy_dir":
+                    copytree(*specification["command"])
                 elif specification["action"] == "docker":
                     with open(specification["path"], "w") as file:
                         file.write(specification["command"])
@@ -787,11 +789,11 @@ class LRAgentClient:
         except FileNotFoundError as e:
             self.logger.info("Failed to load cert {}".format(e))
         else:
-            for name, attr in {"customer_id": NameOID.LOCALITY_NAME, "resolver_id": NameOID.COMMON_NAME}.items():
-                try:
-                    locals()[name] = cert.subject.get_attributes_for_oid(attr)[0].value
-                except Exception as err:
-                    self.logger.info("Failed to get parameter {}, error: {}".format(name, err))
+            try:
+                customer_id = cert.subject.get_attributes_for_oid(NameOID.LOCALITY_NAME)[0].value
+                resolver_id = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+            except Exception as err:
+                self.logger.info("Failed to get cert parameterers, error: {}".format( err))
 
         logs_zip = "/opt/whalebone/{}-{}-{}-wblogs.zip".format(customer_id, datetime.now().strftime("%Y-%m-%d_%H:%M:%S"), resolver_id)
         try:
@@ -802,14 +804,20 @@ class LRAgentClient:
         else:
             for root, dirs, files in os.walk(folder):
                 for file in files:
-                    zip_file.write(os.path.join(root, file))
+                    if os.path.getsize(os.path.join(root, file)) >= 20000000:
+                        try:
+                            self.tail_file(os.path.join(root, file), 2000)
+                        except Exception:
+                            pass
+                    if os.path.exists(os.path.join(root, file)):
+                        zip_file.write(os.path.join(root, file))
             zip_file.close()
 
             try:
                 files = {'upload_file': open(logs_zip, 'rb')}
                 req = requests.post("https://transfer.whalebone.io", files=files)
             except Exception as e:
-                self.logger.info("Failed to send files to transfer,whalebone.io, {}".format(e))
+                self.logger.info("Failed to send files to transfer.whalebone.io, {}".format(e))
                 response["data"] = {"status": "failure", "message": "Data upload failed", "body": str(e)}
             else:
                 if req.ok:
@@ -826,10 +834,36 @@ class LRAgentClient:
                 pass
             return response
 
+    def tail_file(self, path: str, tail_size: int, repeated=None):
+        try:
+            with open(path + "_new", "w") as resized_output:
+                for line in deque(open(path, encoding="utf-8"), tail_size):
+                    resized_output.write(line)
+        except UnicodeDecodeError:
+            repeated = "fail"
+        except Exception as e:
+            self.logger.info("Failed to resize file {} due to error {}".format(path, e))
+            if repeated is not None:
+                self.tail_file(path, 10, True)
+            else:
+                repeated = "fail"
+        finally:
+            try:
+                os.remove(path)
+                if not isinstance(repeated, str):
+                    os.rename(path + "_new", path)
+                else:
+                    os.remove(path + "_new")
+            except Exception:
+                pass
+
     def docker_ps(self) -> str:
         result = []
-        for container in [container for container in self.dockerConnector.get_containers(stopped=True)]:
-            result.append("{} {} {}\n".format(container.image.tags[0], container.status, container.name))
+        try:
+            for container in [container for container in self.dockerConnector.get_containers(stopped=True)]:
+                result.append("{} {} {}\n".format(container.image.tags[0], container.status, container.name))
+        except Exception as e:
+            self.logger.info("Failed to acquire docker ps info, {}".format(e))
         return "".join(result)
 
     async def write_config(self, response: dict, request: dict) -> dict:

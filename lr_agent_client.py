@@ -35,7 +35,7 @@ class LRAgentClient:
         self.log_reader = LogReader()
         self.folder = "/etc/whalebone/"
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
-        self.async_actions = ["stop", "remove", "create", "upgrade"]
+        self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect"]
         self.error_stash = {}
         try:
             self.alive = int(os.environ['KEEP_ALIVE'])
@@ -729,6 +729,8 @@ class LRAgentClient:
         return response
 
     async def pack_files(self, response: dict, request: dict) -> dict:
+        if "cli" not in request:
+            await self.send_acknowledgement(response)
         folder = "{}{}".format(self.folder, "temp")
         try:
             os.mkdir(folder)
@@ -832,6 +834,8 @@ class LRAgentClient:
                 rmtree(folder)
             except Exception:
                 pass
+            if "requestId" in response:
+                del response["requestId"]
             return response
 
     def tail_file(self, path: str, tail_size: int, repeated=None):

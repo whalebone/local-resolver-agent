@@ -212,7 +212,7 @@ class Tester():
                         self.logger.info("Agent upgrade config check successful")
                         self.status["upgrade_agent"] = "ok"
                     else:
-                        self.status["upgrade_agent"] = {"fail":{}}
+                        self.status["upgrade_agent"] = {"fail": {"version": config["labels"]["lr-agent"]}}
             else:
                 self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
 
@@ -696,7 +696,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/datacollect".format(self.proxy_address, self.agent_id),
-                data="https://hooks.slack.com/services/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")
+                data= "https://hooks.slack.com/services/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")
         except Exception as e:
             self.logger.info(e)
         else:
@@ -810,10 +810,10 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         time.sleep(5)
-        # try:
-        #     self.pack_data()
-        # except Exception as e:
-        #     self.logger.info(e)
+        try:
+            self.pack_data()
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.stop_container("resolver")
         except Exception as e:

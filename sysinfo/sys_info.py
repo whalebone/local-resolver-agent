@@ -5,6 +5,7 @@ from dns import resolver
 
 def get_system_info(docker_connector, error_stash: dict):
     mem = psutil.virtual_memory()
+    swap = psutil.swap_memory()
     du = psutil.disk_usage('/')
     return {
         'hostname': platform.node(),
@@ -23,6 +24,11 @@ def get_system_info(docker_connector, error_stash: dict):
             'total': to_gigabytes(du.total),
             'free': to_gigabytes(du.free),
             'usage': du.percent,
+        },
+        "swap": {
+            'total': to_gigabytes(swap.total),
+            'free': to_gigabytes(mem.free),
+            'usage': mem.percent,
         },
         "docker": docker_connector.docker_version(),
         "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},

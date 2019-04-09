@@ -738,6 +738,38 @@ class LRAgentClient:
         except FileExistsError:
             rmtree(folder)
             os.mkdir(folder)
+        self.gather_static_files(folder)
+        customer_id, resolver_id = self.create_client_ids()
+
+        logs_zip = "/opt/whalebone/{}-{}-{}-wblogs.zip".format(customer_id,
+                                                               datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
+                                                               resolver_id)
+        self.pack_logs(logs_zip, folder)
+        try:
+            files = {'upload_file': open(logs_zip, 'rb')}
+            req = requests.post("https://transfer.whalebone.io", files=files)
+        except Exception as e:
+            self.logger.info("Failed to send files to transfer.whalebone.io, {}".format(e))
+            response["data"] = {"status": "failure", "message": "Data upload failed", "body": str(e)}
+        else:
+            if req.ok:
+                try:
+                    requests.post(request["data"],
+                                  json={"text": "New customer log archive was uploaded:\n{}".format(
+                                      req.content.decode("utf-8"))})
+                except Exception as e:
+                    self.logger.info("Failed to send notification to Slack, {}".format(e))
+                else:
+                    response["data"] = {"status": "success", "message": "Data uploaded"}
+        try:
+            rmtree(folder)
+        except Exception:
+            pass
+        if "requestId" in response:
+            del response["requestId"]
+        return response
+
+    def gather_static_files(self, folder: str):
         actions = {"release": {"action": "copy_file", "command": ("/etc/os-release", "{}/release".format(folder))},
                    "etc": {"action": "copy_dir", "command": ("/opt/host/etc/whalebone/", "{}/etc".format(folder))},
                    "log": {"action": "copy_dir", "command": ("/opt/host/var/log/whalebone/", "{}/logs".format(folder))},
@@ -787,6 +819,7 @@ class LRAgentClient:
             except Exception as e:
                 self.logger.info("Failed to perform pack of {} action, {}".format(action, e))
 
+    def create_client_ids(self):
         customer_id, resolver_id = "unknown", "unknown"
         try:
             with open("/opt/whalebone/certs/client.crt", "r") as file:
@@ -799,15 +832,13 @@ class LRAgentClient:
                 resolver_id = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
             except Exception as err:
                 self.logger.info("Failed to get cert parameterers, error: {}".format(err))
+        return customer_id, resolver_id
 
-        logs_zip = "/opt/whalebone/{}-{}-{}-wblogs.zip".format(customer_id,
-                                                               datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
-                                                               resolver_id)
+    def pack_logs(self, logs_zip: str, folder: str):
         try:
             zip_file = zipfile.ZipFile(logs_zip, "w", zipfile.ZIP_DEFLATED)
         except zipfile.BadZipFile as ze:
             self.logger.info("Error when creating zip file")
-            response["data"] = {"status": "failure", "message": "Zip pack failed", "body": str(ze)}
         else:
             for root, dirs, files in os.walk(folder):
                 for file in files:
@@ -819,30 +850,6 @@ class LRAgentClient:
                     if os.path.exists(os.path.join(root, file)):
                         zip_file.write(os.path.join(root, file))
             zip_file.close()
-
-            try:
-                files = {'upload_file': open(logs_zip, 'rb')}
-                req = requests.post("https://transfer.whalebone.io", files=files)
-            except Exception as e:
-                self.logger.info("Failed to send files to transfer.whalebone.io, {}".format(e))
-                response["data"] = {"status": "failure", "message": "Data upload failed", "body": str(e)}
-            else:
-                if req.ok:
-                    try:
-                        requests.post(request["data"],
-                                      json={"text": "New customer log archive was uploaded:\n{}".format(
-                                          req.content.decode("utf-8"))})
-                    except Exception as e:
-                        self.logger.info("Failed to send notification to Slack, {}".format(e))
-                    else:
-                        response["data"] = {"status": "success", "message": "Data uploaded"}
-            try:
-                rmtree(folder)
-            except Exception:
-                pass
-            if "requestId" in response:
-                del response["requestId"]
-            return response
 
     def persist_request(self, request: dict):
         if not os.path.exists("{}/requests".format(self.folder)):

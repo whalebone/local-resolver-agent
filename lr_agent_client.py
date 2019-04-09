@@ -402,12 +402,10 @@ class LRAgentClient:
 
     def upgrade_save_files(self, request: dict, decoded_data, keys: list) -> dict:
         try:
-            if "compose" in keys:
-                if "compose" in request["data"]:
-                    self.save_file("compose/docker-compose.yml", "yml", decoded_data)
-            if "config" in keys:
-                if "config" in request["data"]:
-                    self.save_file("resolver/kres.conf", "text", request["data"]["config"])
+            if "compose" in keys and "compose" in request["data"]:
+                self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+            if "config" in keys and "config" in request["data"]:
+                self.save_file("resolver/kres.conf", "text", request["data"]["config"])
         except IOError as e:
             return {"status": "failure", "body": str(e)}
         else:

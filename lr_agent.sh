@@ -7,6 +7,7 @@ echo ${CLIENT_CRT_BASE64} | base64 -d > /opt/whalebone/certs/client.crt
 echo ${CLIENT_KEY_BASE64} | base64 -d > /opt/whalebone/certs/client.key
 
 cat /opt/whalebone/certs/client.crt /opt/whalebone/certs/client.key > /opt/whalebone/certs/client.pem
+cp /opt/whalebone/cli.sh /etc/whalebone/cli/
 
 export LR_CLIENT_CERT=/opt/whalebone/certs/client.pem
 

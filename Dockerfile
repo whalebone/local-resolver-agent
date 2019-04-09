@@ -18,8 +18,5 @@ WORKDIR /opt/whalebone/
 COPY . .
 #RUN chown whalebone /opt/whalebone/ -R && chgrp whalebone /opt/whalebone/ -R && chmod g+s /opt/whalebone/ -R
 
-#RUN mkdir /etc/whalebone/cli/
-COPY cli.sh /etc/whalebone/cli/cli.sh
-
 #USER whalebone
 CMD ["/opt/whalebone/lr_agent.sh"]

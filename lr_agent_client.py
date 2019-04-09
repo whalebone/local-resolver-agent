@@ -179,11 +179,14 @@ class LRAgentClient:
                             "whitelistadd": [response, request], "localtest": [response],
                             "datacollect": [response, request]}
 
-        try:
-            return await method_calls[request["action"]](*method_arguments[request["action"]])
-        except KeyError as e:
-            self.logger.info(e)
-            return self.getError('Unknown action', request)
+        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] in ["upgrade"] and not "cli" in request:
+            self.persist_request(request)
+        else:
+            try:
+                return await method_calls[request["action"]](*method_arguments[request["action"]])
+            except KeyError as e:
+                self.logger.info(e)
+                return self.getError('Unknown action', request)
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
@@ -456,7 +459,7 @@ class LRAgentClient:
         else:
             return "success"
 
-    async def upgrade_start_service(self, service: str, compose: dict, error_message: str= "start of new container"):
+    async def upgrade_start_service(self, service: str, compose: dict, error_message: str = "start of new container"):
         try:
             if service not in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
                 await self.dockerConnector.start_service(compose)  # tries to start new service
@@ -742,8 +745,10 @@ class LRAgentClient:
                    "log": {"action": "copy_dir", "command": ("/opt/host/var/log/whalebone/", "{}/logs".format(folder))},
                    "agent_log": {"action": "copy_dir",
                                  "command": ("/etc/whalebone/logs/", "{}/agent-logs".format(folder))},
-                   "syslog": {"action": "copy_file", "command": ("/opt/host/var/log/syslog", "{}/syslog".format(folder))},
-                   "list": {"action": "list", "command": ["ls", "-lh", "/opt/host/opt/whalebone/"], "path": "{}/ls_opt".format(folder)},
+                   "syslog": {"action": "copy_file",
+                              "command": ("/opt/host/var/log/syslog", "{}/syslog".format(folder))},
+                   "list": {"action": "list", "command": ["ls", "-lh", "/opt/host/opt/whalebone/"],
+                            "path": "{}/ls_opt".format(folder)},
                    "df": {"action": "list", "command": ["df", "-h"], "path": "{}/df".format(folder)},
                    "netstat": {"action": "list", "command": ["netstat", "-tupan"], "path": "{}/netstat".format(folder)},
                    "ip": {"action": "list", "command": ["ifconfig"], "path": "{}/ifconfig".format(folder)},
@@ -795,9 +800,11 @@ class LRAgentClient:
                 customer_id = cert.subject.get_attributes_for_oid(NameOID.LOCALITY_NAME)[0].value
                 resolver_id = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
             except Exception as err:
-                self.logger.info("Failed to get cert parameterers, error: {}".format( err))
+                self.logger.info("Failed to get cert parameterers, error: {}".format(err))
 
-        logs_zip = "/opt/whalebone/{}-{}-{}-wblogs.zip".format(customer_id, datetime.now().strftime("%Y-%m-%d_%H:%M:%S"), resolver_id)
+        logs_zip = "/opt/whalebone/{}-{}-{}-wblogs.zip".format(customer_id,
+                                                               datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
+                                                               resolver_id)
         try:
             zip_file = zipfile.ZipFile(logs_zip, "w", zipfile.ZIP_DEFLATED)
         except zipfile.BadZipFile as ze:
@@ -824,8 +831,9 @@ class LRAgentClient:
             else:
                 if req.ok:
                     try:
-                        requests.post(request["data"], json={"text": "New customer log archive was uploaded:\n{}".format(
-                            req.content.decode("utf-8"))})
+                        requests.post(request["data"],
+                                      json={"text": "New customer log archive was uploaded:\n{}".format(
+                                          req.content.decode("utf-8"))})
                     except Exception as e:
                         self.logger.info("Failed to send notification to Slack, {}".format(e))
                     else:
@@ -837,6 +845,13 @@ class LRAgentClient:
             if "requestId" in response:
                 del response["requestId"]
             return response
+
+    def persist_request(self, request: dict):
+        if not os.path.exists("{}/requests".format(self.folder)):
+            os.mkdir("{}/requests".format(self.folder))
+        with open("{}/requests/requests.txt".format(self.folder), "a") as file:
+            json.dump(request, file)
+            file.write("\n")
 
     def tail_file(self, path: str, tail_size: int, repeated=None):
         try:

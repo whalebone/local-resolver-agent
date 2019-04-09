@@ -111,7 +111,7 @@ class LRAgentClient:
         else:
             try:
                 with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                    parsed_compose = self.compose_parser.create_service(yaml.load(compose))
+                    parsed_compose = self.compose_parser.create_service(yaml.load(compose, Loader=yaml.SafeLoader))
                     active_services = [container.name for container in self.dockerConnector.get_containers()]
                     for service, config in parsed_compose["services"].items():
                         if service not in active_services:
@@ -759,7 +759,7 @@ class LRAgentClient:
                                        "path": "{}/docker_ps".format(folder)},
                    }
         with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-            parsed_compose = self.compose_parser.create_service(yaml.load(compose))
+            parsed_compose = self.compose_parser.create_service(yaml.load(compose, Loader=yaml.SafeLoader))
             for service in parsed_compose["services"]:
                 try:
                     actions["{}_service".format(service)] = {"action": "docker",

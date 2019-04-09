@@ -16,7 +16,7 @@ class ComposeParser:
 
     def parse(self, compose_yaml: str) -> dict:
         try:
-            parsed_compose = yaml.load(compose_yaml)
+            parsed_compose = yaml.load(compose_yaml, Loader=yaml.SafeLoader)
             if 'version' in parsed_compose:
                 return parsed_compose
             else:

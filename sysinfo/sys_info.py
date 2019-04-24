@@ -27,8 +27,8 @@ def get_system_info(docker_connector, error_stash: dict):
         },
         "swap": {
             'total': to_gigabytes(swap.total),
-            'free': to_gigabytes(mem.free),
-            'usage': mem.percent,
+            'free': to_gigabytes(swap.free),
+            'usage': swap.percent,
         },
         "docker": docker_connector.docker_version(),
         "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},

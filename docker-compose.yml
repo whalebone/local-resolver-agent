@@ -26,3 +26,4 @@ services:
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/sinkhole/:/etc/whalebone/kresman
       - /:/opt/host/:ro
+      - /vat/lib/kres/tty/:/etc/whalebone/tty/

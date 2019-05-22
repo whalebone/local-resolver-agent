@@ -45,6 +45,7 @@ Used volumes:
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 
 - /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
 - /etc/whalebone/agent/ : /etc/whalebone/compose/ - docker compose and upgrade is exposed
+- /vat/lib/kres/tty/ : /etc/whalebone/tty/ - tty mapping of resolver processes
 
 
 Useful Directories:

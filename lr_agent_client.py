@@ -211,7 +211,7 @@ class LRAgentClient:
         else:
             if "resolver" in parsed_compose["services"]:
                 result = self.upgrade_save_files(request, decoded_data, ["compose", "config"])
-                if result != {}:
+                if result:
                     status["dump"] = result
             for service, config in parsed_compose["services"].items():
                 status[service] = {}
@@ -259,7 +259,7 @@ class LRAgentClient:
                 except IOError as e:
                     status["load"] = {"status": "failure", "body": str(e)}
                 result = self.upgrade_save_files(request, compose, ["config"])
-                if result != {}:
+                if result:
                     status["dump"] = result
             for service in services:
                 status[service] = {}
@@ -271,7 +271,7 @@ class LRAgentClient:
                     remove = await self.upgrade_worker_method(service, service,
                                                               self.dockerConnector.remove_container,
                                                               "remove old container")
-                    if remove == {}:
+                    if not remove:
                         start = await self.upgrade_start_service(service, parsed_compose["services"][service])
                         if isinstance(start, str):
                             status[service]["status"] = start
@@ -284,7 +284,7 @@ class LRAgentClient:
                         remove = await self.upgrade_worker_method(service, service,
                                                                   self.dockerConnector.remove_container,
                                                                   "Failed to remove unhealthy container")
-                        if remove == {}:
+                        if not remove:
                             start = await self.upgrade_start_service(service, parsed_compose["services"][service],
                                                                      "Failed to create new container from unhealthy")
                             if start != "success":
@@ -305,7 +305,7 @@ class LRAgentClient:
                                 rename = await self.upgrade_worker_method(service, "{}-old".format(service),
                                                                           self.dockerConnector.rename_container,
                                                                           "rename rollback")
-                                if rename != {}:
+                                if rename:
                                     status[service] = rename
                             else:
                                 try:
@@ -324,7 +324,7 @@ class LRAgentClient:
                                         stop = await self.upgrade_worker_method("resolver-old", "resolver-old",
                                                                                 self.dockerConnector.stop_container,
                                                                                 "Failed to stop old resolver")
-                                        if stop != {}:
+                                        if stop:
                                             raise ContainerException("Failed to stop old resolver")
                                         else:
                                             if check_resolving() == "fail":
@@ -336,7 +336,7 @@ class LRAgentClient:
                                                                                            "resolver-old",
                                                                                            self.dockerConnector.restart_container,
                                                                                            "failed to restart old resolver")
-                                                if restart == {}:
+                                                if not restart:
                                                     try:
                                                         await self.upgrade_worker_method(service, service,
                                                                                          self.dockerConnector.remove_container,
@@ -361,7 +361,7 @@ class LRAgentClient:
                                                                                   self.dockerConnector.remove_container,
                                                                                   "Failed to remove old {}".format(
                                                                                       service))
-                                        if remove != {}:
+                                        if remove:
                                             raise ContainerException(
                                                 "Failed to remove old {}, with error {}".format(service, e))
 
@@ -374,11 +374,11 @@ class LRAgentClient:
                                     remove = await self.upgrade_worker_method(service, service,
                                                                               self.dockerConnector.remove_container,
                                                                               "removal of old and new service")
-                                    if remove == {}:
+                                    if not remove:
                                         rename = await self.upgrade_worker_method(service, "{}-old".format(service),
                                                                                   self.dockerConnector.rename_container,
                                                                                   "removal and rename of old agent")
-                                        if rename != {}:
+                                        if rename:
                                             status[service] = rename
                                     else:
                                         status[service] = remove
@@ -391,7 +391,7 @@ class LRAgentClient:
             try:
                 if all(state["status"] == "success" for state in status.values()):
                     result = self.upgrade_save_files(request, compose, ["compose"])
-                    if result != {}:
+                    if result:
                         status["dump"] = result
             except Exception as e:
                 self.logger.warning("Failed to check status {}".format(e))

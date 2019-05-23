@@ -717,9 +717,9 @@ class LRAgentClient:
         try:
             address = os.environ["KRESMAN_LISTENER"]
         except KeyError:
-            address = "http://localhost:8080"
+            address = "http://127.0.0.1:8080"
         try:
-            msg = requests.get("{}/updatenow".format(address))
+            msg = requests.post("{}/updatenow".format(address), json={})
         except Exception as e:
             response["data"] = {"status": "failure", "body": str(e)}
         else:

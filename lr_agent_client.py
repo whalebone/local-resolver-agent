@@ -719,7 +719,7 @@ class LRAgentClient:
         except KeyError:
             address = "http://127.0.0.1:8080"
         try:
-            msg = requests.post("{}/updatenow".format(address), json={})
+            msg = requests.get("{}/updatenow".format(address), json={})
         except Exception as e:
             response["data"] = {"status": "failure", "body": str(e)}
         else:

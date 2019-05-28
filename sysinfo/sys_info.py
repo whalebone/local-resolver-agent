@@ -1,5 +1,5 @@
 import traceback
-
+import json
 import psutil
 import platform
 import socket
@@ -8,7 +8,7 @@ import os
 from dns import resolver
 
 
-def get_system_info(docker_connector, error_stash: dict):
+def get_system_info(docker_connector, error_stash: dict, request: dict):
     mem = psutil.virtual_memory()
     swap = psutil.swap_memory()
     du = psutil.disk_usage('/')
@@ -35,7 +35,7 @@ def get_system_info(docker_connector, error_stash: dict):
             'free': to_gigabytes(swap.free),
             'usage': swap.percent,
         },
-        "resolver": process_stats_output(),
+        "resolver": process_stats_output(request),
         "docker": docker_connector.docker_version(),
         "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},
         "containers": {container.name: container.status for container in docker_connector.get_containers()},
@@ -104,6 +104,14 @@ def check_port(docker_connector, service: str = "resolver"):
     return "fail"
 
 
+def result_manipulation(mode: str, results: dict = None):
+    with open("/etc/whalebone/kres_stats.json", mode) as file:
+        if mode == "w":
+            json.dump(results, file)
+        else:
+            return json.load(file)
+
+
 def get_resolver_stats(tty: str) -> str:
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
@@ -115,7 +123,7 @@ def get_resolver_stats(tty: str) -> str:
             message = b"map 'stats.list()'"
             sock.sendall(message)
 
-            amount_received, amount_expected = 0,  len(message)
+            amount_received, amount_expected = 0, len(message)
             while amount_received < amount_expected:
                 data = sock.recv(65535)
                 amount_received += len(data)
@@ -136,7 +144,25 @@ def parse_stats_output(stats: str) -> dict:
     return result
 
 
-def process_stats_output() -> dict:
+def result_diff(results: dict, request: dict) -> dict:
+    try:
+        if results:
+            if "requestId" in request and request["requestId"] == "666":
+                return results
+            try:
+                previous = result_manipulation("r")
+            except FileNotFoundError:
+                return results
+            else:
+                return {stat: value - previous[stat] for stat, value in results.items()}
+            finally:
+                result_manipulation("w", results)
+    except Exception as e:
+        print("Failed to create resolver diff {}".format(e))
+    return {"error": "no data"}
+
+
+def process_stats_output(request: dict) -> dict:
     stats_results = {}
     for tty in os.listdir("/etc/whalebone/tty/"):
         try:
@@ -151,7 +177,5 @@ def process_stats_output() -> dict:
                             stats_results[stat_name] = int(count)
         except Exception as e:
             print("Failed to get data from kres instance {}, {}".format(tty, e))
-    if stats_results:
-        return stats_results
-    else:
-        return {"error": "no data"}
+    return result_diff(stats_results, request)
+

@@ -21,9 +21,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/whalebone/kres/:/etc/whalebone/resolver/
-      - /etc/whalebone/cli/:/etc/whalebone/cli/
+      - /var/whalebone/cli/:/etc/whalebone/cli/
       - /etc/whalebone/agent/:/etc/whalebone/compose/
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/sinkhole/:/etc/whalebone/kresman
       - /:/opt/host/:ro
-      - /vat/lib/kres/tty/:/etc/whalebone/tty/
+      - /var/lib/kres/tty/:/etc/whalebone/tty/

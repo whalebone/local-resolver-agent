@@ -43,9 +43,9 @@ Used volumes:
 - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config 
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 
-- /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
+- /var/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
 - /etc/whalebone/agent/ : /etc/whalebone/compose/ - docker compose and upgrade is exposed
-- /vat/lib/kres/tty/ : /etc/whalebone/tty/ - tty mapping of resolver processes
+- /var/lib/kres/tty/ : /etc/whalebone/tty/ - tty mapping of resolver processes
 
 
 Useful Directories:

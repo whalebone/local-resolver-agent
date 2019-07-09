@@ -31,6 +31,11 @@ Sample message from agent:
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": "some text"}}       
 
 
+Testing:
+----------
+Testing is initiated by docker-compose file in tests/integration/ folder. Test result will be display in the logs 
+of _current_directory__tester_1 container. Wsproxy is required from Whalebone, the rest can be downloaded/built.
+
 
 Used volumes:
 ----------
@@ -38,7 +43,9 @@ Used volumes:
 - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config 
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 
-- /etc/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
+- /var/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
+- /etc/whalebone/agent/ : /etc/whalebone/compose/ - docker compose and upgrade is exposed
+- /var/lib/kres/tty/ : /etc/whalebone/tty/ - tty mapping of resolver processes
 
 
 Useful Directories:
@@ -46,5 +53,5 @@ Useful Directories:
 - /opt/whalebone/ - code is stored here and in certs/ are cert and key files
 - /etc/whalebone/compose - resolver docker-compose is here
 - /etc/whalebone/logs - agent logs are here
-- /etc/whalebone/log - resolver log is mounted here
 - /etc/whalebone/kres - resolver config si stored here and exposed to the world
+

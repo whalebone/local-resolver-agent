@@ -31,6 +31,7 @@ class Tester():
         except KeyError:
             self.redis = "localhost"
         logging.basicConfig(level=logging.DEBUG)
+        self.status = {}
         self.logger = logging.getLogger(__name__)
 
     def parse_volumes(self, volumes_list):
@@ -89,6 +90,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
+            state = {}
             while True:
                 if self.redis.exists("create"):
                     status = self.redis_output(self.redis.lpop("create"))
@@ -98,9 +100,14 @@ class Tester():
                             self.logger.info("{} creation successful".format(key))
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, value["body"]))
+                            state[key] = value["body"]
                     break
                 else:
                     time.sleep(3)
+            if state == {}:
+                self.status["start_services"] = "ok"
+            else:
+                self.status["start_services"] = {"fail": state}
 
     def redis_output(self, redis_in):
         return ast.literal_eval(redis_in.decode("utf-8"))
@@ -144,6 +151,7 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
+            state = {}
             while True:
                 if self.redis.exists("upgrade"):
                     status = self.redis_output(self.redis.lpop("upgrade"))
@@ -153,6 +161,7 @@ class Tester():
                             self.logger.info("{} upgrade successful".format(key))
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                            state[key] = value["body"]
                     for config in self.view_config():
                         if config["name"] in services and config["labels"][config["name"]] == "3.0":
                             self.logger.info("{} upgrade config check successful".format(config["name"]))
@@ -161,10 +170,15 @@ class Tester():
                     break
                 else:
                     time.sleep(3)
+            if state == {}:
+                self.status["upgrade_resolver"] = "ok"
+            else:
+                self.status["upgrade_resolver"] = {"fail": state}
 
-    def upgrade_all(self):
+
+    def upgrade_all(self,services):
         compose = self.compose_reader("docker-compose.yml")
-        services = []
+        # services = []
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
@@ -178,18 +192,7 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            while True:
-                if self.redis.exists("upgrade"):
-                    status = self.redis_output(self.redis.lpop("upgrade"))
-                    self.logger.info(status)
-                    for key, value in status.items():
-                        if value["status"] == "success":
-                            self.logger.info("{} upgrade successful".format(key))
-                        else:
-                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
-                    break
-                else:
-                    time.sleep(3)
+            self.logger.info("Upgrade Received")
 
     def upgrade_agent(self):
         compose = self.compose_reader("agent-compose-upgraded.yml")
@@ -207,6 +210,9 @@ class Tester():
                 for config in self.view_config():
                     if config["name"] == "lr-agent" and config["labels"]["lr-agent"] == "3.0":
                         self.logger.info("Agent upgrade config check successful")
+                        self.status["upgrade_agent"] = "ok"
+                    else:
+                        self.status["upgrade_agent"] = {"fail": {"version": config["labels"]["lr-agent"]}}
             else:
                 self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
 
@@ -230,6 +236,7 @@ class Tester():
                     self.logger.info("memory: " + str(value))
                 if key == "hdd":
                     self.logger.info("hdd: " + str(value))
+            self.status["sysinfo"] = "ok"
 
     def rename_container(self):
         try:
@@ -244,8 +251,10 @@ class Tester():
             for key, value in rec.items():
                 if value["status"] == "success":
                     self.logger.info("{} renamed successfully".format(key))
+                    self.status["{}_rename".format(key)] = "ok"
                 else:
                     self.logger.info("{} rename failed".format(key))
+                    self.status["{}_rename".format(key)] = {"fail": {}}
 
     def stop_container(self, container: str):
         try:
@@ -264,8 +273,11 @@ class Tester():
                         for key, value in status.items():
                             if value["status"] == "success":
                                 self.logger.info("{} stop successful".format(key))
+                                self.status["{}_rename".format(key)] = "ok"
                             else:
                                 self.logger.warning("{} stop unsuccessful with response: {}".format(key, status))
+                                self.status["{}_rename".format(key)] = {"fail": {}}
+
                         break
                     else:
                         time.sleep(3)
@@ -289,8 +301,10 @@ class Tester():
                         for key, value in status.items():
                             if value["status"] == "success":
                                 self.logger.info("{} remove successful".format(key))
+                                self.status["{}_remove".format(key)] = {"fail": {}}
                             else:
                                 self.logger.warning("{} remove unsuccessful with response: {}".format(key, status))
+                                self.status["{}_remove".format(key)] = {"fail": {}}
                         break
                     else:
                         time.sleep(3)
@@ -413,8 +427,10 @@ class Tester():
             rec = json.loads(rec.text)
             if set(rec) == set(files):
                 self.logger.info("Log files are identical")
+                self.status["logs"] = "ok"
             else:
                 self.logger.info("Log files are different: {}".format(rec))
+                self.status["logs"] = {"fail": {}}
 
     def delete_log(self):
         try:
@@ -427,8 +443,10 @@ class Tester():
             rec = json.loads(rec.text)
             if rec["agent-docker-connector.log"]["status"] == "success":
                 self.logger.info("Log deleted successfully")
+                self.status["log_deleted"] = "ok"
             else:
                 self.logger.info("Log not deleted: {}".format(rec["info"]))
+                self.status["log_deleted"] = {"fail": {}}
 
     def update_cache(self):
         try:
@@ -440,8 +458,10 @@ class Tester():
             rec = json.loads(rec.text)
             if rec["status"] == "success":
                 self.logger.info("Cache updated successfully")
+                self.status["update_cache"] = "ok"
             else:
                 self.logger.info("Cache update failed")
+                self.status["update_cache"] = {"fail": {}}
 
     def save_config(self):
         try:
@@ -459,8 +479,10 @@ class Tester():
             for key, value in rec.items():
                 if value["status"] == "success":
                     self.logger.info("Service {} config dumped successfuly".format(key))
+                    self.status["save_{}_config".format(key)] = "ok"
                 else:
                     self.logger.info("Config dump failed {}".format(value))
+                    self.status["save_{}_config".format(key)] = {"fail": {}}
 
     async def local_test_remove(self):
         async with websockets.connect('ws://localhost:8888') as websocket:
@@ -599,13 +621,10 @@ class Tester():
                     for key, value in status.items():
                         if value["status"] == "failure":
                             self.logger.info("{} upgrade successful with failed check(config)".format(key))
-                            # for config in self.view_config():
-                            #     if config["name"] in services and config["labels"][key] == "3.0":
-                            #         self.logger.info("{} upgrade config check successful".format(key))
-                            #     else:
-                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                            self.status["upgrade_config"] = "ok"
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                            self.status["upgrade_config"] = {"fail": {}}
                     break
                 else:
                     time.sleep(3)
@@ -634,13 +653,10 @@ class Tester():
                     for key, value in status.items():
                         if value["status"] == "failure":
                             self.logger.info("{} upgrade successful with failed check(redirect)".format(key))
-                            # for config in self.view_config():
-                            #     if config["name"] in services and config["labels"][key] == "3.0":
-                            #         self.logger.info("{} upgrade config check successful".format(key))
-                            #     else:
-                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                            self.status["upgrade_redirect"] = "ok"
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                            self.status["upgrade_redirect"] = {"fail": {}}
                     break
                 else:
                     time.sleep(3)
@@ -668,13 +684,10 @@ class Tester():
                     for key, value in status.items():
                         if value["status"] == "failure":
                             self.logger.info("{} upgrade successful with failed check(image)".format(key))
-                            # for config in self.view_config():
-                            #     if config["name"] in services and config["labels"][key] == "3.0":
-                            #         self.logger.info("{} upgrade config check successful".format(key))
-                            #     else:
-                            #         self.logger.warning("{} upgrade config check unsuccessful".format(key))
+                            self.status["upgrade_image"] = "ok"
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                            self.status["upgrade_image"] = {"fail": {}}
                     break
                 else:
                     time.sleep(3)
@@ -683,7 +696,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/datacollect".format(self.proxy_address, self.agent_id),
-                data="https://hooks.slack.com/services/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")
+                data= "")
         except Exception as e:
             self.logger.info(e)
         else:
@@ -691,8 +704,19 @@ class Tester():
             self.logger.info(rec)
             if rec["status"] == "failure":
                 self.logger.info("Failed to pack data")
+                self.status["pack_data"] = {"fail": {}}
             else:
                 self.logger.info("Pack data success")
+                self.status["pack_data"] = "ok"
+
+    def final_print(self):
+        for key, value in self.status.items():
+            if isinstance(value, str):
+                self.logger.info("{}    {}".format(key, value))
+            else:
+                self.logger.info("{}    {}".format(key, "fail"))
+                for states in value.values():
+                    self.logger.info("      {}".format(states))
 
     def run_test(self):
         time.sleep(10)
@@ -727,6 +751,7 @@ class Tester():
             self.get_sysinfo()
         except Exception as e:
             self.logger.info(e)
+            self.status["start_services"] = {"fail": {}}
         try:
             self.rename_container()
         except Exception as e:
@@ -785,10 +810,10 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         time.sleep(5)
-        # try:
-        #     self.pack_data()
-        # except Exception as e:
-        #     self.logger.info(e)
+        try:
+            self.pack_data()
+        except Exception as e:
+            self.logger.info(e)
         try:
             self.stop_container("resolver")
         except Exception as e:
@@ -797,6 +822,15 @@ class Tester():
             self.upgrade_resolver()
         except Exception as e:
             self.logger.info(e)
+        try:
+            self.upgrade_all([])
+        except Exception as e:
+            self.logger.info(e)
+        # time.sleep(10)
+        # try:
+        #     self.upgrade_all(["lr-agent", "resolver", "kresman"])
+        # except Exception as e:
+        #     self.logger.info(e)
         # time.sleep(60)
         # loop = asyncio.get_event_loop()
         # try:
@@ -823,6 +857,12 @@ class Tester():
         #     loop.run_until_complete(self.local_test_sysinfo())
         # except Exception as e:
         #     self.logger.info(e)
+        try:
+            self.final_print()
+        except Exception as e:
+            self.logger.info(e)
+
+
 
 if __name__ == '__main__':
     tester = Tester()

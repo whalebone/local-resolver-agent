@@ -5,7 +5,7 @@ RUN apt-get update -y && \
 
 RUN mkdir -p /opt/whalebone/ /etc/whalebone/logs /etc/whalebone/compose /etc/whalebone/cli/
 
-RUN pip3 install "docker==3.0.1" psutil "websockets==4.0.1" pyaml netifaces dnspython cryptography requests
+RUN pip3 --no-cache-dir install "docker==3.0.1" psutil "websockets==4.0.1" pyaml netifaces dnspython cryptography requests
 
 #RUN mkdir -p /opt/whalebone/ /etc/whalebone/logs /etc/whalebone/compose /etc/whalebone/cli/
 #RUN useradd -s /sbin/nologin -G staff whalebone
@@ -17,9 +17,6 @@ WORKDIR /opt/whalebone/
 
 COPY . .
 #RUN chown whalebone /opt/whalebone/ -R && chgrp whalebone /opt/whalebone/ -R && chmod g+s /opt/whalebone/ -R
-
-#RUN mkdir /etc/whalebone/cli/
-COPY cli.sh /etc/whalebone/cli/cli.sh
 
 #USER whalebone
 CMD ["/opt/whalebone/lr_agent.sh"]

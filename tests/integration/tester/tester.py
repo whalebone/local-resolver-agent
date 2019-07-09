@@ -696,7 +696,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/datacollect".format(self.proxy_address, self.agent_id),
-                data= "https://hooks.slack.com/services/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")
+                data= "")
         except Exception as e:
             self.logger.info(e)
         else:

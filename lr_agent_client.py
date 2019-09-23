@@ -84,9 +84,8 @@ class LRAgentClient:
 
     async def send_sys_info(self):
         try:
-            sys_info = {"action": "sysinfo",
-                        "data": get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None),
-                                                self.sysinfo_logger)}
+            sys_info = get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None),
+                                                self.sysinfo_logger)
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}

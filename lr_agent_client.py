@@ -51,7 +51,7 @@ class LRAgentClient:
                 try:
                     pong_waiter = await self.websocket.ping()
                     await asyncio.wait_for(pong_waiter, timeout=self.alive)
-                except asyncio.TimeoutError:
+                except asyncio.TimeoutError, websockets.exceptions.ConnectionClosed:
                     raise Exception("Failed to receive pong")
             else:
                 try:

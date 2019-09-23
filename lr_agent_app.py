@@ -45,7 +45,7 @@ async def local_resolver_agent_app():
         try:
             websocket = await connect()
             remote_client = LRAgentClient(websocket)
-            asyncio.ensure_future(remote_client.listen())
+            future = asyncio.ensure_future(remote_client.listen())
             # try:
             #     dummy_client = LRAgentClient(None)
             #     local_client = LRAgentLocalClient(dummy_client)

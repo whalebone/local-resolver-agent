@@ -1,7 +1,7 @@
 version: '3'
 services:
     resolver:
-      image: whalebone/kres:2.4.1-5-fedora28-compact
+      image: whalebone/kres:3.2.1-12
       labels:
          resolver: "2.0"
       logging:
@@ -23,7 +23,7 @@ services:
          SINKIPV6: '::1'
          SINKTTL: 1
     kresman:
-      image: whalebone/kresman:2.3.2
+      image: whalebone/kresman:2.4.6
       labels:
          kresman: "2.0"
       restart: always

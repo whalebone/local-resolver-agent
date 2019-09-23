@@ -90,8 +90,8 @@ class LRAgentClient:
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
-        self.save_file("sysinfo/sysinfo.log", "json", sys_info)
-        await self.send(sys_info)
+        self.save_file("sysinfo/metrics.log", "sysinfo", sys_info, "a")
+        # await self.send(sys_info)
 
     async def send_acknowledgement(self, message: dict):
         message["data"] = {"status": "success", "message": "Command received"}
@@ -942,13 +942,15 @@ class LRAgentClient:
                     response["data"] = {"status": "success", "message": "Local api is up"}
             return response
 
-    def save_file(self, location: str, file_type: str, content):
+    def save_file(self, location: str, file_type: str, content, mode: str = "w"):
         try:
-            with open("{}{}".format(self.folder, location), "w") as file:
+            with open("{}{}".format(self.folder, location), mode) as file:
                 if file_type == "yml":
                     yaml.dump(content, file, default_flow_style=False)
                 elif file_type == "json":
                     json.dump(content, file)
+                elif file_type == "sysinfo":
+                    file.write(json.dumps(content))
                 else:
                     for rule in content:
                         file.write(rule + "\n")

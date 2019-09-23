@@ -950,7 +950,7 @@ class LRAgentClient:
                 elif file_type == "json":
                     json.dump(content, file)
                 elif file_type == "sysinfo":
-                    file.write(json.dumps(content))
+                    file.write("{}\n".format(json.dumps(content)))
                 else:
                     for rule in content:
                         file.write(rule + "\n")

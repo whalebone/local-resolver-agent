@@ -35,6 +35,7 @@ class LRAgentClient:
         self.log_reader = LogReader()
         self.folder = "/etc/whalebone/"
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
+        self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect"]
         self.error_stash = {}
         try:
@@ -51,7 +52,7 @@ class LRAgentClient:
                 try:
                     pong_waiter = await self.websocket.ping()
                     await asyncio.wait_for(pong_waiter, timeout=self.alive)
-                except asyncio.TimeoutError, websockets.exceptions.ConnectionClosed:
+                except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
                     raise Exception("Failed to receive pong")
             else:
                 try:
@@ -83,7 +84,9 @@ class LRAgentClient:
 
     async def send_sys_info(self):
         try:
-            sys_info = {"action": "sysinfo", "data": get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None))}
+            sys_info = {"action": "sysinfo",
+                        "data": get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None),
+                                                self.sysinfo_logger)}
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
@@ -191,7 +194,8 @@ class LRAgentClient:
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
-            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request, LRAgentClient(None))
+            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request, LRAgentClient(None),
+                                               self.sysinfo_logger)
         except Exception as e:
             self.logger.info(e)
             self.getError(str(e), request)

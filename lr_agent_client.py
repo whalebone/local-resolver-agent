@@ -83,10 +83,11 @@ class LRAgentClient:
 
     async def send_sys_info(self):
         try:
-            sys_info = {"action": "sysinfo", "data": get_system_info(self.dockerConnector, self.error_stash, {})}
+            sys_info = {"action": "sysinfo", "data": get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None))}
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
+        self.save_file("sysinfo/sysinfo.log", "json", sys_info)
         await self.send(sys_info)
 
     async def send_acknowledgement(self, message: dict):
@@ -190,7 +191,7 @@ class LRAgentClient:
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
-            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request)
+            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request, LRAgentClient(None))
         except Exception as e:
             self.logger.info(e)
             self.getError(str(e), request)

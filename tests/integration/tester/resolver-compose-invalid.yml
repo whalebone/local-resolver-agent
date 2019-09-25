@@ -1,7 +1,7 @@
 version: '3'
 services:
     resolver:
-      image: whalebone/kres:3.2.1-12
+      image: whalebone/kres:3.2.1-66
       labels:
          resolver: "3.0"
       logging:
@@ -23,7 +23,7 @@ services:
          SINKIPV6: '::1'
          SINKTTL: 1
     kresman:
-      image: whalebone/kresman:2.4.6
+      image: whalebone/kresman:2.4.3
       labels:
          kresman: "2.0"
       restart: always

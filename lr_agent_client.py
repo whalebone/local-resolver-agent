@@ -84,13 +84,14 @@ class LRAgentClient:
 
     async def send_sys_info(self):
         try:
-            sys_info = get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None),
-                                                self.sysinfo_logger)
+            sys_info = {"action": "sysinfo",
+                        "data": get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None),
+                                                self.sysinfo_logger)}
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
-        self.save_file("sysinfo/metrics.log", "sysinfo", sys_info, "a")
-        # await self.send(sys_info)
+        self.save_file("sysinfo/metrics.log", "sysinfo", sys_info["data"], "a")
+        await self.send(sys_info)
 
     async def send_acknowledgement(self, message: dict):
         message["data"] = {"status": "success", "message": "Command received"}
@@ -114,7 +115,7 @@ class LRAgentClient:
         else:
             try:
                 with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                    parsed_compose = self.compose_parser.create_service(yaml.load(compose, Loader=yaml.SafeLoader))
+                    parsed_compose = self.compose_parser.create_service(compose)
                     active_services = [container.name for container in self.dockerConnector.get_containers()]
                     for service, config in parsed_compose["services"].items():
                         if service not in active_services:
@@ -417,11 +418,11 @@ class LRAgentClient:
 
     def upgrade_load_compose(self, request: dict, response: dict):
         if "compose" in request["data"]:
-            return request["data"]["compose"]  # str
+            return request["data"]["compose"]
         else:
             try:
                 with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                    return compose.read()  # str
+                    return compose.read()
             except FileNotFoundError:
                 del response["requestId"]
                 response["data"] = {"status": "failure",

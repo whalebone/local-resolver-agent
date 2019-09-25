@@ -22,5 +22,6 @@ def build_logger(name: str, log_path: str, log_level: str = "INFO"):
         formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(levelname)s | %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+        logger.addHandler(console_handler)
 
     return logger

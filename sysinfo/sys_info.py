@@ -5,6 +5,7 @@ import platform
 import socket
 import re
 import os
+from datetime import datetime
 from dns import resolver
 
 
@@ -41,6 +42,7 @@ def get_system_info(docker_connector, error_stash: dict, request: dict, agent_co
         "containers": {container.name: container.status for container in docker_connector.get_containers()},
         "images": get_images(docker_connector),
         "error_messages": error_stash,
+        "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
         'interfaces': get_interfaces()
     }
 

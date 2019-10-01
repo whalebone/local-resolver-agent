@@ -5,7 +5,7 @@ RUN apt-get update -y && \
 
 RUN mkdir -p /opt/whalebone/ /etc/whalebone/logs /etc/whalebone/compose /etc/whalebone/cli/
 
-RUN pip3 --no-cache-dir install "docker==3.0.1" psutil "websockets==4.0.1" pyaml netifaces dnspython cryptography requests
+RUN pip3 --no-cache-dir install "docker==3.0.1" psutil "websockets==8.0.2" pyaml netifaces dnspython cryptography requests
 
 #RUN mkdir -p /opt/whalebone/ /etc/whalebone/logs /etc/whalebone/compose /etc/whalebone/cli/
 #RUN useradd -s /sbin/nologin -G staff whalebone

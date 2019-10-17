@@ -24,6 +24,7 @@ services:
       - /var/whalebone/cli/:/etc/whalebone/cli/
       - /etc/whalebone/agent/:/etc/whalebone/compose/
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
+      - /var/log/whalebone/:/etc/whalebone/sysinfo/
       - /var/sinkhole/:/etc/whalebone/kresman
       - /:/opt/host/:ro
       - /var/lib/kres/tty/:/etc/whalebone/tty/

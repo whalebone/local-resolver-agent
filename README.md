@@ -15,6 +15,7 @@ Agent envs:
 - KRESMAN_LISTENER: (optional) sets kresman listener for cache, if not set 'http:localhost:8080' is used
 - LOCAL_API_PORT: (optional) local api port, if not set default value of 8765 will be used
 - KEEP_ALIVE: (optional) specifies the time between keepalive pings, if not set 10s is used
+- DISABLE_FILE_LOGS: (optional) disables logging to file, keeps logging to console
 
 Messages:
 ----------

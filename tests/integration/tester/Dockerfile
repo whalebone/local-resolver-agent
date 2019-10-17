@@ -1,5 +1,5 @@
-FROM ubuntu:18.04
-RUN apt-get update && apt-get -y install python3-pip
+FROM python:3.7.4-slim-stretch
+#RUN apt-get update && apt-get -y install python3-pip
 WORKDIR /root/
 #RUN git clone https://github.com/secdev/scapy.git
 #WORKDIR /root/scapy/

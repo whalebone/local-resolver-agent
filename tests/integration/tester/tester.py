@@ -135,7 +135,7 @@ class Tester():
             else:
                 self.logger.warning("Inject failed", rec)
 
-    def upgrade_resolver(self):
+    def upgrade_resolver(self, name: str):
         compose = self.compose_reader("resolver-compose-upgraded.yml")
         services = ["resolver", "logrotate"]
         try:
@@ -171,12 +171,11 @@ class Tester():
                 else:
                     time.sleep(3)
             if state == {}:
-                self.status["upgrade_resolver"] = "ok"
+                self.status["upgrade_resolver_{}".format(name)] = "ok"
             else:
-                self.status["upgrade_resolver"] = {"fail": state}
+                self.status["upgrade_resolver_{}".format(name)] = {"fail": state}
 
-
-    def upgrade_all(self,services):
+    def upgrade_all(self, services):
         compose = self.compose_reader("docker-compose.yml")
         # services = []
         try:
@@ -208,11 +207,12 @@ class Tester():
             if rec["status"] == "success":
                 time.sleep(5)
                 for config in self.view_config():
-                    if config["name"] == "lr-agent" and config["labels"]["lr-agent"] == "3.0":
-                        self.logger.info("Agent upgrade config check successful")
-                        self.status["upgrade_agent"] = "ok"
-                    else:
-                        self.status["upgrade_agent"] = {"fail": {"version": config["labels"]["lr-agent"]}}
+                    if config["name"] == "lr-agent":
+                        if config["labels"]["lr-agent"] == "3.0":
+                            self.logger.info("Agent upgrade config check successful")
+                            self.status["upgrade_agent"] = "ok"
+                        else:
+                            self.status["upgrade_agent"] = {"fail": {"version": config["labels"]["lr-agent"]}}
             else:
                 self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
 
@@ -254,7 +254,7 @@ class Tester():
                     self.status["{}_rename".format(key)] = "ok"
                 else:
                     self.logger.info("{} rename failed".format(key))
-                    self.status["{}_rename".format(key)] = {"fail": {}}
+                    self.status["{}_rename".format(key)] = {"fail": rec}
 
     def stop_container(self, container: str):
         try:
@@ -273,10 +273,10 @@ class Tester():
                         for key, value in status.items():
                             if value["status"] == "success":
                                 self.logger.info("{} stop successful".format(key))
-                                self.status["{}_rename".format(key)] = "ok"
+                                self.status["{}_stop".format(key)] = "ok"
                             else:
                                 self.logger.warning("{} stop unsuccessful with response: {}".format(key, status))
-                                self.status["{}_rename".format(key)] = {"fail": {}}
+                                self.status["{}_stop".format(key)] = {"fail": {}}
 
                         break
                     else:
@@ -301,10 +301,10 @@ class Tester():
                         for key, value in status.items():
                             if value["status"] == "success":
                                 self.logger.info("{} remove successful".format(key))
-                                self.status["{}_remove".format(key)] = {"fail": {}}
+                                self.status["{}_remove".format(key)] = "ok"
                             else:
                                 self.logger.warning("{} remove unsuccessful with response: {}".format(key, status))
-                                self.status["{}_remove".format(key)] = {"fail": {}}
+                                self.status["{}_remove".format(key)] = {"fail": rec}
                         break
                     else:
                         time.sleep(3)
@@ -423,7 +423,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-main.log"]
+            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-main.log", 'agent-sys_info.log']
             rec = json.loads(rec.text)
             if set(rec) == set(files):
                 self.logger.info("Log files are identical")
@@ -461,7 +461,7 @@ class Tester():
                 self.status["update_cache"] = "ok"
             else:
                 self.logger.info("Cache update failed")
-                self.status["update_cache"] = {"fail": {}}
+                self.status["update_cache"] = {"fail": rec}
 
     def save_config(self):
         try:
@@ -624,7 +624,7 @@ class Tester():
                             self.status["upgrade_config"] = "ok"
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
-                            self.status["upgrade_config"] = {"fail": {}}
+                            self.status["upgrade_config"] = {"fail": status}
                     break
                 else:
                     time.sleep(3)
@@ -687,7 +687,7 @@ class Tester():
                             self.status["upgrade_image"] = "ok"
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
-                            self.status["upgrade_image"] = {"fail": {}}
+                            self.status["upgrade_image"] = {"fail": status}
                     break
                 else:
                     time.sleep(3)
@@ -740,7 +740,7 @@ class Tester():
         # except Exception as e:
         #     self.logger.info(e)
         try:
-            self.upgrade_resolver()
+            self.upgrade_resolver("initial")
         except Exception as e:
             self.logger.info(e)
         # try:
@@ -796,7 +796,6 @@ class Tester():
             self.save_config()
         except Exception as e:
             self.logger.info(e)
-
         try:
             self.upgrade_resolver_config()
         except Exception as e:
@@ -819,7 +818,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         try:
-            self.upgrade_resolver()
+            self.upgrade_resolver("final")
         except Exception as e:
             self.logger.info(e)
         try:

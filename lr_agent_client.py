@@ -35,6 +35,7 @@ class LRAgentClient:
         self.log_reader = LogReader()
         self.folder = "/etc/whalebone/"
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
+        self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect"]
         self.error_stash = {}
         try:
@@ -51,7 +52,7 @@ class LRAgentClient:
                 try:
                     pong_waiter = await self.websocket.ping()
                     await asyncio.wait_for(pong_waiter, timeout=self.alive)
-                except asyncio.TimeoutError:
+                except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
                     raise Exception("Failed to receive pong")
             else:
                 try:
@@ -83,10 +84,13 @@ class LRAgentClient:
 
     async def send_sys_info(self):
         try:
-            sys_info = {"action": "sysinfo", "data": get_system_info(self.dockerConnector, self.error_stash, {})}
+            sys_info = {"action": "sysinfo",
+                        "data": get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None),
+                                                self.sysinfo_logger)}
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
+        self.save_file("sysinfo/metrics.log", "sysinfo", sys_info["data"], "a")
         await self.send(sys_info)
 
     async def send_acknowledgement(self, message: dict):
@@ -111,7 +115,7 @@ class LRAgentClient:
         else:
             try:
                 with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                    parsed_compose = self.compose_parser.create_service(yaml.load(compose, Loader=yaml.SafeLoader))
+                    parsed_compose = self.compose_parser.create_service(compose)
                     active_services = [container.name for container in self.dockerConnector.get_containers()]
                     for service, config in parsed_compose["services"].items():
                         if service not in active_services:
@@ -190,7 +194,8 @@ class LRAgentClient:
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
-            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request)
+            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request, LRAgentClient(None),
+                                               self.sysinfo_logger)
         except Exception as e:
             self.logger.info(e)
             self.getError(str(e), request)
@@ -413,11 +418,11 @@ class LRAgentClient:
 
     def upgrade_load_compose(self, request: dict, response: dict):
         if "compose" in request["data"]:
-            return request["data"]["compose"]  # str
+            return request["data"]["compose"]
         else:
             try:
                 with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
-                    return compose.read()  # str
+                    return compose.read()
             except FileNotFoundError:
                 del response["requestId"]
                 response["data"] = {"status": "failure",
@@ -937,13 +942,15 @@ class LRAgentClient:
                     response["data"] = {"status": "success", "message": "Local api is up"}
             return response
 
-    def save_file(self, location: str, file_type: str, content):
+    def save_file(self, location: str, file_type: str, content, mode: str = "w"):
         try:
-            with open("{}{}".format(self.folder, location), "w") as file:
+            with open("{}{}".format(self.folder, location), mode) as file:
                 if file_type == "yml":
                     yaml.dump(content, file, default_flow_style=False)
                 elif file_type == "json":
                     json.dump(content, file)
+                elif file_type == "sysinfo":
+                    file.write("{}\n".format(json.dumps(content)))
                 else:
                     for rule in content:
                         file.write(rule + "\n")

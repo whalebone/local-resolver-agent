@@ -174,10 +174,7 @@ def result_diff(results: dict, request: dict, logger) -> dict:
             except FileNotFoundError:
                 return results
             else:
-                try:
-                    return {stat: value - previous[stat] for stat, value in results.items()}
-                except KeyError:
-                    return results
+                return {stat: value - previous[stat] for stat, value in results.items() if stat in previous}
             finally:
                 result_manipulation("w", results)
     except Exception as e:

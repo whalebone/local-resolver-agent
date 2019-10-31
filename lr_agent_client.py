@@ -18,7 +18,7 @@ from datetime import datetime
 
 from dockertools.docker_connector import DockerConnector
 from sysinfo.sys_info import get_system_info, check_port, check_resolving
-from exception.exc import ContainerException, ComposeException
+from exception.exc import ContainerException, ComposeException, PongFailedException
 from dockertools.compose_parser import ComposeParser
 from loggingtools.logger import build_logger
 from loggingtools.log_reader import LogReader
@@ -53,7 +53,7 @@ class LRAgentClient:
                     pong_waiter = await self.websocket.ping()
                     await asyncio.wait_for(pong_waiter, timeout=self.alive)
                 except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
-                    raise Exception("Failed to receive pong")
+                    raise PongFailedException("Failed to receive pong")
             else:
                 try:
                     response = await self.process(request)
@@ -85,8 +85,7 @@ class LRAgentClient:
     async def send_sys_info(self):
         try:
             sys_info = {"action": "sysinfo",
-                        "data": get_system_info(self.dockerConnector, self.error_stash, {}, LRAgentClient(None),
-                                                self.sysinfo_logger)}
+                        "data": get_system_info(self.dockerConnector, self.error_stash, {}, self.sysinfo_logger)}
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
@@ -194,8 +193,7 @@ class LRAgentClient:
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
-            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request, LRAgentClient(None),
-                                               self.sysinfo_logger)
+            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request, self.sysinfo_logger)
         except Exception as e:
             self.logger.info(e)
             self.getError(str(e), request)

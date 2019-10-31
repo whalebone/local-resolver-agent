@@ -5,8 +5,8 @@ import logging
 import websockets
 
 from lr_agent_client import LRAgentClient
-from lr_agent_local import LRAgentLocalClient
-from exception.exc import InitException
+# from lr_agent_local import LRAgentLocalClient
+from exception.exc import InitException, PongFailedException
 from loggingtools.logger import build_logger
 
 
@@ -57,13 +57,15 @@ async def local_resolver_agent_app():
                 await remote_client.send_sys_info()
                 await remote_client.validate_host()
                 await asyncio.sleep(interval)
-        except Exception as e:
-            logger.error('Generic error: {}'.format(str(e)))
-            logger.error('Retrying in 10 secs...')
+        except Exception:
             try:
+                e = future.exception()
+                if type(e) not in [websockets.exceptions.ConnectionClosed, PongFailedException]:
+                    logger.error('Generic error: {}'.format(str(e)))
                 await websocket.close()
             except Exception:
                 pass
+            logger.error('Connection Reset. Retrying in 10 secs...')
             await asyncio.sleep(10)
 
 

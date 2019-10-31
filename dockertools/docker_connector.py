@@ -75,6 +75,12 @@ class DockerConnector:
         except Exception as e:
             raise ContainerException(e)
 
+    def restart_resolver(self):
+        try:
+            self.api_client.restart("resolver")
+        except Exception as e:
+            raise ContainerException(e)
+
     async def stop_container(self, container_name: str):
         try:
             self.api_client.stop(container_name)

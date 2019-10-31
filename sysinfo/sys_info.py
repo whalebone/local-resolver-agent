@@ -9,7 +9,7 @@ from datetime import datetime
 from dns import resolver
 
 
-def get_system_info(docker_connector, error_stash: dict, request: dict, agent_connector, logger):
+def get_system_info(docker_connector, error_stash: dict, request: dict, logger):
     mem = psutil.virtual_memory()
     swap = psutil.swap_memory()
     du = psutil.disk_usage('/')
@@ -36,7 +36,7 @@ def get_system_info(docker_connector, error_stash: dict, request: dict, agent_co
             'free': to_gigabytes(swap.free),
             'usage': swap.percent,
         },
-        "resolver": process_stats_output(request, docker_connector, agent_connector, logger),
+        "resolver": process_stats_output(request, docker_connector, logger),
         "docker": docker_connector.docker_version(),
         "check": {"resolve": check_resolving(), "port": check_port(docker_connector)},
         "containers": {container.name: container.status for container in docker_connector.get_containers()},
@@ -114,30 +114,39 @@ def result_manipulation(mode: str, results: dict = None):
             return json.load(file)
 
 
-def resurrect_resolver(pid: str, docker_connector, agent_connector, logger):
+def resurrect_resolver(pid: str, docker_connector, logger):
     try:
-        docker_connector.container_exec("resolver", ["sh", "-c", "kill -9 {}"])
+        returned_text = docker_connector.container_exec("resolver", ["sh", "-c", "kill -9 {}"])
     except Exception as e:
         logger.warning("Failed to kill tty {}, {}".format(pid, e))
+    else:
+        logger.info("Recovery: kill sent with response: {}".format(returned_text))
     if docker_connector.container_exec("resolver", ["sh", "-c", "ps -A | grep kresd | grep {}".format(pid)]) != "":
+        logger.info("Recovery: pid found in ps")
         if "resolver-old" not in [container.name for container in docker_connector.get_containers()]:
-            agent_connector.process({"requestId": "666", "cli": "true", "action": "upgrade",
-                                     "data": {"services": ["resolver"]}})
+            try:
+                docker_connector.restart_resolver()
+            except Exception as e:
+                logger.warning("Failed to restart resolver, {}".format(e))
+            else:
+                logger.info("Recovery: resolver restart command sent")
+            # agent_connector.process({"requestId": "666", "cli": "true", "action": "restart",
+            #                          "data": {"containers": ["resolver"]}})
 
 
-def get_resolver_stats(tty: str, docker_connector, agent_connector, logger) -> str:
+def get_resolver_stats(tty: str, docker_connector, logger) -> str:
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.settimeout(5)
     try:
         sock.connect(tty)
     except socket.timeout as te:
-        resurrect_resolver(tty, docker_connector, agent_connector, logger)
+        resurrect_resolver(tty, docker_connector, logger)
         logger.warning("Timeout of socket {} reading, {}".format(tty, te))
     except socket.error as msg:
         logger.warning("Connection error {} to socket {}".format(msg, tty))
     else:
         try:
-            message = b"map 'stats.list()'"
+            message = b"stats.list()"
             sock.sendall(message)
 
             amount_received, amount_expected = 0, len(message)
@@ -146,7 +155,7 @@ def get_resolver_stats(tty: str, docker_connector, agent_connector, logger) -> s
                 amount_received += len(data)
             return data.decode("utf-8")
         except socket.timeout as re:
-            resurrect_resolver(tty, docker_connector, agent_connector)
+            resurrect_resolver(tty, docker_connector, logger)
             print("Failed to get data from scoket {}, {}".format(tty, re))
         except Exception as e:
             print("Failed to get data from {}, {}".format(tty, e))
@@ -182,11 +191,11 @@ def result_diff(results: dict, request: dict, logger) -> dict:
     return {"error": "no data"}
 
 
-def process_stats_output(request: dict, docker_connector, agent_connector, logger) -> dict:
+def process_stats_output(request: dict, docker_connector, logger) -> dict:
     stats_results = {}
     for tty in os.listdir("/etc/whalebone/tty/"):
         try:
-            stats = get_resolver_stats("/etc/whalebone/tty/{}".format(tty), docker_connector, agent_connector, logger)
+            stats = get_resolver_stats("/etc/whalebone/tty/{}".format(tty), docker_connector, logger)
             if stats:
                 stats = parse_stats_output(stats)
                 if stats:

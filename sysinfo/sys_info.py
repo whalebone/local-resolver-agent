@@ -114,9 +114,9 @@ def result_manipulation(mode: str, results: dict = None):
             return json.load(file)
 
 
-def resurrect_resolver(pid: str, docker_connector, logger):
+def resurrect_resolver(pid: str, docker_connector, logger) -> bool:
     try:
-        returned_text = docker_connector.container_exec("resolver", ["sh", "-c", "kill -9 {}"])
+        returned_text = docker_connector.container_exec("resolver", ["sh", "-c", "kill -9 {}".format(pid)])
     except Exception as e:
         logger.warning("Failed to kill tty {}, {}".format(pid, e))
     else:
@@ -130,17 +130,15 @@ def resurrect_resolver(pid: str, docker_connector, logger):
                 logger.warning("Failed to restart resolver, {}".format(e))
             else:
                 logger.info("Recovery: resolver restart command sent")
-            # agent_connector.process({"requestId": "666", "cli": "true", "action": "restart",
-            #                          "data": {"containers": ["resolver"]}})
+                return True
 
 
-def get_resolver_stats(tty: str, docker_connector, logger) -> str:
+def get_resolver_stats(tty: str, logger) -> str:
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.settimeout(5)
     try:
         sock.connect(tty)
     except socket.timeout as te:
-        resurrect_resolver(tty, docker_connector, logger)
         logger.warning("Timeout of socket {} reading, {}".format(tty, te))
     except socket.error as msg:
         logger.warning("Connection error {} to socket {}".format(msg, tty))
@@ -155,10 +153,9 @@ def get_resolver_stats(tty: str, docker_connector, logger) -> str:
                 amount_received += len(data)
             return data.decode("utf-8")
         except socket.timeout as re:
-            resurrect_resolver(tty, docker_connector, logger)
-            print("Failed to get data from scoket {}, {}".format(tty, re))
+            logger.warning("Failed to get data from scoket {}, {}".format(tty, re))
         except Exception as e:
-            print("Failed to get data from {}, {}".format(tty, e))
+            logger.warning("Failed to get data from {}, {}".format(tty, e))
         finally:
             sock.close()
     return ""
@@ -195,7 +192,7 @@ def process_stats_output(request: dict, docker_connector, logger) -> dict:
     stats_results = {}
     for tty in os.listdir("/etc/whalebone/tty/"):
         try:
-            stats = get_resolver_stats("/etc/whalebone/tty/{}".format(tty), docker_connector, logger)
+            stats = get_resolver_stats("/etc/whalebone/tty/{}".format(tty), logger)
             if stats:
                 stats = parse_stats_output(stats)
                 if stats:
@@ -204,6 +201,9 @@ def process_stats_output(request: dict, docker_connector, logger) -> dict:
                             stats_results[stat_name] += int(count)
                         except KeyError:
                             stats_results[stat_name] = int(count)
+            else:
+                if resurrect_resolver(tty, docker_connector, logger):
+                    break
         except Exception as e:
             logger.warning("Failed to get data from kres instance {}, {}".format(tty, e))
     return result_diff(stats_results, request, logger)

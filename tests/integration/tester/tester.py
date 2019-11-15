@@ -26,10 +26,7 @@ class Tester():
             self.agent_id = os.environ["AGENT_ID"]
         except KeyError:
             self.agent_id = 101
-        try:
-            self.redis = redis.Redis(os.environ["REDIS_ADDRESS"])
-        except KeyError:
-            self.redis = "localhost"
+        self.redis = redis.Redis(os.environ["REDIS_ADDRESS"])
         logging.basicConfig(level=logging.DEBUG)
         self.status = {}
         self.logger = logging.getLogger(__name__)
@@ -709,6 +706,30 @@ class Tester():
                 self.logger.info("Pack data success")
                 self.status["pack_data"] = "ok"
 
+    def upgrade_agent_with_old_present(self):
+        compose = self.compose_reader("agent-compose-upgraded.yml")
+        try:
+            rename = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/rename".format(self.proxy_address, self.agent_id),
+                json={"lr-agent": "lr-agent-old"})
+        except Exception as e:
+            self.logger.warning(e)
+        else:
+            if rename.json()["lr-agent"]["status"] == "success":
+                rec = requests.post(
+                    "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                    json={"compose": compose, "services": ["lr-agent"]})
+                rec = json.loads(rec.text)
+                self.logger.info(rec)
+                if rec["status"] == "success":
+                    time.sleep(10)
+                    if "lr-agent" in [container.name for container in self.docker_client.containers.list()]:
+                        self.status["upgrade_agent_with_old"] = "ok"
+                    else:
+                        self.status["upgrade_agent_with_old"] = {"fail": rec}
+            else:
+                self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rename.json()))
+
     def final_print(self):
         for key, value in self.status.items():
             if isinstance(value, str):
@@ -806,6 +827,11 @@ class Tester():
             self.logger.info(e)
         try:
             self.upgrade_resolver_image()
+        except Exception as e:
+            self.logger.info(e)
+        time.sleep(5)
+        try:
+            self.upgrade_agent_with_old_present()
         except Exception as e:
             self.logger.info(e)
         time.sleep(5)

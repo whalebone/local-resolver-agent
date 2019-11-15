@@ -17,7 +17,7 @@ import zipfile
 from datetime import datetime
 
 from dockertools.docker_connector import DockerConnector
-from sysinfo.sys_info import get_system_info, check_port, check_resolving
+from sysinfo.sys_info import SystemInfo
 from exception.exc import ContainerException, ComposeException, PongFailedException
 from dockertools.compose_parser import ComposeParser
 from loggingtools.logger import build_logger
@@ -85,7 +85,7 @@ class LRAgentClient:
     async def send_sys_info(self):
         try:
             sys_info = {"action": "sysinfo",
-                        "data": get_system_info(self.dockerConnector, self.error_stash, {}, self.sysinfo_logger)}
+                        "data": SystemInfo(self.dockerConnector, self.sysinfo_logger, self.error_stash).get_system_info()}
         except Exception as e:
             self.logger.info(e)
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
@@ -193,7 +193,7 @@ class LRAgentClient:
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
-            response["data"] = get_system_info(self.dockerConnector, self.error_stash, request, self.sysinfo_logger)
+            response["data"] = SystemInfo(self.dockerConnector, self.sysinfo_logger, self.error_stash).get_system_info()
         except Exception as e:
             self.logger.info(e)
             self.getError(str(e), request)
@@ -233,6 +233,7 @@ class LRAgentClient:
         return response
 
     async def upgrade_container(self, response: dict, request: dict) -> dict:
+        sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
         if "cli" not in request:
             await self.send_acknowledgement(response)
         status = {}
@@ -283,7 +284,7 @@ class LRAgentClient:
                     else:
                         status[service] = remove
                 else:
-                    if service == "resolver" and check_port(self.dockerConnector) == "fail":
+                    if service == "resolver" and sysinfo_connector.check_port() == "fail":
                         remove = await self.upgrade_worker_method(service, service,
                                                                   self.dockerConnector.remove_container,
                                                                   "Failed to remove unhealthy container")
@@ -314,8 +315,8 @@ class LRAgentClient:
                                 try:
                                     if service == "resolver":
                                         for interval in range(10):
-                                            if check_port(self.dockerConnector) == "ok" and \
-                                                    check_port(self.dockerConnector, "resolver-old") == "ok":
+                                            if sysinfo_connector.check_port() == "ok" and \
+                                                    sysinfo_connector.check_port("resolver-old") == "ok":
                                                 break
                                             await asyncio.sleep(1)
                                         else:
@@ -330,7 +331,7 @@ class LRAgentClient:
                                         if stop:
                                             raise ContainerException("Failed to stop old resolver")
                                         else:
-                                            if check_resolving() == "fail":
+                                            if sysinfo_connector.check_resolving() == "fail":
                                                 try:
                                                     self.save_file("resolver/kres.conf", "text", old_config)
                                                 except Exception as e:

@@ -1,6 +1,7 @@
 import traceback
 import json
 import psutil
+import errno
 import platform
 import socket
 import re
@@ -81,6 +82,18 @@ class SystemInfo:
             else:
                 return json.load(file)
 
+    def check_resolver_process(self, pid: str) -> str:
+        return self.docker_connector.container_exec("resolver",
+                                                    ["sh", "-c", "ps -A | grep kresd | grep {}".format(pid)])
+
+    def delete_orphaned_tty(self, tty: str):
+        try:
+            os.remove("/etc/whalebone/tty/{}".format(tty))
+        except Exception as e:
+            self.logger.warning("Failed to delete orphaned tty {}, reason: {}".format(tty, e))
+        else:
+            self.logger.info("Successfully deleted orphaned tty {}".format(tty))
+
     def resurrect_resolver(self, pid: str) -> bool:
         try:
             returned_text = self.docker_connector.container_exec("resolver", ["sh", "-c", "kill -9 {}".format(pid)])
@@ -88,8 +101,7 @@ class SystemInfo:
             self.logger.warning("Failed to kill tty {}, {}".format(pid, e))
         else:
             self.logger.info("Recovery: kill sent with response: {}".format(returned_text))
-        if self.docker_connector.container_exec("resolver",
-                                                ["sh", "-c", "ps -A | grep kresd | grep {}".format(pid)]) != "":
+        if self.check_resolver_process(pid) != "":
             self.logger.info("Recovery: pid found in ps")
             if "resolver-old" not in [container.name for container in self.docker_connector.get_containers()]:
                 try:
@@ -109,6 +121,9 @@ class SystemInfo:
             self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
         except socket.error as msg:
             self.logger.warning("Connection error {} to socket {}".format(msg, tty))
+            if msg.errno == errno.ECONNREFUSED and self.check_resolver_process(tty) == "":
+                self.delete_orphaned_tty(tty)
+                return "cleanup"
         else:
             try:
                 message = b"stats.list()"
@@ -156,6 +171,8 @@ class SystemInfo:
         for tty in os.listdir("/etc/whalebone/tty/"):
             try:
                 stats = self.get_resolver_stats("/etc/whalebone/tty/{}".format(tty))
+                if stats == "cleanup":
+                    continue
                 if stats:
                     stats = self.parse_stats_output(stats)
                     if stats:

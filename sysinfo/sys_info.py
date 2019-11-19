@@ -159,7 +159,11 @@ class SystemInfo:
                 except FileNotFoundError:
                     return results
                 else:
-                    return {stat: value - previous[stat] for stat, value in results.items() if stat in previous}
+                    stats = {stat: value - previous[stat] for stat, value in results.items() if stat in previous}
+                    if any(stat_value < 0 for stat_value in stats.values()):
+                        return {}
+                    else:
+                        return stats
                 finally:
                     self.result_manipulation("w", results)
         except Exception as e:

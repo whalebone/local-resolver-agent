@@ -88,7 +88,7 @@ class SystemInfo:
 
     def delete_orphaned_tty(self, tty: str):
         try:
-            os.remove("/etc/whalebone/tty/{}".format(tty))
+            os.remove(tty)
         except Exception as e:
             self.logger.warning("Failed to delete orphaned tty {}, reason: {}".format(tty, e))
         else:
@@ -121,7 +121,7 @@ class SystemInfo:
             self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
         except socket.error as msg:
             self.logger.warning("Connection error {} to socket {}".format(msg, tty))
-            if msg.errno == errno.ECONNREFUSED and self.check_resolver_process(tty) == "":
+            if msg.errno == errno.ECONNREFUSED and self.check_resolver_process(tty.split("/")[-1]) == "":
                 self.delete_orphaned_tty(tty)
                 return "cleanup"
         else:

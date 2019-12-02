@@ -149,8 +149,8 @@ class LRAgentClient:
             self.logger.info("Failed to parse request: {}, {}".format(e, request_json))
             return {"action": "request",
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
-
-        self.logger.info("Received: {}".format(request))
+        if "cli" not in request:
+            self.logger.info("Received: {}".format(request))
         response = {}
         if "action" not in request:
             return self.getError('Missing action in request', request)

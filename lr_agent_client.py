@@ -193,7 +193,8 @@ class LRAgentClient:
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
-            response["data"] = SystemInfo(self.dockerConnector, self.sysinfo_logger, self.error_stash).get_system_info()
+            response["data"] = SystemInfo(self.dockerConnector, self.sysinfo_logger, self.error_stash,
+                                          request).get_system_info()
         except Exception as e:
             self.logger.info(e)
             self.getError(str(e), request)

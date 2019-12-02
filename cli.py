@@ -85,7 +85,7 @@ class Cli:
                 request = self.prepare_request()
                 self.delete_files()
             else:
-                request = {"requestId": "666", "action": self.cli_input["action"]}
+                request = {"requestId": "666", "cli": "true", "action": self.cli_input["action"]}
         except Exception as e:
             print("Cannot assemble request, reason: {}".format(e))
         else:

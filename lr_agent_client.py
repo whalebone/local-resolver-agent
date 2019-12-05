@@ -1,7 +1,7 @@
 import json
 import asyncio
 import base64
-
+import logging
 import yaml
 import os
 import requests
@@ -38,6 +38,8 @@ class LRAgentClient:
         self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect"]
         self.error_stash = {}
+        if "WEBSOCKET_LOGGING" in os.environ:
+            self.enable_websocket_log()
         try:
             self.alive = int(os.environ['KEEP_ALIVE'])
         except KeyError:
@@ -128,6 +130,14 @@ class LRAgentClient:
                             del self.error_stash[service]
             except Exception as e:
                 self.logger.warning(e)
+
+    def enable_websocket_log(self):
+        logger = logging.getLogger('websockets')
+        logger.setLevel(int(os.environ["WEBSOCKET_LOGGING"]))
+        formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(levelname)s | %(message)s')
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
 
     def process_response(self, response: dict):
         for service, error_message in response["data"].items():

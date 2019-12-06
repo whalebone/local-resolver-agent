@@ -178,7 +178,7 @@ class LRAgentClient:
                         "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
                         "test": self.agent_test_message, "updatecache": self.update_cache,
                         "saveconfig": self.write_config, "whitelistadd": self.whitelist_add,
-                        "localtest": self.local_api_check, "datacollect": self.pack_files}
+                        "localtest": self.local_api_check, "datacollect": self.pack_files, "trace": self.trace_domain}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request], "restart": [response, request],
                             "rename": [response, request], "containers": [response],
@@ -190,7 +190,7 @@ class LRAgentClient:
                             "flog": [response, request], "dellogs": [response, request], "test": [response],
                             "updatecache": [response], "saveconfig": [response, request],
                             "whitelistadd": [response, request], "localtest": [response],
-                            "datacollect": [response, request]}
+                            "datacollect": [response, request], "trace": [response, request]}
 
         if "CONFIRMATION_REQUIRED" in os.environ and request["action"] in ["upgrade"] and not "cli" in request:
             self.persist_request(request)

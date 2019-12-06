@@ -2,6 +2,8 @@ import json
 import asyncio
 import base64
 import logging
+import socket
+
 import yaml
 import os
 import requests
@@ -171,7 +173,7 @@ class LRAgentClient:
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
                         "rename": self.rename_container, "containers": self.list_containers,
                         "restart": self.restart_container, "stop": self.stop_container, "remove": self.remove_container,
-                        "containerlogs": self.container_logs,
+                        "containerlogs": self.container_logs, "clearcache": self.resolver_cache_clear,
                         "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
                         "fwmodify": self.modify_rule, "fwdelete": self.delete_rule,
                         "logs": self.agent_log_files, "log": self.agent_all_logs,
@@ -182,7 +184,7 @@ class LRAgentClient:
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
                             "upgrade": [response, request], "restart": [response, request],
                             "rename": [response, request], "containers": [response],
-                            "containerlogs": [response, request],
+                            "containerlogs": [response, request], "clearcache": [response, request],
                             "stop": [response, request], "remove": [response, request],
                             "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
                             "fwmodify": [response, request], "fwdelete": [response, request],
@@ -785,7 +787,7 @@ class LRAgentClient:
 
         except KeyError:
             address = "http://127.0.0.1:8453"
-        query_type = request["data"]["type"] if "type" in request else ""
+        query_type = request["data"]["type"] if "type" in request["data"] else ""
         try:
             msg = requests.get("{}/trace/{}/{}".format(address, request["data"]["domain"], query_type))
         except requests.exceptions.RequestException as e:
@@ -797,6 +799,33 @@ class LRAgentClient:
                 response["data"] = {"status": "failure", "message": "Trace failed",
                                     "error": msg.content.decode("utf-8")}
         return response
+
+    async def resolver_cache_clear(self, response: dict, request: dict):
+        for tty in os.listdir("/etc/whalebone/tty/"):
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            try:
+                sock.connect("/etc/whalebone/tty/{}".format(tty))
+            except socket.timeout as te:
+                self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
+            except socket.error as msg:
+                self.logger.warning("Connection error {} to socket {}".format(msg, tty))
+            else:
+                try:
+                    args = "" if request["data"]["clear"] == "all" else "'{}', true".format(request["data"]["clear"])
+                    self.logger.info("cache.clear({})".format(args))
+                    message = "cache.clear({})".format(args).encode("utf-8")
+                    sock.sendall(message)
+                    response["data"] = {"status": "success"}
+                except socket.timeout as re:
+                    self.logger.warning("Failed to get data from socket {}, {}".format(tty, re))
+                except Exception as e:
+                    self.logger.warning("Failed to get data from {}, {}".format(tty, e))
+                finally:
+                    sock.close()
+            if "data" not in response:
+                response["data"] = {"status": "failure"}
+            return response
 
     async def pack_files(self, response: dict, request: dict) -> dict:
         if "cli" not in request:

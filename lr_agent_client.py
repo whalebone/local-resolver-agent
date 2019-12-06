@@ -170,7 +170,7 @@ class LRAgentClient:
 
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
                         "rename": self.rename_container, "containers": self.list_containers,
-                        "stop": self.stop_container, "remove": self.remove_container,
+                        "restart": self.restart_container, "stop": self.stop_container, "remove": self.remove_container,
                         "containerlogs": self.container_logs,
                         "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
                         "fwmodify": self.modify_rule, "fwdelete": self.delete_rule,
@@ -180,7 +180,7 @@ class LRAgentClient:
                         "saveconfig": self.write_config, "whitelistadd": self.whitelist_add,
                         "localtest": self.local_api_check, "datacollect": self.pack_files}
         method_arguments = {"sysinfo": [response, request], "create": [response, request],
-                            "upgrade": [response, request],
+                            "upgrade": [response, request], "restart": [response, request],
                             "rename": [response, request], "containers": [response],
                             "containerlogs": [response, request],
                             "stop": [response, request], "remove": [response, request],
@@ -521,22 +521,49 @@ class LRAgentClient:
         response["data"] = status
         return response
 
-    # async def restart_container(self, response: dict, request: dict) -> dict:
-    #     await self.send_acknowledgement(response)
+    # async def container_action(self, response: dict, request: dict, action) -> dict:
+    #     if "cli" not in request:
+    #         await self.send_acknowledgement(response)
     #     status = {}
-    #     for container in request["data"]:
-    #         status[container] = {}
-    #         try:
-    #             await self.dockerConnector.restart_container(container)
-    #         except ContainerException as e:
-    #             status[container] = {"status": "failure", "body": str(e)}
-    #             response["status"] = "failure"
-    #             self.logger.info(e)
-    #         else:
-    #             status[container]["status"] = "success"
-    #     del response["requestId"]
+    #     try:
+    #         for container in request["data"]["containers"]:
+    #             status[container] = {}
+    #             try:
+    #                 await self.dockerConnector.restart_container(container)
+    #             except ContainerException as e:
+    #                 status[container] = {"status": "failure", "body": str(e)}
+    #                 self.logger.info(e)
+    #             else:
+    #                 status[container]["status"] = "success"
+    #     except KeyError:
+    #         response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
+    #         return response
+    #     if "requestId" in response:
+    #         del response["requestId"]
     #     response["data"] = status
     #     return response
+
+    async def restart_container(self, response: dict, request: dict) -> dict:
+        if "cli" not in request:
+            await self.send_acknowledgement(response)
+        status = {}
+        try:
+            for container in request["data"]["containers"]:
+                status[container] = {}
+                try:
+                    await self.dockerConnector.restart_container(container)
+                except ContainerException as e:
+                    status[container] = {"status": "failure", "body": str(e)}
+                    self.logger.info(e)
+                else:
+                    status[container]["status"] = "success"
+        except KeyError:
+            response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
+            return response
+        if "requestId" in response:
+            del response["requestId"]
+        response["data"] = status
+        return response
 
     async def stop_container(self, response: dict, request: dict) -> dict:
         if "cli" not in request:
@@ -743,13 +770,32 @@ class LRAgentClient:
             address = "http://127.0.0.1:8080"
         try:
             msg = requests.get("{}/updatenow".format(address), json={})
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             response["data"] = {"status": "failure", "body": str(e)}
         else:
             if msg.ok:
                 response["data"] = {"status": "success", "message": "Cache update successful"}
             else:
                 response["data"] = {"status": "failure", "message": "Cache update failed"}
+        return response
+
+    async def trace_domain(self, response: dict, request: dict):
+        try:
+            address = os.environ["TRACE_LISTENER"]
+
+        except KeyError:
+            address = "http://127.0.0.1:8453"
+        query_type = request["data"]["type"] if "type" in request else ""
+        try:
+            msg = requests.get("{}/trace/{}/{}".format(address, request["data"]["domain"], query_type))
+        except requests.exceptions.RequestException as e:
+            response["data"] = {"status": "failure", "body": str(e)}
+        else:
+            if msg.ok:
+                response["data"] = {"status": "success", "trace": msg.content.decode("utf-8")}
+            else:
+                response["data"] = {"status": "failure", "message": "Trace failed",
+                                    "error": msg.content.decode("utf-8")}
         return response
 
     async def pack_files(self, response: dict, request: dict) -> dict:

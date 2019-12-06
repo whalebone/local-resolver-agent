@@ -1,4 +1,4 @@
-import traceback
+import requests
 import json
 import psutil
 import errno
@@ -81,6 +81,21 @@ class SystemInfo:
                 json.dump(results, file)
             else:
                 return json.load(file)
+
+    def get_kresman_metrics(self) -> dict:
+        try:
+            address = os.environ["KRESMAN_LISTENER"]
+        except KeyError:
+            address = "http://127.0.0.1:8080"
+        try:
+            msg = requests.get("{}/metrics".format(address))
+        except requests.exceptions.RequestException as e:
+            self.logger.info("Failed to get data from kresman, {}".format(e))
+        else:
+            try:
+                return {metric: int(value.split(".")[0]) for metric, value in msg.json().items()}
+            except Exception as e:
+                return {"data": msg.content.decode("utf-8"), "error": str(e)}
 
     def check_resolver_process(self, pid: str) -> str:
         return self.docker_connector.container_exec("resolver",
@@ -223,6 +238,7 @@ class SystemInfo:
             "check": {"resolve": self.check_resolving(), "port": self.check_port()},
             "containers": {container.name: container.status for container in self.docker_connector.get_containers()},
             "images": self.get_images(),
+            "kresman_metrics": self.get_kresman_metrics(),
             "error_messages": self.error_stash,
             "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             'interfaces': self.get_interfaces()

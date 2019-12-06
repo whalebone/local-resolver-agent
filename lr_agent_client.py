@@ -813,7 +813,6 @@ class LRAgentClient:
             else:
                 try:
                     args = "" if request["data"]["clear"] == "all" else "'{}', true".format(request["data"]["clear"])
-                    self.logger.info("cache.clear({})".format(args))
                     message = "cache.clear({})".format(args).encode("utf-8")
                     sock.sendall(message)
                     response["data"] = {"status": "success"}

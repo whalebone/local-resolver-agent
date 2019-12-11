@@ -6,7 +6,7 @@ import websockets
 
 from lr_agent_client import LRAgentClient
 # from lr_agent_local import LRAgentLocalClient
-from exception.exc import InitException, PongFailedException
+from exception.exc import InitException, PongFailedException, TaskFailedException
 from loggingtools.logger import build_logger
 
 
@@ -35,6 +35,13 @@ async def connect():
     return await websockets.connect(proxy_address, ssl=ssl_context)
 
 
+async def task_monitor():
+    if "listen" not in [task._coro.__name__ for task in asyncio.Task.all_tasks() if not task.done()]:
+        logger = logging.getLogger("main")
+        logger.error("Task listen not found in running tasks.")
+        raise TaskFailedException
+
+
 async def local_resolver_agent_app():
     logger = logging.getLogger("main")
     try:
@@ -45,7 +52,7 @@ async def local_resolver_agent_app():
         try:
             websocket = await connect()
             remote_client = LRAgentClient(websocket)
-            future = asyncio.ensure_future(remote_client.listen())
+            task = asyncio.ensure_future(remote_client.listen())
             # try:
             #     dummy_client = LRAgentClient(None)
             #     local_client = LRAgentLocalClient(dummy_client)
@@ -56,12 +63,15 @@ async def local_resolver_agent_app():
             while True:
                 await remote_client.send_sys_info()
                 await remote_client.validate_host()
+                await task_monitor()
                 await asyncio.sleep(interval)
         except Exception:
             try:
-                e = future.exception()
-                if type(e) not in [websockets.exceptions.ConnectionClosed, PongFailedException]:
-                    logger.error('Generic error: {}'.format(str(e)))
+                te = task.exception()
+                if type(te) in [websockets.exceptions.ConnectionClosed, PongFailedException]:
+                    logger.error("Connection error encountered.")
+                else:
+                    logger.error('Generic error: {}'.format(te))
                 await websocket.close()
             except Exception:
                 pass
@@ -79,7 +89,7 @@ if __name__ == '__main__':
         loop = asyncio.get_event_loop()
         loop.run_until_complete(local_resolver_agent_app())
         loop.run_forever()
-    except InitException as e:
-        logger.error(str(e))
+    except InitException as ie:
+        logger.error(str(ie))
     except Exception as e:
         logger.error(str(e))

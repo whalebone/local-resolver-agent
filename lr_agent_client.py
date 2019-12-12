@@ -784,7 +784,6 @@ class LRAgentClient:
     async def trace_domain(self, response: dict, request: dict):
         try:
             address = os.environ["TRACE_LISTENER"]
-
         except KeyError:
             address = "http://127.0.0.1:8453"
         query_type = request["data"]["type"] if "type" in request["data"] else ""

@@ -16,6 +16,7 @@ class Cli:
         arg_list = list(filter(None, self.cli_input["args"]))
         action_mapping = {"remove": {"containers": arg_list},
                           "stop": {"containers": arg_list},
+                          "restart": {"containers": arg_list},
                           "create": {},  # "compose": self.cli_input["args"]
                           "upgrade": {"services": arg_list}}
         return action_mapping[action]
@@ -74,7 +75,7 @@ class Cli:
 
     async def run_command(self):
         agent = LRAgentClient(None)
-        has_params = ["stop", "remove", "create", "upgrade"]
+        has_params = ["stop", "remove", "create", "upgrade", "restart"]
         try:
             if self.cli_input["action"] in has_params:
                 request = {"requestId": "666", "cli": "true", "action": self.cli_input["action"],
@@ -104,7 +105,8 @@ class Cli:
 
 if __name__ == '__main__':
     # upgrade works ass restart
-    supported_actions = ["sysinfo", "stop", "remove", "containers", "create", "upgrade", "updatecache", "list", "run"]
+    supported_actions = ["sysinfo", "stop", "remove", "containers", "create", "upgrade", "updatecache", "list", "run",
+                         "restart"]
     parser = argparse.ArgumentParser(prog='lr-agent-cli', usage='%(prog)s [options]',
                                      description="This code can be called to run commands of agent without wsproxy")
     parser.add_argument('--version', action='version', version='%(prog)s 0.1')
@@ -117,4 +119,4 @@ if __name__ == '__main__':
     cli = Cli(vars(args))
     loop = asyncio.get_event_loop()
     loop.run_until_complete(cli.run_command())
-    #loop.run_forever()
+    # loop.run_forever()

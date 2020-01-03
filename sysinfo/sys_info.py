@@ -91,6 +91,7 @@ class SystemInfo:
             msg = requests.get("{}/metrics".format(address))
         except requests.exceptions.RequestException as e:
             self.logger.info("Failed to get data from kresman, {}".format(e))
+            return {"error": str(e)}
         else:
             try:
                 return {metric: int(value.split(".")[0]) for metric, value in msg.json().items()}

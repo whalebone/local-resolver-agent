@@ -278,6 +278,13 @@ class LRAgentClient:
                 result = self.upgrade_save_files(request, compose, ["config"])
                 if result:
                     status["dump"] = result
+            running_containers = [container.name for container in self.dockerConnector.get_containers()]
+            if "lr-agent-old" in running_containers and "lr-agent" not in running_containers:
+                try:
+                    await self.dockerConnector.rename_container("lr-agent-old", "lr-agent")
+                except ContainerException as ce:
+                    return {"status": "failure",
+                            "message": "agent old running without agent, rename failed, {}".format(ce)}
             for service in services:
                 status[service] = {}
                 if service not in parsed_compose["services"]:
@@ -297,14 +304,6 @@ class LRAgentClient:
                     else:
                         status[service] = remove
                 else:
-                    running_containers = [container.name for container in self.dockerConnector.get_containers()]
-                    if "lr-agent-old" in running_containers and "lr-agent" not in running_containers:
-                        try:
-                            await self.dockerConnector.rename_container("lr-agent-old", "lr-agent")
-                        except ContainerException as ce:
-                            status[service] = {"status": "failure",
-                                               "message": "agent old running without agent, rename failed, {}".format(ce)}
-                            continue
                     if service == "resolver" and sysinfo_connector.check_port() == "fail":
                         remove = await self.upgrade_worker_method(service, service,
                                                                   self.dockerConnector.remove_container,

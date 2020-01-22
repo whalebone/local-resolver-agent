@@ -150,7 +150,7 @@ class SystemInfo:
                     amount_received += len(data)
                 return data.decode("utf-8")
             except socket.timeout as re:
-                self.logger.warning("Failed to get data from scoket {}, {}".format(tty, re))
+                self.logger.warning("Failed to get data from socket {}, {}".format(tty, re))
             except Exception as e:
                 self.logger.warning("Failed to get data from {}, {}".format(tty, e))
             finally:

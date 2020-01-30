@@ -731,6 +731,7 @@ class Tester():
                 self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rename.json()))
 
     def final_print(self):
+        print("==============Test evaluation==============")
         for key, value in self.status.items():
             if isinstance(value, str):
                 self.logger.info("{}    {}".format(key, value))

@@ -334,7 +334,7 @@ class LRAgentClient:
                             else:
                                 try:
                                     if service == "resolver":
-                                        for interval in range(10):
+                                        for _ in range(10):
                                             if sysinfo_connector.check_port() == "ok" and \
                                                     sysinfo_connector.check_port("resolver-old") == "ok":
                                                 break

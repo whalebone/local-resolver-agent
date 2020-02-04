@@ -38,7 +38,7 @@ class LRAgentClient:
         self.folder = "/etc/whalebone/"
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
         self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
-        self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect"]
+        self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect", "updatecache"]
         self.error_stash = {}
         if "WEBSOCKET_LOGGING" in os.environ:
             self.enable_websocket_log()
@@ -70,7 +70,7 @@ class LRAgentClient:
                     self.logger.warning(e)
                 else:
                     try:
-                        if response["action"] in self.async_actions:
+                        if response["action"] in self.async_actions and response["action"] != "updatecache":
                             self.process_response(response)
                     except Exception as e:
                         self.logger.info("Error during exception persistance, {}".format(e))
@@ -190,7 +190,7 @@ class LRAgentClient:
                             "fwmodify": [response, request], "fwdelete": [response, request],
                             "logs": [response], "log": [response, request],
                             "flog": [response, request], "dellogs": [response, request], "test": [response],
-                            "updatecache": [response], "saveconfig": [response, request],
+                            "updatecache": [response, request], "saveconfig": [response, request],
                             "whitelistadd": [response, request], "localtest": [response],
                             "datacollect": [response, request], "trace": [response, request]}
 
@@ -239,7 +239,7 @@ class LRAgentClient:
                 else:
                     status[service]["status"] = "success"
                     if service == "resolver":
-                        await self.update_cache({})
+                        await self.update_cache()
             if "requestId" in response:
                 del response["requestId"]
             response["data"] = status
@@ -406,7 +406,7 @@ class LRAgentClient:
                                     if "status" not in status[service]:
                                         status[service]["status"] = "success"
                                         if service == "resolver":
-                                            await self.update_cache({})
+                                            await self.update_cache()
             try:
                 if all(state["status"] == "success" for state in status.values()):
                     result = self.upgrade_save_files(request, compose, ["compose"])
@@ -757,7 +757,9 @@ class LRAgentClient:
         response["data"] = {"status": "success", "message": "Agent seems ok"}
         return response
 
-    async def update_cache(self, response: dict) -> dict:
+    async def update_cache(self, response: dict = None, request: dict = None) -> dict:
+        if request and "cli" not in request:
+            await self.send_acknowledgement(response)
         try:
             address = os.environ["KRESMAN_LISTENER"]
         except KeyError:
@@ -765,12 +767,14 @@ class LRAgentClient:
         try:
             msg = requests.get("{}/updatenow".format(address), json={})
         except requests.exceptions.RequestException as e:
-            response["data"] = {"status": "failure", "body": str(e)}
+            if response:
+                response["data"] = {"status": "failure", "body": str(e)}
         else:
-            if msg.ok:
-                response["data"] = {"status": "success", "message": "Cache update successful"}
-            else:
-                response["data"] = {"status": "failure", "message": "Cache update failed"}
+            if response:
+                if msg.ok:
+                    response["data"] = {"status": "success", "message": "Cache update successful"}
+                else:
+                    response["data"] = {"status": "failure", "message": "Cache update failed"}
         return response
 
     async def trace_domain(self, response: dict, request: dict):

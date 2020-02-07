@@ -239,7 +239,7 @@ class SystemInfo:
             "check": {"resolve": self.check_resolving(), "port": self.check_port()},
             "containers": {container.name: container.status for container in self.docker_connector.get_containers()},
             "images": self.get_images(),
-            "kresman_metrics": self.get_kresman_metrics(),
+            "kresman": self.get_kresman_metrics(),
             "error_messages": self.error_stash,
             "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             'interfaces': self.get_interfaces()

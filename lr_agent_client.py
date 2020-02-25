@@ -324,8 +324,8 @@ class LRAgentClient:
                             start = await self.upgrade_start_service(service, parsed_compose["services"][service])
                             if start != "success":
                                 status[service] = start
-                                rename = await self.upgrade_worker_method(service, self.dockerConnector.rename_container,
-                                                                          "rename rollback", "{}-old".format(service))
+                                rename = await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
+                                                                          "rename rollback", service)
                                 if rename:
                                     status[service] = rename
                             else:
@@ -361,10 +361,10 @@ class LRAgentClient:
                                                         await self.upgrade_worker_method(service,
                                                                                          self.dockerConnector.remove_container,
                                                                                          "Filed to remove new resolver.")
-                                                        await self.upgrade_worker_method(service,
+                                                        await self.upgrade_worker_method("resolver-old",
                                                                                          self.dockerConnector.rename_container,
                                                                                          "Filed to remove new resolver.",
-                                                                                         "resolver-old")
+                                                                                         service)
                                                     except Exception as e:
                                                         self.logger.warning(
                                                             "Failure during healthcheck rollback, {}".format(e))
@@ -394,9 +394,9 @@ class LRAgentClient:
                                     remove = await self.upgrade_worker_method(service, self.dockerConnector.remove_container,
                                                                               "removal of old and new service")
                                     if not remove:
-                                        rename = await self.upgrade_worker_method(service, self.dockerConnector.rename_container,
+                                        rename = await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
                                                                                   "removal and rename of old agent",
-                                                                                  "{}-old".format(service))
+                                                                                  service)
                                         if rename:
                                             status[service] = rename
                                     else:
@@ -453,7 +453,7 @@ class LRAgentClient:
         try:
             if service in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
                 if name:
-                    await action(name, service)
+                    await action(service, name)
                 else:
                     await action(service)
         except ContainerException as e:

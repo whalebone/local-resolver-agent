@@ -83,10 +83,7 @@ class SystemInfo:
                 return json.load(file)
 
     def get_kresman_metrics(self) -> dict:
-        try:
-            address = os.environ["KRESMAN_LISTENER"]
-        except KeyError:
-            address = "http://127.0.0.1:8080"
+        address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
             msg = requests.get("{}/metrics".format(address), timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
         except requests.exceptions.RequestException as e:

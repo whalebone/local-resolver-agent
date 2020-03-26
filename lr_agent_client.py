@@ -760,10 +760,7 @@ class LRAgentClient:
     async def update_cache(self, response: dict = None, request: dict = None) -> dict:
         if request and "cli" not in request:
             await self.send_acknowledgement(response)
-        try:
-            address = os.environ["KRESMAN_LISTENER"]
-        except KeyError:
-            address = "http://127.0.0.1:8080"
+        address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
             msg = requests.get("{}/updatenow".format(address), json={}, timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
         except requests.exceptions.RequestException as e:

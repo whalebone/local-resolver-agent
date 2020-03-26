@@ -781,7 +781,8 @@ class LRAgentClient:
             address = "http://127.0.0.1:8453"
         query_type = request["data"]["type"] if "type" in request["data"] else ""
         try:
-            msg = requests.get("{}/trace/{}/{}".format(address, request["data"]["domain"], query_type))
+            msg = requests.get("{}/trace/{}/{}".format(address, request["data"]["domain"], query_type),
+                               timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
         except requests.exceptions.RequestException as e:
             response["data"] = {"status": "failure", "body": str(e)}
         else:
@@ -845,7 +846,7 @@ class LRAgentClient:
                 try:
                     requests.post(request["data"],
                                   json={"text": "New customer log archive was uploaded:\n{}".format(
-                                      req.content.decode("utf-8"))})
+                                      req.content.decode("utf-8"))}, timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
                 except Exception as e:
                     self.logger.info("Failed to send notification to Slack, {}".format(e))
                 else:

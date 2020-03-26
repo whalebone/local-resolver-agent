@@ -88,7 +88,7 @@ class SystemInfo:
         except KeyError:
             address = "http://127.0.0.1:8080"
         try:
-            msg = requests.get("{}/metrics".format(address))
+            msg = requests.get("{}/metrics".format(address), timeout=5)
         except requests.exceptions.RequestException as e:
             self.logger.info("Failed to get data from kresman, {}".format(e))
             return {"error": str(e)}

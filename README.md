@@ -16,6 +16,7 @@ Agent envs:
 - LOCAL_API_PORT: (optional) local api port, if not set default value of 8765 will be used
 - KEEP_ALIVE: (optional) specifies the time between keepalive pings, if not set 10s is used
 - DISABLE_FILE_LOGS: (optional) disables logging to file, keeps logging to console
+- HTTP_TIMEOUT: (optional) explicit requests timeout (default: 5 seconds)
 - WEBSOCKET_LOGGING: (optional) enable logging of Websockets library, should be supplied as integer using Python [logging codes](https://docs.python.org/3/library/logging.html#logging-levels), use levels INFO, DEBUG and ERROR
 
 Messages:

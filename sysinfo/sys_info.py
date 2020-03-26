@@ -88,7 +88,7 @@ class SystemInfo:
         except KeyError:
             address = "http://127.0.0.1:8080"
         try:
-            msg = requests.get("{}/metrics".format(address), timeout=5)
+            msg = requests.get("{}/metrics".format(address), timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
         except requests.exceptions.RequestException as e:
             self.logger.info("Failed to get data from kresman, {}".format(e))
             return {"error": str(e)}
@@ -96,7 +96,7 @@ class SystemInfo:
             try:
                 return {metric: int(value.split(".")[0]) for metric, value in msg.json().items()}
             except Exception as e:
-                return {"data": msg.content.decode("utf-8"), "error": str(e)}
+                return {"error": str(e)}
 
     def check_resolver_process(self, pid: str) -> str:
         return self.docker_connector.container_exec("resolver",

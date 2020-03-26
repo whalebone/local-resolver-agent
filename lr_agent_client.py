@@ -765,7 +765,7 @@ class LRAgentClient:
         except KeyError:
             address = "http://127.0.0.1:8080"
         try:
-            msg = requests.get("{}/updatenow".format(address), json={}, timeout=5)
+            msg = requests.get("{}/updatenow".format(address), json={}, timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
         except requests.exceptions.RequestException as e:
             if response:
                 response["data"] = {"status": "failure", "body": str(e)}

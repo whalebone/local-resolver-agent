@@ -93,6 +93,7 @@ SUPPORTED_PARAMETERS = {
     'environment': parse_envs,
     'tty': parse_value,
     'privileged': parse_value,
+    "cap_add": parse_value,
     'stdin_open': parse_value,
     'restart': {'fn': parse_restart_policy, 'name': 'restart_policy'},
     'cpu_shares': parse_value,

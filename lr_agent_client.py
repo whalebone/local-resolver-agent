@@ -408,6 +408,7 @@ class LRAgentClient:
                                         if service == "resolver":
                                             await self.update_cache()
             try:
+                self.logger.info(status)
                 if all(state["status"] == "success" for state in status.values()):
                     result = self.upgrade_save_files(request, compose, ["compose"])
                     if result:
@@ -762,7 +763,8 @@ class LRAgentClient:
             await self.send_acknowledgement(response)
         address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
-            msg = requests.get("{}/updatenow".format(address), json={}, timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
+            # msg = requests.get("{}/updatenow".format(address), json={}, timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
+            msg = requests.get("{}/updatenow".format(address), json={})
         except requests.exceptions.RequestException as e:
             if response:
                 response["data"] = {"status": "failure", "body": str(e)}
@@ -782,7 +784,7 @@ class LRAgentClient:
         query_type = request["data"]["type"] if "type" in request["data"] else ""
         try:
             msg = requests.get("{}/trace/{}/{}".format(address, request["data"]["domain"], query_type),
-                               timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
+                               timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
         except requests.exceptions.RequestException as e:
             response["data"] = {"status": "failure", "body": str(e)}
         else:
@@ -846,7 +848,7 @@ class LRAgentClient:
                 try:
                     requests.post(request["data"],
                                   json={"text": "New customer log archive was uploaded:\n{}".format(
-                                      req.content.decode("utf-8"))}, timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
+                                      req.content.decode("utf-8"))}, timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
                 except Exception as e:
                     self.logger.info("Failed to send notification to Slack, {}".format(e))
                 else:

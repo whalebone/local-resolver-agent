@@ -85,7 +85,7 @@ class SystemInfo:
     def get_kresman_metrics(self) -> dict:
         address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
-            msg = requests.get("{}/metrics".format(address), timeout=int(os.environ.get("HTTP_TIMEOUT", 5)))
+            msg = requests.get("{}/metrics".format(address), timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
         except requests.exceptions.RequestException as e:
             self.logger.info("Failed to get data from kresman, {}".format(e))
             return {"error": str(e)}

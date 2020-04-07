@@ -20,7 +20,7 @@ class DockerConnector:
             self.logger.info(e)
             return []
 
-    def get_containers(self, stopped: bool = False):
+    def get_containers(self, stopped: bool = False) -> list:
         try:
             return self.docker_client.containers.list(all=stopped)
         except Exception as e:
@@ -34,7 +34,7 @@ class DockerConnector:
             self.logger.info(e)
             return ""
 
-    def container_exec(self, name: str, command: list):
+    def container_exec(self, name: str, command: list) -> str:
         service = self.get_container(name)
         if service != "":
             try:
@@ -54,7 +54,7 @@ class DockerConnector:
         except Exception as e:
             raise ContainerException(e)
 
-    def docker_version(self):
+    def docker_version(self) -> dict:
         try:
             return self.api_client.version()
         except Exception as e:

@@ -1,4 +1,4 @@
-FROM python:3.7-slim-buster
+FROM python:3.8-slim-buster
 #RUN apt-get update && apt-get -y install python3-pip
 WORKDIR /root/
 #RUN git clone https://github.com/secdev/scapy.git

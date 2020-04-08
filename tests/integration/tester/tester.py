@@ -30,6 +30,9 @@ class Tester():
         logging.basicConfig(level=logging.DEBUG)
         self.status = {}
         self.logger = logging.getLogger(__name__)
+        # console_handler = logging.StreamHandler()
+        # console_handler.setFormatter(logging.Formatter('%(asctime)s | %(message)s'))
+        # self.logger.addHandler(console_handler)
 
     def parse_volumes(self, volumes_list):
         volumes_dict = {}
@@ -48,7 +51,7 @@ class Tester():
         return volumes_dict
 
     def start_agent(self):
-        compose = yaml.load(self.compose_reader("agent-compose.yml"))
+        compose = yaml.load(self.compose_reader("agent-compose.yml"), Loader=yaml.SafeLoader)
         for k, v in compose["services"].items():
             if "volumes" in v:
                 compose["services"][k]["volumes"] = self.parse_volumes(v["volumes"])
@@ -706,6 +709,45 @@ class Tester():
                 self.logger.info("Pack data success")
                 self.status["pack_data"] = "ok"
 
+    def create_file(self):
+        for name in ["wb_client.crt", "wb_client.key"]:
+            with open("/etc/whalebone/{}".format(name), "w") as file:
+                file.write("test")
+
+    def check_file(self, name):
+        return os.path.exists("/etc/whalebone/{}".format(name))
+
+    def inspect_container(self, name: str):
+        return self.api_client.inspect_container(name)["Config"]["Env"]
+
+    def commit_suicide(self):
+        env_config = {"kresman": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "CA_CRT_BASE64", "CORE_URL"]}
+        try:
+            self.create_file()
+            print("commiting suicide")
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/suicide".format(self.proxy_address, self.agent_id))
+            print(rec.status_code)
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            time.sleep(6)
+            if all(not self.check_file(name) for name in ["wb_client.crt", "wb_client.key"]):
+                containers = [container.name for container in self.docker_client.containers.list()]
+                if all(container not in containers for container in ["logstream", "lr-agent"]):
+                    for cont_name, envs in env_config.items():
+                        for env_var in self.inspect_container(cont_name):
+                            env_var = env_var.split("=")
+                            if env_var[0] in envs and env_var[1] != "some string":
+                                self.status["suicide"] = {
+                                    "fail": {"{} env {} has some value".format(cont_name, env_var[0])}}
+                                return
+                    self.status["suicide"] = "ok"
+                else:
+                    self.logger.warning("Found running containers {}".format(containers))
+            else:
+                self.logger.warning("Files found")
+
     def upgrade_agent_with_old_present(self):
         compose = self.compose_reader("agent-compose-upgraded.yml")
         try:
@@ -852,6 +894,11 @@ class Tester():
             self.upgrade_all([])
         except Exception as e:
             self.logger.info(e)
+        time.sleep(10)
+        try:
+            self.commit_suicide()
+        except Exception as e:
+            self.logger.info(e)
         # time.sleep(10)
         # try:
         #     self.upgrade_all(["lr-agent", "resolver", "kresman"])
@@ -889,7 +936,10 @@ class Tester():
             self.logger.info(e)
 
 
-
 if __name__ == '__main__':
     tester = Tester()
     tester.run_test()
+    try:
+        os.remove("/etc/whalebone/agent/docker-compose.yml")
+    except FileNotFoundError:
+        pass

@@ -20,6 +20,7 @@ services:
         PROXY_ADDRESS: 'localhost'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/whalebone/:/etc/whalebone/
   redis:
     image: redis:4.0
     network_mode: host

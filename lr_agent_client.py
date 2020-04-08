@@ -408,7 +408,6 @@ class LRAgentClient:
                                         if service == "resolver":
                                             await self.update_cache()
             try:
-                self.logger.info(status)
                 if all(state["status"] == "success" for state in status.values()):
                     result = self.upgrade_save_files(request, compose, ["compose"])
                     if result:

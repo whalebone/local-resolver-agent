@@ -3,7 +3,7 @@ import asyncio
 import base64
 import logging
 import socket
-
+import zipfile
 import yaml
 import os
 import requests
@@ -15,7 +15,6 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID
 from subprocess import call
-import zipfile
 from datetime import datetime
 
 from dockertools.docker_connector import DockerConnector
@@ -38,7 +37,7 @@ class LRAgentClient:
         self.folder = "/etc/whalebone/"
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
         self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
-        self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect", "updatecache"]
+        self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect", "updatecache", "suicide"]
         self.error_stash = {}
         if "WEBSOCKET_LOGGING" in os.environ:
             self.enable_websocket_log()
@@ -112,12 +111,12 @@ class LRAgentClient:
                 self.logger.info("Done persisted upgrade with response: {}".format(response))
                 self.process_response(response)
             os.remove("{}compose/upgrade.json".format(self.folder))
-        elif not os.path.exists("{}compose/docker-compose.yml".format(self.folder)):
+        elif not os.path.exists("{}etc/agent/docker-compose.yml".format(self.folder)):
             request = {"action": "request", "data": {"message": "compose missing"}}
             await self.send(request)
         else:
             try:
-                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
                     parsed_compose = self.compose_parser.create_service(compose)
                     active_services = [container.name for container in self.dockerConnector.get_containers()]
                     for service, config in parsed_compose["services"].items():
@@ -175,7 +174,7 @@ class LRAgentClient:
                         "restart": self.restart_container, "stop": self.stop_container, "remove": self.remove_container,
                         "containerlogs": self.container_logs, "clearcache": self.resolver_cache_clear,
                         "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
-                        "fwmodify": self.modify_rule, "fwdelete": self.delete_rule,
+                        "fwmodify": self.modify_rule, "fwdelete": self.delete_rule, "suicide": self.resolver_suicide,
                         "logs": self.agent_log_files, "log": self.agent_all_logs,
                         "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
                         "test": self.agent_test_message, "updatecache": self.update_cache,
@@ -188,7 +187,7 @@ class LRAgentClient:
                             "stop": [response, request], "remove": [response, request],
                             "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
                             "fwmodify": [response, request], "fwdelete": [response, request],
-                            "logs": [response], "log": [response, request],
+                            "logs": [response], "log": [response, request], "suicide": [response],
                             "flog": [response, request], "dellogs": [response, request], "test": [response],
                             "updatecache": [response, request], "saveconfig": [response, request],
                             "whitelistadd": [response, request], "localtest": [response],
@@ -263,16 +262,15 @@ class LRAgentClient:
             services = request["data"]["services"] if request["data"]["services"] else list(parsed_compose["services"])
             # else:
             #     services = list(parsed_compose["services"].keys())
-            if "lr-agent" in services:
-                if len(services) != 1:
-                    request["data"]["services"] = [service for service in services if service != "lr-agent"]
-                    request["data"]["compose"] = json.dumps(
-                        {key: value for key, value in parsed_compose["services"].items() if key != "lr-agent"})
-                    self.save_file("compose/upgrade.json", "json", request)
-                    services = ["lr-agent"]
+            if "lr-agent" in services and len(services) != 1:
+                request["data"]["services"] = [service for service in services if service != "lr-agent"]
+                request["data"]["compose"] = json.dumps(
+                    {key: value for key, value in parsed_compose["services"].items() if key != "lr-agent"})
+                self.save_file("compose/upgrade.json", "json", request)
+                services = ["lr-agent"]
             if "resolver" in services:
                 try:
-                    old_config = self.load_file("resolver/kres.conf")
+                    old_config = self.load_file("etc/kres/kres.conf")
                 except IOError as e:
                     status["load"] = {"status": "failure", "body": str(e)}
                 result = self.upgrade_save_files(request, compose, ["config"])
@@ -338,7 +336,7 @@ class LRAgentClient:
                                             await asyncio.sleep(1)
                                         else:
                                             try:
-                                                self.save_file("resolver/kres.conf", "text", old_config)
+                                                self.save_file("etc/kres/kres.conf", "text", old_config)
                                             except Exception as e:
                                                 self.logger.warning("Failed to back up to old config".format(e))
                                             raise ContainerException("New resolver is not healthy rollback")
@@ -350,7 +348,7 @@ class LRAgentClient:
                                         else:
                                             if sysinfo_connector.check_resolving() == "fail":
                                                 try:
-                                                    self.save_file("resolver/kres.conf", "text", old_config)
+                                                    self.save_file("etc/kres/kres.conf", "text", old_config)
                                                 except Exception as e:
                                                     self.logger.warning("Failed to back up to old config".format(e))
                                                 restart = await self.upgrade_worker_method("resolver-old",
@@ -422,9 +420,9 @@ class LRAgentClient:
     def upgrade_save_files(self, request: dict, decoded_data, keys: list) -> dict:
         try:
             if "compose" in keys and "compose" in request["data"]:
-                self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+                self.save_file("etc/agent/docker-compose.yml", "yml", decoded_data)
             if "config" in keys and "config" in request["data"]:
-                self.save_file("resolver/kres.conf", "text", request["data"]["config"])
+                self.save_file("etc/kres/kres.conf", "text", request["data"]["config"])
         except IOError as e:
             return {"status": "failure", "body": str(e)}
         else:
@@ -435,7 +433,7 @@ class LRAgentClient:
             return request["data"]["compose"]
         else:
             try:
-                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
                     return compose.read()
             except FileNotFoundError:
                 del response["requestId"]
@@ -820,6 +818,58 @@ class LRAgentClient:
                 response["data"] = {"status": "failure"}
             return response
 
+    async def resolver_suicide(self, response: dict):
+        await self.send_acknowledgement(response)
+        status = {}
+        for action in [self.suicide_delete_certs, self.suicide_modify_compose, self.suicide_delete_containers]:
+            try:
+                if action.__name__ != "suicide_delete_containers":
+                    await action()
+                else:
+                    await action(status)
+            except Exception as e:
+                self.logger.warning("Failed to execute suicide action {}, {}.".format(action.__name__, e))
+                status[action.__name__] = {"status": "failure", "error": str(e)}
+            else:
+                status[action.__name__] = "success"
+        self.logger.warning("Failed tp finish suicide: {}".format(status))
+
+    async def suicide_delete_certs(self):
+        for file_name in ["wb_client.crt", "wb_client.key"]:
+            try:
+                os.remove("{}etc/{}".format(self.folder, file_name))
+            except FileNotFoundError:
+                self.logger.warning()
+
+    async def suicide_modify_compose(self):
+        env_config = {"kresman": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "CA_CRT_BASE64", "CORE_URL"],
+                      "lr-agent": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "PROXY_ADDRESS"]}
+        with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
+            parsed_compose = self.compose_parser.create_service(compose)
+            try:
+                del parsed_compose["services"]["logstream"]
+            except KeyError:
+                self.logger.warning("Logstream not found in compose")
+            for name, envs in env_config.items():
+                for env in envs:
+                    try:
+                        parsed_compose["services"][name]["environment"][env] = "some string"
+                    except KeyError as ke:
+                        self.logger.warning("Failed to alter variable {} for {}, key {} is missing".format(env, name, ke))
+            await self.upgrade_container({},
+                                         {"data": {"services": ["kresman"], "compose": yaml.dump(parsed_compose)},
+                                          "cli": "true"})
+
+    async def suicide_delete_containers(self, status: dict):
+        for name in ["logstream", "lr-agent"]:
+            if name == "lr-agent":
+                try:
+                    await self.send({"action": "suicide", "status": status,
+                                     "message": "All those moments will be lost in time, like tears in rain. Time to die."})
+                except Exception as e:
+                    self.logger.info("Failed to acknowledge suicide, {}.".format(e))
+            await self.remove_container({}, {"data": {"containers": [name]}, "cli": "true"})
+
     async def pack_files(self, response: dict, request: dict) -> dict:
         if "cli" not in request:
             await self.send_acknowledgement(response)
@@ -879,7 +929,7 @@ class LRAgentClient:
                    "list_containers": {"action": "docker", "command": self.docker_ps(),
                                        "path": "{}/docker_ps".format(folder)},
                    }
-        with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+        with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
             parsed_compose = self.compose_parser.create_service(yaml.load(compose, Loader=yaml.SafeLoader))
             for service in parsed_compose["services"]:
                 try:
@@ -1030,6 +1080,7 @@ class LRAgentClient:
 
     def save_file(self, location: str, file_type: str, content, mode: str = "w"):
         try:
+            self.create_required_directory(location)
             with open("{}{}".format(self.folder, location), mode) as file:
                 if file_type == "yml":
                     yaml.dump(content, file, default_flow_style=False)
@@ -1043,6 +1094,11 @@ class LRAgentClient:
         except Exception as e:
             self.logger.info("Failed to save file: {}".format(e))
             raise IOError(e)
+
+    def create_required_directory(self, name: str):
+        if "/" in name:
+            path = "/".join(name.split("/")[:-1])
+            os.makedirs("{}{}".format(self.folder, path), exist_ok=True)
 
     def load_file(self, location: str) -> list:
         try:

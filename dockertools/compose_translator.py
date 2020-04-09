@@ -25,7 +25,7 @@ def parse_logging(logging: dict) -> dict:
 def parse_envs(envs: dict) -> dict:
     file_mapping = {"CLIENT_CRT_BASE64": "client.crt", "CLIENT_KEY_BASE64": "client.key"}
     for name, value in envs.items():
-        if name in file_mapping:
+        if name in file_mapping and not value:
             envs[name] = read_file(file_mapping[name])
         if name == "DNS_INTERFACE" and value == "":
             for interface in netifaces.gateways()["default"].values():

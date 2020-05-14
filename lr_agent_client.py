@@ -111,12 +111,12 @@ class LRAgentClient:
                 self.logger.info("Done persisted upgrade with response: {}".format(response))
                 self.process_response(response)
             os.remove("{}compose/upgrade.json".format(self.folder))
-        elif not os.path.exists("{}etc/agent/docker-compose.yml".format(self.folder)):
+        elif not os.path.exists("{}compose/docker-compose.yml".format(self.folder)):
             request = {"action": "request", "data": {"message": "compose missing"}}
             await self.send(request)
         else:
             try:
-                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
+                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
                     parsed_compose = self.compose_parser.create_service(compose)
                     active_services = [container.name for container in self.dockerConnector.get_containers()]
                     for service, config in parsed_compose["services"].items():
@@ -270,7 +270,7 @@ class LRAgentClient:
                 services = ["lr-agent"]
             if "resolver" in services:
                 try:
-                    old_config = self.load_file("etc/kres/kres.conf")
+                    old_config = self.load_file("resolver/kres.conf")
                 except IOError as e:
                     status["load"] = {"status": "failure", "body": str(e)}
                 result = self.upgrade_save_files(request, compose, ["config"])
@@ -336,7 +336,7 @@ class LRAgentClient:
                                             await asyncio.sleep(1)
                                         else:
                                             try:
-                                                self.save_file("etc/kres/kres.conf", "text", old_config)
+                                                self.save_file("resolver/kres.conf", "text", old_config)
                                             except Exception as e:
                                                 self.logger.warning("Failed to back up to old config".format(e))
                                             raise ContainerException("New resolver is not healthy rollback")
@@ -348,7 +348,7 @@ class LRAgentClient:
                                         else:
                                             if sysinfo_connector.check_resolving() == "fail":
                                                 try:
-                                                    self.save_file("etc/kres/kres.conf", "text", old_config)
+                                                    self.save_file("resolver/kres.conf", "text", old_config)
                                                 except Exception as e:
                                                     self.logger.warning("Failed to back up to old config".format(e))
                                                 restart = await self.upgrade_worker_method("resolver-old",
@@ -420,9 +420,9 @@ class LRAgentClient:
     def upgrade_save_files(self, request: dict, decoded_data, keys: list) -> dict:
         try:
             if "compose" in keys and "compose" in request["data"]:
-                self.save_file("etc/agent/docker-compose.yml", "yml", decoded_data)
+                self.save_file("compose/docker-compose.yml", "yml", decoded_data)
             if "config" in keys and "config" in request["data"]:
-                self.save_file("etc/kres/kres.conf", "text", request["data"]["config"])
+                self.save_file("resolver/kres.conf", "text", request["data"]["config"])
         except IOError as e:
             return {"status": "failure", "body": str(e)}
         else:
@@ -433,7 +433,7 @@ class LRAgentClient:
             return request["data"]["compose"]
         else:
             try:
-                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
+                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
                     return compose.read()
             except FileNotFoundError:
                 del response["requestId"]
@@ -844,7 +844,7 @@ class LRAgentClient:
     async def suicide_modify_compose(self):
         env_config = {"kresman": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "CA_CRT_BASE64", "CORE_URL"],
                       "lr-agent": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "PROXY_ADDRESS"]}
-        with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
+        with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
             parsed_compose = self.compose_parser.create_service(compose)
             try:
                 del parsed_compose["services"]["logstream"]
@@ -929,7 +929,7 @@ class LRAgentClient:
                    "list_containers": {"action": "docker", "command": self.docker_ps(),
                                        "path": "{}/docker_ps".format(folder)},
                    }
-        with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
+        with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
             parsed_compose = self.compose_parser.create_service(yaml.load(compose, Loader=yaml.SafeLoader))
             for service in parsed_compose["services"]:
                 try:

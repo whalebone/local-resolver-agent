@@ -44,10 +44,7 @@ async def task_monitor():
 
 async def local_resolver_agent_app():
     logger = logging.getLogger("main")
-    try:
-        interval = int(os.environ['PERIODIC_INTERVAL'])
-    except KeyError:
-        interval = 60
+    interval = int(os.environ.get('PERIODIC_INTERVAL', 60))
     while True:
         try:
             websocket = await connect()

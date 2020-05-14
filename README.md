@@ -48,6 +48,7 @@ Used volumes:
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 
 - /var/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
 - /etc/whalebone/agent/ : /etc/whalebone/compose/ - docker compose and upgrade is exposed
+- /etc/whalebone/:/etc/whalebone/etc/ - suicide folder required for cert deletion 
 - /var/lib/kres/tty/ : /etc/whalebone/tty/ - tty mapping of resolver processes
 
 

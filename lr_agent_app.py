@@ -31,25 +31,40 @@ async def connect():
     ssl_context.load_cert_chain(client_cert)
     # sslContext.load_cert_chain(WHALEBONE_LR_CLIENT_CERT)
     logger = logging.getLogger("main")
-    logger.info("Connecting to {0}".format(proxy_address))
-    return await websockets.connect(proxy_address, ssl=ssl_context)
+    try:
+        connection = await websockets.connect(proxy_address, ssl=ssl_context)
+    except Exception as ce:
+        raise InitException("Failed to connect to {} due to {}.".format(proxy_address, ce))
+    else:
+        logger.info("Connected to {}".format(proxy_address))
+        return connection
 
 
 async def task_monitor():
-    if "listen" not in [task._coro.__name__ for task in asyncio.Task.all_tasks() if not task.done()]:
+    if "listen" not in [task._coro.__name__ for task in asyncio.all_tasks() if not task.done()]:
         logger = logging.getLogger("main")
         logger.error("Task listen not found in running tasks.")
         raise TaskFailedException
 
 
+async def main_task_monitor():
+    while True:
+        if "local_resolver_agent_app" not in [task._coro.__name__ for task in asyncio.all_tasks() if not task.done()]:
+            logger = logging.getLogger("main")
+            logger.error("Task local_resolver_agent_app not found in running tasks.")
+            raise TaskFailedException
+        await asyncio.sleep(60)
+
+
 async def local_resolver_agent_app():
     logger = logging.getLogger("main")
     interval = int(os.environ.get('PERIODIC_INTERVAL', 60))
+    task_timeout = int(os.environ.get('TASK_TIMEOUT', 300))
     while True:
         try:
             websocket = await connect()
             remote_client = LRAgentClient(websocket)
-            task = asyncio.ensure_future(remote_client.listen())
+            task = asyncio.create_task(remote_client.listen())
             # try:
             #     dummy_client = LRAgentClient(None)
             #     local_client = LRAgentLocalClient(dummy_client)
@@ -58,10 +73,11 @@ async def local_resolver_agent_app():
             # else:
             #     await local_client.start_api()
             while True:
-                await remote_client.send_sys_info()
-                await remote_client.validate_host()
-                await task_monitor()
+                for periodic_task in (remote_client.send_sys_info, remote_client.validate_host, task_monitor):
+                    await asyncio.wait_for(periodic_task(), task_timeout)
                 await asyncio.sleep(interval)
+        except asyncio.exceptions.TimeoutError:
+            logger.error("Periodic task {} failed to finish in time, Retrying in 10 secs... .".format(periodic_task))
         except Exception:
             try:
                 te = task.exception()
@@ -69,11 +85,15 @@ async def local_resolver_agent_app():
                     logger.error("Connection error encountered.")
                 else:
                     logger.error('Generic error: {}'.format(te))
-                await websocket.close()
             except Exception:
                 pass
-            logger.error('Connection Reset. Retrying in 10 secs...')
-            await asyncio.sleep(10)
+        finally:
+            try:
+                await websocket.close()
+                logger.error('Connection Reset. Retrying in 10 secs...')
+                await asyncio.sleep(10)
+            except Exception as ce:
+                logger.warning("Failed to cleanup due to {}.".format(ce))
 
 
 if __name__ == '__main__':
@@ -85,8 +105,11 @@ if __name__ == '__main__':
     try:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(local_resolver_agent_app())
+        loop.create_task(main_task_monitor())
         loop.run_forever()
     except InitException as ie:
         logger.error(str(ie))
     except Exception as e:
         logger.error(str(e))
+    finally:
+        loop.close()

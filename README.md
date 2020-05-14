@@ -18,6 +18,8 @@ Agent envs:
 - DISABLE_FILE_LOGS: (optional) disables logging to file, keeps logging to console
 - HTTP_TIMEOUT: (optional) explicit requests timeout (default: 5 seconds)
 - WEBSOCKET_LOGGING: (optional) enable logging of Websockets library, should be supplied as integer using Python [logging codes](https://docs.python.org/3/library/logging.html#logging-levels), use levels INFO, DEBUG and ERROR
+- TASK_TIMEOUT: (optional) sets timeout for periodic actions in which they have to finish, otherwise error will be thrown
+
 
 Messages:
 ----------

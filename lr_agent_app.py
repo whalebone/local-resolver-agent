@@ -91,9 +91,10 @@ async def local_resolver_agent_app():
             try:
                 await websocket.close()
                 logger.error('Connection Reset. Retrying in 10 secs...')
-                await asyncio.sleep(10)
             except Exception as ce:
                 logger.warning("Failed to cleanup due to {}.".format(ce))
+            finally:
+                await asyncio.sleep(10)
 
 
 if __name__ == '__main__':

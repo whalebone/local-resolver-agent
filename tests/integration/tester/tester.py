@@ -73,11 +73,17 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                      "config": ['net.ipv6 = false',
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"]
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"]
                       # "config": {"resolver": [{"path": "kres.conf",
                       #                          "data": ["net.ipv6 = false", "net.listen('0.0.0.0')",
                       #                                   "net.listen('0.0.0.0', {tls=true})",
@@ -142,11 +148,17 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                      "config": ['net.ipv6 = false',
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -182,11 +194,17 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                      "config": ['net.ipv6 = false',
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -605,11 +623,17 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/onvsodnv/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
-                                 "cache.storage = 'lmdb:///var/lib/slvnjdsnv/cache'",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                      "config": ['net.ipv6 = false',
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
+                                 "cache.storage = 'lmdb:///var/fgnsgnsfgn/nbondbosobn/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -636,12 +660,24 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                      "config": ['net.ipv6 = false',
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
                                  "policy.forward('127.0.0.1')",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
+                      # "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
+                      #            "trust_anchors.file = '/etc/kres/root.keys'",
+                      #            "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                      #            "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                      #            "policy.forward('127.0.0.1')",
+                      #            "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
                       "services": services})
         except Exception as e:
             self.logger.warning(e)
@@ -668,11 +704,17 @@ class Tester():
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
-                      "config": ["net.ipv6 = false", "net.listen('0.0.0.0')", "net.listen('0.0.0.0', {tls=true})",
-                                 "trust_anchors.file = '/etc/kres/root.keys'",
-                                 "modules = { 'hints', 'policy', 'stats', 'predict', 'whalebone' }",
+                      "config": ['net.ipv6 = false',
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB"],
+                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
                       "services": services})
         except Exception as e:
             self.logger.warning(e)

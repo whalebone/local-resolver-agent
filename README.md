@@ -45,11 +45,12 @@ of _current_directory__tester_1 container. Wsproxy is required from Whalebone, t
 Used volumes:
 ----------
 - /var/run/docker.sock : /var/run/docker.sock - to access docker api
-- /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config 
+- /etc/whalebone/:/etc/whalebone/etc/
+<!-- - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config  -->
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 
 - /var/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
-- /etc/whalebone/agent/ : /etc/whalebone/compose/ - docker compose and upgrade is exposed
+<!-- - /etc/whalebone/agent/ : /etc/whalebone/compose/ - docker compose and upgrade is exposed  -->
 - /etc/whalebone/:/etc/whalebone/etc/ - suicide folder required for cert deletion 
 - /var/lib/kres/tty/ : /etc/whalebone/tty/ - tty mapping of resolver processes
 

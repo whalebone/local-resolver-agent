@@ -16,6 +16,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID
 from subprocess import call
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 from dockertools.docker_connector import DockerConnector
 from sysinfo.sys_info import SystemInfo
@@ -41,10 +42,7 @@ class LRAgentClient:
         self.error_stash = {}
         if "WEBSOCKET_LOGGING" in os.environ:
             self.enable_websocket_log()
-        try:
-            self.alive = int(os.environ['KEEP_ALIVE'])
-        except KeyError:
-            self.alive = 10
+        self.alive = int(os.environ.get('KEEP_ALIVE', 10))
 
     async def listen(self):
         # async for request in self.websocket:
@@ -100,8 +98,8 @@ class LRAgentClient:
         await self.send(message)
 
     async def validate_host(self):
-        if os.path.exists("{}compose/upgrade.json".format(self.folder)):
-            with open("{}compose/upgrade.json".format(self.folder), "r") as upgrade:
+        if os.path.exists("{}etc/agent/upgrade.json".format(self.folder)):
+            with open("{}etc/agent/upgrade.json".format(self.folder), "r") as upgrade:
                 request = json.loads(upgrade.read())
             try:
                 response = await self.upgrade_container({"action": "upgrade"}, request)
@@ -110,13 +108,13 @@ class LRAgentClient:
             else:
                 self.logger.info("Done persisted upgrade with response: {}".format(response))
                 self.process_response(response)
-            os.remove("{}compose/upgrade.json".format(self.folder))
-        elif not os.path.exists("{}compose/docker-compose.yml".format(self.folder)):
+            os.remove("{}etc/agent/upgrade.json".format(self.folder))
+        elif not os.path.exists("{}etc/agent/docker-compose.yml".format(self.folder)):
             request = {"action": "request", "data": {"message": "compose missing"}}
             await self.send(request)
         else:
             try:
-                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
                     parsed_compose = self.compose_parser.create_service(compose)
                     active_services = [container.name for container in self.dockerConnector.get_containers()]
                     for service, config in parsed_compose["services"].items():
@@ -135,8 +133,8 @@ class LRAgentClient:
     def enable_websocket_log(self):
         logger = logging.getLogger('websockets')
         logger.setLevel(int(os.environ["WEBSOCKET_LOGGING"]))
-        formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(levelname)s | %(message)s')
-        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(message)s')
+        handler = RotatingFileHandler("{}/logs/agent-ws.log".format(self.folder), maxBytes=200000000, backupCount=5)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
@@ -266,11 +264,11 @@ class LRAgentClient:
                 request["data"]["services"] = [service for service in services if service != "lr-agent"]
                 request["data"]["compose"] = json.dumps(
                     {key: value for key, value in parsed_compose["services"].items() if key != "lr-agent"})
-                self.save_file("compose/upgrade.json", "json", request)
+                self.save_file("etc/agent/upgrade.json", "json", request)
                 services = ["lr-agent"]
             if "resolver" in services:
                 try:
-                    old_config = self.load_file("resolver/kres.conf")
+                    old_config = self.load_file("etc/kres/kres.conf")
                 except IOError as e:
                     status["load"] = {"status": "failure", "body": str(e)}
                 result = self.upgrade_save_files(request, compose, ["config"])
@@ -336,7 +334,7 @@ class LRAgentClient:
                                             await asyncio.sleep(1)
                                         else:
                                             try:
-                                                self.save_file("resolver/kres.conf", "text", old_config)
+                                                self.save_file("etc/kres/kres.conf", "text", old_config)
                                             except Exception as e:
                                                 self.logger.warning("Failed to back up to old config".format(e))
                                             raise ContainerException("New resolver is not healthy rollback")
@@ -348,7 +346,7 @@ class LRAgentClient:
                                         else:
                                             if sysinfo_connector.check_resolving() == "fail":
                                                 try:
-                                                    self.save_file("resolver/kres.conf", "text", old_config)
+                                                    self.save_file("etc/kres/kres.conf", "text", old_config)
                                                 except Exception as e:
                                                     self.logger.warning("Failed to back up to old config".format(e))
                                                 restart = await self.upgrade_worker_method("resolver-old",
@@ -420,9 +418,9 @@ class LRAgentClient:
     def upgrade_save_files(self, request: dict, decoded_data, keys: list) -> dict:
         try:
             if "compose" in keys and "compose" in request["data"]:
-                self.save_file("compose/docker-compose.yml", "yml", decoded_data)
+                self.save_file("etc/agent/docker-compose.yml", "yml", decoded_data)
             if "config" in keys and "config" in request["data"]:
-                self.save_file("resolver/kres.conf", "text", request["data"]["config"])
+                self.save_file("etc/kres/kres.conf", "text", request["data"]["config"])
         except IOError as e:
             return {"status": "failure", "body": str(e)}
         else:
@@ -433,7 +431,7 @@ class LRAgentClient:
             return request["data"]["compose"]
         else:
             try:
-                with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
                     return compose.read()
             except FileNotFoundError:
                 del response["requestId"]
@@ -497,7 +495,7 @@ class LRAgentClient:
     #     except KeyError as ke:
     #         self.logger.warning("Unexpected exception during upgrade persistence: {}".format(ke))
     #     else:
-    #         self.save_file("compose/upgrade.json".format(self.folder), "json", request)
+    #         self.save_file("etc/agent/upgrade.json".format(self.folder), "json", request)
 
     async def rename_container(self, response: dict, request: dict) -> dict:
         status = {}
@@ -844,7 +842,7 @@ class LRAgentClient:
     async def suicide_modify_compose(self):
         env_config = {"kresman": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "CA_CRT_BASE64", "CORE_URL"],
                       "lr-agent": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "PROXY_ADDRESS"]}
-        with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+        with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
             parsed_compose = self.compose_parser.create_service(compose)
             try:
                 del parsed_compose["services"]["logstream"]
@@ -929,7 +927,7 @@ class LRAgentClient:
                    "list_containers": {"action": "docker", "command": self.docker_ps(),
                                        "path": "{}/docker_ps".format(folder)},
                    }
-        with open("{}compose/docker-compose.yml".format(self.folder), "r") as compose:
+        with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
             parsed_compose = self.compose_parser.create_service(yaml.load(compose, Loader=yaml.SafeLoader))
             for service in parsed_compose["services"]:
                 try:

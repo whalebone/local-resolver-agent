@@ -40,8 +40,8 @@ class LRAgentClient:
         self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect", "updatecache", "suicide"]
         self.error_stash = {}
-        if "WEBSOCKET_LOGGING" in os.environ:
-            self.enable_websocket_log()
+        # if "WEBSOCKET_LOGGING" in os.environ:
+        self.enable_websocket_log()
         self.alive = int(os.environ.get('KEEP_ALIVE', 10))
 
     async def listen(self):
@@ -132,7 +132,7 @@ class LRAgentClient:
 
     def enable_websocket_log(self):
         logger = logging.getLogger('websockets')
-        logger.setLevel(int(os.environ["WEBSOCKET_LOGGING"]))
+        logger.setLevel(int(os.environ.get("WEBSOCKET_LOGGING", 10)))
         formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(message)s')
         handler = RotatingFileHandler("{}/logs/agent-ws.log".format(self.folder), maxBytes=200000000, backupCount=5)
         handler.setFormatter(formatter)

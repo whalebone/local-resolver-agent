@@ -62,7 +62,7 @@ class Cli:
         request = {"cli": "true", "action": "upgrade"}
         data = {}
         services = set()
-        with open("/etc/whalebone/requests/requests.txt", "r") as file:
+        with open("/var/whalebone/requests/requests.txt", "r") as file:
             for line in file:
                 line = json.loads(line)
                 if line:

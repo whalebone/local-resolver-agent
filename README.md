@@ -56,7 +56,7 @@ Used volumes:
 ----------
 - /var/run/docker.sock : /var/run/docker.sock - to access docker api
 - /etc/whalebone/:/etc/whalebone/etc/
-- /etc/whalebone/requests:/etc/whalebone/requests/
+- /var/whalebone/requests/:/etc/whalebone/requests/
 <!-- - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config  -->
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 

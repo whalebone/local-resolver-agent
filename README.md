@@ -17,6 +17,7 @@ Agent envs:
 - KEEP_ALIVE: (optional) specifies the time between keepalive pings, if not set 10s is used
 - DISABLE_FILE_LOGS: (optional) disables logging to file, keeps logging to console
 - HTTP_TIMEOUT: (optional) explicit requests timeout (default: 5 seconds)
+- CONFIRMATION_REQUIRED: (optional) sets the persistence of upgrade requests
 - WEBSOCKET_LOGGING: (optional, default: 10) enable logging of Websockets library, should be supplied as integer using Python [logging codes](https://docs.python.org/3/library/logging.html#logging-levels), use levels INFO, DEBUG and ERROR
 - TASK_TIMEOUT: (optional) sets timeout for periodic actions in which they have to finish, otherwise error will be thrown
 
@@ -35,6 +36,11 @@ Sample message from agent:
 {"requestId": '4as6c4as6d4wf', "action": create,
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": "some text"}}       
 
+Confirmation of upgrade request
+----------
+To enable the persistence of upgrade request set env variable **CONFIRMATION_REQUIRED**. To list changes in the request
+the cli option **list** option should be used. To execute the changes use cli option **run**.
+
 
 Testing:
 ----------
@@ -46,6 +52,7 @@ Used volumes:
 ----------
 - /var/run/docker.sock : /var/run/docker.sock - to access docker api
 - /etc/whalebone/:/etc/whalebone/etc/
+- /etc/whalebone/requests:/etc/whalebone/requests/
 <!-- - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config  -->
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 

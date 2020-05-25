@@ -191,7 +191,7 @@ class LRAgentClient:
                             "whitelistadd": [response, request], "localtest": [response],
                             "datacollect": [response, request], "trace": [response, request]}
 
-        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] in ["upgrade"] and not "cli" in request:
+        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] in ["upgrade"] and "cli" not in request:
             self.persist_request(request)
         else:
             try:

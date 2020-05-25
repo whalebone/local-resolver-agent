@@ -38,9 +38,13 @@ Sample message from agent:
 
 Confirmation of upgrade request
 ----------
-To enable the persistence of upgrade request set env variable **CONFIRMATION_REQUIRED**. To list changes in the request
-the cli option **list** option should be used. To execute the changes use cli option **run**.
+To enable the persistence of upgrade request set env variable **CONFIRMATION_REQUIRED** and add the volume to host's **/etc/whalebone/requests**. To list changes in the request
+the cli option **list** option should be used. To execute the changes use cli option **run**. Example:
 
+```
+./var/whalebone/cli/cli.sh list 
+./var/whalebone/cli/cli.sh run
+```
 
 Testing:
 ----------

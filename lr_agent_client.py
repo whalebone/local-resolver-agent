@@ -193,6 +193,8 @@ class LRAgentClient:
 
         if "CONFIRMATION_REQUIRED" in os.environ and request["action"] in ["upgrade"] and "cli" not in request:
             self.persist_request(request)
+            response["data"] = {"message": "Request successfully persisted."}
+            return response
         else:
             try:
                 return await method_calls[request["action"]](*method_arguments[request["action"]])

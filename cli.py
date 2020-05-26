@@ -125,7 +125,7 @@ class Cli:
                 self.delete_files()
             elif self.cli_input["action"] == "delete_request":
                 self.delete_files()
-                print("Request file successfully deleted.")
+                print("Pending configuration request deleted.")
             else:
                 request = {"requestId": "666", "cli": "true", "action": self.cli_input["action"]}
         except Exception as e:

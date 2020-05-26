@@ -1,5 +1,6 @@
 import argparse
 import base64
+import difflib
 import json
 import asyncio
 import os
@@ -30,6 +31,13 @@ class Cli:
                           "upgrade": {"services": arg_list}}
         return action_mapping[action]
 
+    def get_old_config(self) -> list:
+        try:
+            with open("/etc/whalebone/etc/kres/kres.conf", "r") as file:
+                return [line.strip() for line in file]
+        except Exception as e:
+            print("Failed to load old resolver configuration: {}.".format(e))
+
     def view_requests(self):
         request = self.prepare_request()
         if request:
@@ -49,28 +57,49 @@ class Cli:
                 print("Pending changes will affect following services: {}".format(", ".join(request["services"])))
                 for service, config in yaml.load(request["compose"], Loader=yaml.SafeLoader)["services"].items():
                     if service in request["services"]:
-                        print("-------------------------------")
-                        print("Changes for {}".format(service))
-                        if service in original_compose["services"]:
-                            for key, value in config.items():
-                                try:
-                                    if original_compose["services"][service][key] != value:
-                                        if type(value) != dict:
-                                            print("New value for {}: {}".format(key, value))
-                                            print("   Old value for {}: {}".format(key, original_compose["services"][service][key]))
-                                        else:
-                                            for attr_name, attr_value in value.items():
-                                                if original_compose["services"][service][key][attr_name] != attr_value:
-                                                    print("New value for {} {}: {}".format(key, attr_name, attr_value))
-                                                    print("   Old value for {} {}: {}".format(key, attr_name,
-                                                                                          original_compose["services"][service][
-                                                                                              key][attr_name]))
-                                except KeyError as ke:
-                                    print("Key {} was not found in original compose.".format(ke))
-                        else:
-                            print("New service added with following configuration:")
-                            print(config)
+                        self.view_changes(service, original_compose, config)
+                        if service == "resolver":
+                            self.view_config_changes(request["config"], self.get_old_config())
                 print("-------------------------------")
+
+    def view_changes(self, service: str, original_compose: dict, config: dict):
+        print("-------------------------------")
+        print("Changes for {}".format(service))
+        if service in original_compose["services"]:
+            self.view_compose_changes(config, original_compose, service)
+        else:
+            print("New service added with following configuration:")
+            print(config)
+
+    def view_compose_changes(self, config: dict, original_compose: dict, service: str):
+        for key, value in config.items():
+            try:
+                if original_compose["services"][service][key] != value:
+                    if not isinstance(value, dict):
+                        print("New docker-compose value for {}: {}".format(key, value))
+                        print("   Old docker-compose value for {}: {}".format(key,
+                                                                            original_compose["services"][service][key]))
+                    else:
+                        for attr_name, attr_value in value.items():
+                            if original_compose["services"][service][key][attr_name] != attr_value:
+                                print("New docker-compose value for {} {}: {}".format(key, attr_name, attr_value))
+                                print("   Old docker-compose value for {} {}: {}".format(key, attr_name,
+                                                                original_compose["services"][service][key][attr_name]))
+            except KeyError as ke:
+                print("Key {} was not found in original compose.".format(ke))
+
+    def view_config_changes(self, new_config: list, old_config: list):
+        if new_config and old_config:
+            try:
+                config_diff = list(difflib.unified_diff(old_config, new_config, fromfile="current configuration",
+                                                        tofile="new configuration", lineterm='', n=0))
+            except Exception as e:
+                print("Failed to get changes between new and current resolver configuration, {}.".format(e))
+            else:
+                if config_diff:
+                    print("The following changes have been made to resolver configuration:")
+                    for line in config_diff:
+                        print(line)
 
     # def prepare_request(self) -> dict:
     #     request = {"cli": "true", "action": "upgrade"}

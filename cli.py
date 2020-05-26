@@ -124,7 +124,7 @@ class Cli:
             print("Cannot assemble request, reason: {}".format(e))
         else:
             try:
-                response = await agent.process(json.dumps(request))
+                response = await agent.process(json.dumps(request), True)
             except NameError:
                 pass
             except Exception as e:

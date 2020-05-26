@@ -152,14 +152,14 @@ class LRAgentClient:
                         if len(self.error_stash[service]) == 0:
                             del self.error_stash[service]
 
-    async def process(self, request_json):
+    async def process(self, request_json, cli=False):
         try:
             request = self.decode_base64_json(json.loads(request_json))
         except Exception as e:
             self.logger.info("Failed to parse request: {}, {}".format(e, request_json))
             return {"action": "request",
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
-        if "cli" not in request:
+        if not cli:
             self.logger.info("Received: {}".format(request))
         response = {}
         if "action" not in request:
@@ -192,7 +192,7 @@ class LRAgentClient:
                             "whitelistadd": [response, request], "localtest": [response],
                             "datacollect": [response, request], "trace": [response, request]}
 
-        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] in ["upgrade"] and "cli" not in request:
+        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] in ["upgrade"] and not cli:
             self.persist_request(request)
             response["data"] = {"message": "Request successfully persisted.", "status": "success"}
             return response

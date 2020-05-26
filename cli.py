@@ -32,7 +32,7 @@ class Cli:
 
     def view_requests(self):
         request = self.prepare_request()["data"]
-        with open("/etc/whalebone/compose/docker-compose.yml", "r") as file:
+        with open("/etc/whalebone/etc/compose/docker-compose.yml", "r") as file:
             original_compose = yaml.load(yaml.load(file, Loader=yaml.SafeLoader), Loader=yaml.SafeLoader)
         for service, config in yaml.load(request["compose"], Loader=yaml.SafeLoader)["services"].items():
             if service in request["services"]:
@@ -62,7 +62,7 @@ class Cli:
         request = {"cli": "true", "action": "upgrade"}
         data = {}
         services = set()
-        with open("/var/whalebone/requests/requests.txt", "r") as file:
+        with open("/etc/whalebone/requests/requests.txt", "r") as file:
             for line in file:
                 line = json.loads(line)
                 if line:

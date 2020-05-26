@@ -36,14 +36,26 @@ Sample message from agent:
 {"requestId": '4as6c4as6d4wf', "action": create,
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": "some text"}}       
 
-Confirmation of upgrade request
+Confirmation of actions
 ----------
-To enable the persistence of upgrade request set env variable **CONFIRMATION_REQUIRED** and add the volume to host's **/etc/whalebone/requests**. To list changes in the request
-the cli option **list** option should be used. To execute the changes use cli option **run**. Example:
+The agent's default option is to execute given actions immediately. It is however possible to enable persistence of requests
+in order to confirm their execution. This gives the user control over when and what gets executed. To enable the persistence 
+of requests set env variable **CONFIRMATION_REQUIRED** to **true**. To list changes the request introduces
+the cli option **list** option should be used. To execute the request use cli option **run**. There can only be one persisted request.
+If a new request comes while some request is persisted it will be overwritten. To delete waiting request use cli option **delete_request**.
+Example:
 
 ```
-./var/whalebone/cli/cli.sh list 
-./var/whalebone/cli/cli.sh run
+# ./var/whalebone/cli/cli.sh list
+-------------------------------
+Changes for container
+New value for labels container: 1.2
+   Old value for labels container: 1.1
+------------------------------- 
+# ./var/whalebone/cli/cli.sh run
+{'container': {'status': 'success'}}
+# ./var/whalebone/cli/cli.sh delete_request
+Pending configuration request deleted.
 ```
 
 Testing:
@@ -56,7 +68,6 @@ Used volumes:
 ----------
 - /var/run/docker.sock : /var/run/docker.sock - to access docker api
 - /etc/whalebone/:/etc/whalebone/etc/
-- /var/whalebone/requests/:/etc/whalebone/requests/
 <!-- - /etc/whalebone/kres/ : /etc/whalebone/resolver/ - to save resolver config  -->
 - /var/log/whalebone/agent/ : /etc/whalebone/logs/ - to expose its own logs
 - /var/sinkhole/ : /etc/whalebone/kresman - sinkhole files for kresman 

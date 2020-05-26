@@ -996,7 +996,7 @@ class LRAgentClient:
     def persist_request(self, request: dict):
         if not os.path.exists("{}/requests".format(self.folder)):
             os.mkdir("{}/requests".format(self.folder))
-        with open("{}/requests/requests.txt".format(self.folder), "a") as file:
+        with open("{}/requests/requests.json".format(self.folder), "a") as file:
             json.dump(request, file)
             file.write("\n")
 

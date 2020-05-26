@@ -32,53 +32,77 @@ class Cli:
 
     def view_requests(self):
         request = self.prepare_request()["data"]
-        with open("/etc/whalebone/etc/compose/docker-compose.yml", "r") as file:
-            original_compose = yaml.load(yaml.load(file, Loader=yaml.SafeLoader), Loader=yaml.SafeLoader)
-        for service, config in yaml.load(request["compose"], Loader=yaml.SafeLoader)["services"].items():
-            if service in request["services"]:
+        if request:
+            try:
+                with open("/etc/whalebone/etc/agent/docker-compose.yml", "r") as file:
+                    original_compose = yaml.load(yaml.load(file, Loader=yaml.SafeLoader), Loader=yaml.SafeLoader)
+            except FileNotFoundError:
+                print("Could not found docker-compose.yml in /etc/whalebone/etc/agent/.")
+            except Exception as e:
+                print("Failed to load docker-compose.yml due to {}.".format(e))
+            else:
+                for service, config in yaml.load(request["compose"], Loader=yaml.SafeLoader)["services"].items():
+                    if service in request["services"]:
+                        print("-------------------------------")
+                        print("Changes for {}".format(service))
+                        if service in original_compose["services"]:
+                            for key, value in config.items():
+                                try:
+                                    if original_compose["services"][service][key] != value:
+                                        if type(value) != dict:
+                                            print("New value for {}: {}".format(key, value))
+                                            print("   Old value for {}: {}".format(key, original_compose["services"][service][key]))
+                                        else:
+                                            for attr_name, attr_value in value.items():
+                                                if original_compose["services"][service][key][attr_name] != attr_value:
+                                                    print("New value for {} {}: {}".format(key, attr_name, attr_value))
+                                                    print("   Old value for {} {}: {}".format(key, attr_name,
+                                                                                          original_compose["services"][service][
+                                                                                              key][attr_name]))
+                                except KeyError as ke:
+                                    print("Key {} was not found in original compose.".format(ke))
+                        else:
+                            print("New service added with following configuration:")
+                            print(config)
                 print("-------------------------------")
-                print("Changes for {}".format(service))
-                if service in original_compose["services"]:
-                    for key, value in config.items():
-                        try:
-                            if original_compose["services"][service][key] != value:
-                                if type(value) != dict:
-                                    print("New value for {}: {}".format(key, value))
-                                    print("   Old value for {}: {}".format(key, original_compose["services"][service][key]))
-                                else:
-                                    for attr_name, attr_value in value.items():
-                                        if original_compose["services"][service][key][attr_name] != attr_value:
-                                            print("New value for {} {}: {}".format(key, attr_name, attr_value))
-                                            print("   Old value for {} {}: {}".format(key, attr_name,
-                                                                                  original_compose["services"][service][
-                                                                                      key][attr_name]))
-                        except KeyError:
-                            print(service, config)
-                else:
-                    print(config)
-        print("-------------------------------")
+        else:
+            print("Request incorrectly parsed no changes will be displayed.")
+
+    # def prepare_request(self) -> dict:
+    #     request = {"cli": "true", "action": "upgrade"}
+    #     data = {}
+    #     services = set()
+    #     with open("/etc/whalebone/requests/requests.txt", "r") as file:
+    #         for line in file:
+    #             line = json.loads(line)
+    #             if line:
+    #                 for keyword in ["config", "compose"]:
+    #                     try:
+    #                         data[keyword] = line["data"][keyword]
+    #                     except KeyError:
+    #                         pass
+    #                 services.update(line["data"]["services"])
+    #     data.update({"services": list(services)})
+    #     request["data"] = data
+    #     return request
 
     def prepare_request(self) -> dict:
-        request = {"cli": "true", "action": "upgrade"}
-        data = {}
-        services = set()
-        with open("/etc/whalebone/requests/requests.txt", "r") as file:
-            for line in file:
-                line = json.loads(line)
-                if line:
-                    for keyword in ["config", "compose"]:
-                        try:
-                            data[keyword] = line["data"][keyword]
-                        except KeyError:
-                            pass
-                    services.update(line["data"]["services"])
-        data.update({"services": list(services)})
-        request["data"] = data
-        return request
+        try:
+            with open("/etc/whalebone/requests/requests.json", "r") as file:
+                request = json.load(file)
+        except FileNotFoundError:
+            print("Failed to find persisted request, file was not found.")
+        except json.JSONDecodeError:
+            print("Failed to json parse persisted request, json format is not valid.")
+        except Exception as e:
+            print("Failed to load persisted reqeust due to {}.".format(e))
+        else:
+            request["cli"] = "true"
+            return request
 
     def delete_files(self):
         try:
-            os.remove("/etc/whalebone/requests/requests.txt")
+            os.remove("/etc/whalebone/requests/requests.json")
         except Exception as e:
             print("Failed to delete stored requests, {}".format(e))
 

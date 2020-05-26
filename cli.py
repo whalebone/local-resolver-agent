@@ -46,6 +46,7 @@ class Cli:
             except Exception as e:
                 print("Failed to load docker-compose.yml due to {}.".format(e))
             else:
+                print("Pending changes will affect following services: {}".format(", ".join(request["services"])))
                 for service, config in yaml.load(request["compose"], Loader=yaml.SafeLoader)["services"].items():
                     if service in request["services"]:
                         print("-------------------------------")
@@ -70,8 +71,6 @@ class Cli:
                             print("New service added with following configuration:")
                             print(config)
                 print("-------------------------------")
-        else:
-            print("Request incorrectly parsed no changes will be displayed.")
 
     # def prepare_request(self) -> dict:
     #     request = {"cli": "true", "action": "upgrade"}
@@ -96,11 +95,11 @@ class Cli:
             with open("/etc/whalebone/requests/requests.json", "r") as file:
                 request = json.load(file)
         except FileNotFoundError:
-            print("Failed to find persisted request, file was not found.")
+            print("There are no pending requests")
         except json.JSONDecodeError:
             print("Failed to json parse persisted request, json format is not valid.")
         except Exception as e:
-            print("Failed to load persisted reqeust due to {}.".format(e))
+            print("Failed to load persisted request due to {}.".format(e))
         else:
             request["cli"] = "true"
             return request

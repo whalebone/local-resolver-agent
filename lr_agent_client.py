@@ -998,7 +998,6 @@ class LRAgentClient:
             os.mkdir("{}/requests".format(self.folder))
         with open("{}/requests/requests.json".format(self.folder), "w") as file:
             json.dump(request, file)
-            file.write("\n")
 
     def tail_file(self, path: str, tail_size: int, repeated=None):
         try:

@@ -31,8 +31,13 @@ class Cli:
         return action_mapping[action]
 
     def view_requests(self):
-        request = self.prepare_request()["data"]
+        request = self.prepare_request()
         if request:
+            if request["action"] in ["create", "suicide"]:
+                print("There is a scheduled action '{}' to be run.".format(request["action"]))
+                return
+            else:
+                request = request["data"]
             try:
                 with open("/etc/whalebone/etc/agent/docker-compose.yml", "r") as file:
                     original_compose = yaml.load(yaml.load(file, Loader=yaml.SafeLoader), Loader=yaml.SafeLoader)

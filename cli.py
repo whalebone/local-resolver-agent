@@ -72,9 +72,11 @@ class Cli:
             print(config)
 
     def view_compose_changes(self, config: dict, original_compose: dict, service: str):
+        change = False
         for key, value in config.items():
             try:
                 if original_compose["services"][service][key] != value:
+                    change = True
                     if not isinstance(value, dict):
                         print("New docker-compose value for {}: {}".format(key, value))
                         print("   Old docker-compose value for {}: {}".format(key,
@@ -87,6 +89,8 @@ class Cli:
                                                                 original_compose["services"][service][key][attr_name]))
             except KeyError as ke:
                 print("Key {} was not found in original compose.".format(ke))
+        if not change:
+            print("There are no changes in docker-compose for service {}".format(service))
 
     def view_config_changes(self, new_config: list, old_config: list):
         if new_config and old_config:

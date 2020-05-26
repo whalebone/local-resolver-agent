@@ -123,6 +123,9 @@ class Cli:
             elif self.cli_input["action"] == "run":
                 request = self.prepare_request()
                 self.delete_files()
+            elif self.cli_input["action"] == "delete_request":
+                self.delete_files()
+                print("Request file successfully deleted.")
             else:
                 request = {"requestId": "666", "cli": "true", "action": self.cli_input["action"]}
         except Exception as e:
@@ -144,7 +147,7 @@ class Cli:
 if __name__ == '__main__':
     # upgrade works ass restart
     supported_actions = ["sysinfo", "stop", "remove", "containers", "create", "upgrade", "updatecache", "list", "run",
-                         "restart", "trace", "clearcache"]
+                         "restart", "trace", "clearcache", "delete_request"]
     parser = argparse.ArgumentParser(prog='lr-agent-cli', usage='%(prog)s [options]',
                                      description="This code can be called to run commands of agent without wsproxy")
     parser.add_argument('--version', action='version', version='%(prog)s 0.1')

@@ -70,7 +70,7 @@ class LRAgentClient:
                         if response["action"] in self.async_actions and response["action"] != "updatecache":
                             self.process_response(response)
                     except Exception as e:
-                        self.logger.info("Error during exception persistance, {}".format(e))
+                        self.logger.info("Error during exception persistence, {}".format(e))
                 await self.send(response)
 
     async def send(self, message: dict):
@@ -140,16 +140,17 @@ class LRAgentClient:
 
     def process_response(self, response: dict):
         for service, error_message in response["data"].items():
-            if error_message["status"] == "failure":
-                try:
-                    self.error_stash[service] = {response["action"]: error_message["body"]}
-                except KeyError:
-                    self.error_stash[service].update({response["action"]: error_message["body"]})
-            else:
-                if service in self.error_stash and response["action"] in self.error_stash[service]:
-                    del self.error_stash[service][response["action"]]
-                    if len(self.error_stash[service]) == 0:
-                        del self.error_stash[service]
+            if isinstance(error_message, dict):
+                if error_message["status"] == "failure":
+                    try:
+                        self.error_stash[service] = {response["action"]: error_message["body"]}
+                    except KeyError:
+                        self.error_stash[service].update({response["action"]: error_message["body"]})
+                else:
+                    if service in self.error_stash and response["action"] in self.error_stash[service]:
+                        del self.error_stash[service][response["action"]]
+                        if len(self.error_stash[service]) == 0:
+                            del self.error_stash[service]
 
     async def process(self, request_json):
         try:
@@ -193,7 +194,7 @@ class LRAgentClient:
 
         if "CONFIRMATION_REQUIRED" in os.environ and request["action"] in ["upgrade"] and "cli" not in request:
             self.persist_request(request)
-            response["data"] = {"message": "Request successfully persisted."}
+            response["data"] = {"message": "Request successfully persisted.", "status": "success"}
             return response
         else:
             try:

@@ -90,7 +90,7 @@ class Cli:
             except KeyError as ke:
                 print("Key {} was not found in original compose.".format(ke))
         if not change:
-            print("There are no changes in docker-compose for service {}".format(service))
+            print("There are no changes in docker-compose for service {}, the service will be recreated.".format(service))
 
     def view_config_changes(self, new_config: list, old_config: list):
         if new_config and old_config:

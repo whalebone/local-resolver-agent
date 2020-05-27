@@ -137,14 +137,30 @@ class Cli:
             request["cli"] = "true"
             return request
 
-    def delete_files(self):
+    def delete_files(self, final_print: bool = False):
         try:
             os.remove("/etc/whalebone/requests/requests.json")
+        except FileNotFoundError:
+            print("There is no pending request to be deleted.")
         except Exception as e:
             print("Failed to delete stored requests, {}".format(e))
+        else:
+            if final_print:
+                print("Pending configuration request deleted.")
+
+    async def execute_request(self, request: dict):
+        agent = LRAgentClient(None)
+        try:
+            response = await agent.process(json.dumps(request), True)
+        except Exception as e:
+            print("General error during request execution, reason: {}".format(e))
+        else:
+            if "data" in response:
+                print(response["data"])
+            else:
+                print(response)
 
     async def run_command(self):
-        agent = LRAgentClient(None)
         has_params = ["stop", "remove", "create", "upgrade", "restart", "trace", "clearcache"]
         try:
             if self.cli_input["action"] in has_params:
@@ -156,28 +172,21 @@ class Cli:
                 request = self.prepare_request()
                 self.delete_files()
             elif self.cli_input["action"] == "delete_request":
-                self.delete_files()
-                print("Pending configuration request deleted.")
+                self.delete_files(True)
             else:
                 request = {"requestId": "666", "cli": "true", "action": self.cli_input["action"]}
         except Exception as e:
             print("Cannot assemble request, reason: {}".format(e))
         else:
             try:
-                response = await agent.process(json.dumps(request), True)
+                if request:
+                    await self.execute_request(request)
             except NameError:
                 pass
-            except Exception as e:
-                print("General error during request execution, reason: {}".format(e))
-            else:
-                if "data" in response:
-                    print(response["data"])
-                else:
-                    print(response)
+
 
 
 if __name__ == '__main__':
-    # upgrade works ass restart
     supported_actions = ["sysinfo", "stop", "remove", "containers", "create", "upgrade", "updatecache", "list", "run",
                          "restart", "trace", "clearcache", "delete_request"]
     parser = argparse.ArgumentParser(prog='lr-agent-cli', usage='%(prog)s [options]',

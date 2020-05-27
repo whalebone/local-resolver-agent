@@ -170,7 +170,8 @@ class LRAgentClient:
 
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
                         "rename": self.rename_container, "containers": self.list_containers,
-                        "restart": self.restart_container, "stop": self.stop_container, "remove": self.remove_container,
+                        "restart": self.restart_container,
+                        # "stop": self.stop_container, "remove": self.remove_container,
                         "containerlogs": self.container_logs, "clearcache": self.resolver_cache_clear,
                         "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
                         "fwmodify": self.modify_rule, "fwdelete": self.delete_rule, "suicide": self.resolver_suicide,
@@ -183,7 +184,7 @@ class LRAgentClient:
                             "upgrade": [response, request], "restart": [response, request],
                             "rename": [response, request], "containers": [response],
                             "containerlogs": [response, request], "clearcache": [response, request],
-                            "stop": [response, request], "remove": [response, request],
+                            # "stop": [response, request], "remove": [response, request],
                             "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
                             "fwmodify": [response, request], "fwdelete": [response, request],
                             "logs": [response], "log": [response, request], "suicide": [response],

@@ -9,6 +9,7 @@ import ast
 import time
 import asyncio
 import websockets
+import traceback
 from dns import resolver
 # from scapy.all import *
 
@@ -27,12 +28,13 @@ class Tester():
         except KeyError:
             self.agent_id = 101
         self.redis = redis.Redis(os.environ["REDIS_ADDRESS"])
-        logging.basicConfig(level=logging.DEBUG)
+        # logging.basicConfig(level=logging.DEBUG)
         self.status = {}
         self.logger = logging.getLogger(__name__)
-        # console_handler = logging.StreamHandler()
-        # console_handler.setFormatter(logging.Formatter('%(asctime)s | %(message)s'))
-        # self.logger.addHandler(console_handler)
+        self.logger.level = logging.INFO
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(logging.Formatter('%(asctime)s | %(message)s'))
+        self.logger.addHandler(console_handler)
 
     def parse_volumes(self, volumes_list):
         volumes_dict = {}
@@ -168,6 +170,8 @@ class Tester():
                 if self.redis.exists("upgrade"):
                     status = self.redis_output(self.redis.lpop("upgrade"))
                     self.logger.info(status)
+                    if "message" in status and status["message"] == "Command received":
+                        continue
                     for key, value in status.items():
                         if value["status"] == "success":
                             self.logger.info("{} upgrade successful".format(key))
@@ -187,7 +191,7 @@ class Tester():
             else:
                 self.status["upgrade_resolver_{}".format(name)] = {"fail": state}
 
-    def upgrade_all(self, services):
+    def upgrade_all(self, services: list, scenario: str):
         compose = self.compose_reader("docker-compose.yml")
         # services = []
         try:
@@ -209,7 +213,16 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            self.logger.info("Upgrade Received")
+            i = 0
+            while i <= 7:
+                time.sleep(10)
+                if not os.path.exists("/etc/whalebone/agent/upgrade.json"):
+                    self.logger.info("Upgrade Received")
+                    self.status["upgrade_all_{}".format(scenario)]= "ok"
+                    break
+                i +=1
+            else:
+                self.status["upgrade_all_{}".format(scenario)] = {"fail": {}}
 
     def upgrade_agent(self):
         compose = self.compose_reader("agent-compose-upgraded.yml")
@@ -223,7 +236,7 @@ class Tester():
             rec = json.loads(rec.text)
             self.logger.info(rec)
             if rec["status"] == "success":
-                time.sleep(5)
+                time.sleep(30)
                 for config in self.view_config():
                     if config["name"] == "lr-agent":
                         if config["labels"]["lr-agent"] == "3.0":
@@ -231,8 +244,11 @@ class Tester():
                             self.status["upgrade_agent"] = "ok"
                         else:
                             self.status["upgrade_agent"] = {"fail": {"version": config["labels"]["lr-agent"]}}
+                        break
             else:
                 self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
+
+
 
     def get_sysinfo(self):
         try:
@@ -441,7 +457,8 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-main.log", 'agent-sys_info.log']
+            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-main.log", 'agent-sys_info.log',
+                     "agent-ws.log"]
             rec = json.loads(rec.text)
             if set(rec) == set(files):
                 self.logger.info("Log files are identical")
@@ -503,7 +520,7 @@ class Tester():
                     self.status["save_{}_config".format(key)] = {"fail": {}}
 
     async def local_test_remove(self):
-        async with websockets.connect('ws://localhost:8888') as websocket:
+        async with websockets.connect('ws://localhost:8765') as websocket:
             # remove all services
             try:
                 request = json.dumps({"action": "remove", "data": {
@@ -512,7 +529,7 @@ class Tester():
             except Exception as e:
                 self.logger.info("Error at remove {}".format(e))
             else:
-                response = await websocket.recv()
+                response = await asyncio.wait_for(websocket.recv(), timeout=10)
                 response = json.loads(response)
                 for key, value in response["data"].items():
                     if value["status"] == "success":
@@ -521,7 +538,7 @@ class Tester():
                         self.logger.info("{} failed to remove".format(key))
 
     async def local_test_create(self):
-        async with websockets.connect('ws://localhost:8888') as websocket:
+        async with websockets.connect('ws://localhost:8765') as websocket:
             try:
                 # compose = self.compose_reader("resolver-compose.yml")
                 # request = json.dumps(
@@ -537,7 +554,7 @@ class Tester():
                 #                                                                                "type": "text"}]}}})
                 request = json.dumps({"action": "create", "data": {}})
                 await websocket.send(request)
-                response = await websocket.recv()
+                response = await asyncio.wait_for(websocket.recv(), timeout=10)
             except Exception as e:
                 self.logger.info("Error at start {}".format(e))
             else:
@@ -549,43 +566,49 @@ class Tester():
                         self.logger.info("{} failed to start".format(key))
 
     async def local_test_restart(self):
-        async with websockets.connect('ws://localhost:8888') as websocket:
+        async with websockets.connect('ws://localhost:8765') as websocket:
             try:
                 request = json.dumps({"action": "upgrade", "data": {"services": ["passivedns", "logrotate"]}})
                 await websocket.send(request)
-                response = await websocket.recv()
+                response = await asyncio.wait_for(websocket.recv(), timeout=10)
             except Exception as e:
                 self.logger.info("Error at restart {}".format(e))
             else:
+                self.logger.info(response)
                 response = json.loads(response)
                 for key, value in response["data"].items():
                     if value["status"] == "success":
+                        self.status["local_restart"] = "ok"
                         self.logger.info("{} restarted successfully".format(key))
                     else:
                         self.logger.info("{} failed to restart".format(key))
+                        self.status["local_restart"] = {"fail": value}
 
     async def local_test_rename(self):
-        async with websockets.connect('ws://localhost:8888') as websocket:
+        async with websockets.connect('ws://localhost:8765') as websocket:
             try:
                 request = json.dumps({"action": "rename", "data": {"passivedns": "megarotate"}})
                 await websocket.send(request)
-                response = await websocket.recv()
+                response = await asyncio.wait_for(websocket.recv(), timeout=10)
             except Exception as e:
                 self.logger.info("Error at rename {}".format(e))
             else:
+                self.logger.info(response)
                 response = json.loads(response)
                 for key, value in response["data"].items():
                     if value["status"] == "success":
+                        self.status["local_rename"] = "ok"
                         self.logger.info("{} renamed successfully".format(key))
                     else:
                         self.logger.info("{} failed to rename".format(key))
+                        self.status["local_rename"] = {"fail": value}
 
     async def local_test_stop(self):
-        async with websockets.connect('ws://localhost:8888') as websocket:
+        async with websockets.connect('ws://localhost:8765') as websocket:
             try:
                 request = json.dumps({"action": "stop", "data": {"containers": ["megarotate"]}})
                 await websocket.send(request)
-                response = await websocket.recv()
+                response = await asyncio.wait_for(websocket.recv(), timeout=10)
             except Exception as e:
                 self.logger.info("Error at stop {}".format(e))
             else:
@@ -597,14 +620,15 @@ class Tester():
                         self.logger.info("{} failed to stop".format(key))
 
     async def local_test_sysinfo(self):
-        async with websockets.connect('ws://localhost:8888') as websocket:
+        async with websockets.connect('ws://localhost:8765') as websocket:
             try:
                 request = json.dumps({"action": "sysinfo"})
                 await websocket.send(request)
-                response = await websocket.recv()
+                response = await asyncio.wait_for(websocket.recv(), timeout=10)
             except Exception as e:
                 self.logger.info("Error at restart {}".format(e))
             else:
+                self.logger.info(response)
                 response = json.loads(response)
                 for key, value in response["data"].items():
                     if key == "containers":
@@ -839,6 +863,7 @@ class Tester():
         try:
             self.upgrade_agent()
         except Exception as e:
+            self.logger.warning("{}".format(traceback.print_exc()))
             self.logger.info(e)
         time.sleep(8)
         # try:
@@ -848,6 +873,7 @@ class Tester():
         try:
             self.upgrade_resolver("initial")
         except Exception as e:
+            self.logger.warning("{}".format(traceback.print_exc()))
             self.logger.info(e)
         # try:
         #     self.dns_queries()
@@ -858,18 +884,18 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
             self.status["start_services"] = {"fail": {}}
-        try:
-            self.rename_container()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.stop_container("mega_rotate")
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.remove_container()
-        except Exception as e:
-            self.logger.info(e)
+        # try:
+        #     self.rename_container()
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     self.stop_container("mega_rotate")
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     self.remove_container()
+        # except Exception as e:
+        #     self.logger.info(e)
         # try:
         #     self.get_rules()
         # except Exception as e:
@@ -886,22 +912,22 @@ class Tester():
         #     self.modify_rule()
         # except Exception as e:
         #     self.logger.info(e)
-        try:
-            self.get_logs()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.delete_log()
-        except Exception as e:
-            self.logger.info(e)
+        # try:
+        #     self.get_logs()
+        # except Exception as e:
+        #     self.logger.info(e)
+        # try:
+        #     self.delete_log()
+        # except Exception as e:
+        #     self.logger.info(e)
         try:
             self.update_cache()
         except Exception as e:
             self.logger.info(e)
-        try:
-            self.save_config()
-        except Exception as e:
-            self.logger.info(e)
+        # try:
+        #     self.save_config()
+        # except Exception as e:
+        #     self.logger.info(e)
         try:
             self.upgrade_resolver_config()
         except Exception as e:
@@ -914,29 +940,33 @@ class Tester():
             self.upgrade_resolver_image()
         except Exception as e:
             self.logger.info(e)
-        time.sleep(5)
-        try:
-            self.upgrade_agent_with_old_present()
-        except Exception as e:
-            self.logger.info(e)
+        # time.sleep(5)
+        # try:
+        #     self.upgrade_agent_with_old_present()
+        # except Exception as e:
+        #     self.logger.info(e)
         time.sleep(5)
         try:
             self.pack_data()
         except Exception as e:
             self.logger.info(e)
-        try:
-            self.stop_container("resolver")
-        except Exception as e:
-            self.logger.info(e)
+        # try:
+        #     self.stop_container("resolver")
+        # except Exception as e:
+        #     self.logger.info(e)
         try:
             self.upgrade_resolver("final")
         except Exception as e:
             self.logger.info(e)
         try:
-            self.upgrade_all([])
+            self.upgrade_all([], "all")
         except Exception as e:
             self.logger.info(e)
-        time.sleep(10)
+        try:
+            self.upgrade_all(["logrotate", "logstream", "passivedns"], "some")
+        except Exception as e:
+            self.logger.info(e)
+        time.sleep(3)
         try:
             self.commit_suicide()
         except Exception as e:

@@ -5,7 +5,7 @@ import logging
 import websockets
 
 from lr_agent_client import LRAgentClient
-# from lr_agent_local import LRAgentLocalClient
+from lr_agent_local import LRAgentLocalClient
 from exception.exc import InitException, PongFailedException, TaskFailedException
 from loggingtools.logger import build_logger
 
@@ -66,12 +66,13 @@ async def local_resolver_agent_app():
             remote_client = LRAgentClient(websocket)
             task = asyncio.create_task(remote_client.listen())
             # try:
-            #     dummy_client = LRAgentClient(None)
-            #     local_client = LRAgentLocalClient(dummy_client)
+            #     local_client = LRAgentLocalClient(LRAgentClient(None))
             # except Exception as e:
             #     logger.error("local api runtime error {}".format(e))
             # else:
-            #     await local_client.start_api()
+            #     local_api= await local_client.start_api()
+            #     logger.info(type(local_api))
+            #     local_task = asyncio.ensure_future(local_api)
             while True:
                 for periodic_task in (remote_client.send_sys_info, remote_client.validate_host, task_monitor):
                     await asyncio.wait_for(periodic_task(), task_timeout)
@@ -90,6 +91,7 @@ async def local_resolver_agent_app():
         finally:
             try:
                 await websocket.close()
+                # await local_api.close()
                 logger.error('Connection Reset. Retrying in 10 secs...')
             except Exception as ce:
                 logger.warning("Failed to cleanup due to {}.".format(ce))

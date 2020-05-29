@@ -13,24 +13,21 @@ class LRAgentLocalClient:
     def __init__(self, agent):
         self.agent = agent
         # self.websocket = websocket
-        try:
-            self.port = int(os.environ["LOCAL_API_PORT"])
-        except KeyError:
-            self.port = 8888
+        self.port = int(os.environ.get("LOCAL_API_PORT", 8765))
         self.logger = build_logger("local-api", "/etc/whalebone/logs/")
 
     async def start_api(self):
         while True:
             if self.test_port():
                 try:
-                    worker = websockets.serve(self.receive, 'localhost', self.port)
+                    worker = websockets.serve(self.receive, '0.0.0.0', self.port)
                 except Exception as e:
                     self.logger.info("Unable to init worker, {}".format(e))
                 else:
-                    asyncio.ensure_future(worker)
                     # await worker
                     self.logger.info("Local api created")
-                    break
+                    return worker
+                    # break
             else:
                 self.logger.warning("Bind unsuccessful, port is used")
                 await asyncio.sleep(10)
@@ -53,22 +50,24 @@ class LRAgentLocalClient:
                 pass
             else:
                 try:
-                    msg = json.loads(msg)
-                    self.logger.info("Received: {}".format(msg))
-                    msg["cli"] = "true"
-                    response = await self.agent.process(json.dumps(msg))
-                except Exception as e:
                     request = json.loads(msg)
+                    self.logger.info("Received: {}".format(request))
+                    request["cli"] = "true"
+                    response = await self.agent.process(json.dumps(request))
+                except json.JSONDecodeError:
+                    response = {"error": "failed to json parse request"}
+                except Exception as e:
                     response = {"action": request["action"], "data": {"status": "failure", "body": str(e)}}
-                    self.logger.warning(e)
+                    self.logger.warning("Failed to execute request {}, {}.".format(request, e))
+                finally:
+                    try:
+                        # response["data"] = json.loads(base64.b64decode(response["data"].encode("utf-8")).decode("utf-8"))
+                        self.logger.info("Sending: {}".format(response))
+                        await websocket.send(json.dumps(response))
+                    except Exception as e:
+                        self.logger.info(e)
                 # else:
                 #     try:
                 #         await self.websocket.send(json.dumps(self.agent.encode_base64_json(response)))
                 #     except Exception as e:
                 #         self.logger.warning(e)
-                try:
-                    response["data"] = json.loads(base64.b64decode(response["data"].encode("utf-8")).decode("utf-8"))
-                    self.logger.info("Sending: {}".format(msg))
-                    await websocket.send(json.dumps(response))
-                except Exception as e:
-                    self.logger.info(e)

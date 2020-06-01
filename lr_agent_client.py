@@ -193,7 +193,7 @@ class LRAgentClient:
                             "whitelistadd": [response, request], "localtest": [response],
                             "datacollect": [response, request], "trace": [response, request]}
 
-        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] not in ["datacollect", "updatecache"] and not cli:
+        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] not in ["updatecache"] and not cli:
             self.persist_request(request)
             response["data"] = {"message": "Request successfully persisted.", "status": "success"}
             return response

@@ -170,7 +170,7 @@ class SystemInfo:
                 try:
                     previous = self.result_manipulation("r")
                 except FileNotFoundError:
-                    return results
+                    return {}
                 else:
                     pattern = re.compile(r"answer.*|query.*|request.*")
                     stats = {}

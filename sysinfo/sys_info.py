@@ -76,7 +76,7 @@ class SystemInfo:
         return "fail"
 
     def result_manipulation(self, mode: str, results: dict = None):
-        with open("/etc/whalebone/kres_stats.json", mode) as file:
+        with open("/etc/whalebone/logs/kres_stats.json", mode) as file:
             if mode == "w":
                 json.dump(results, file)
             else:
@@ -170,13 +170,24 @@ class SystemInfo:
                 try:
                     previous = self.result_manipulation("r")
                 except FileNotFoundError:
-                    return results
+                    return {}
                 else:
-                    stats = {stat: value - previous[stat] for stat, value in results.items() if stat in previous}
-                    if any(stat_value < 0 for stat_value in stats.values()):
-                        return {}
-                    else:
-                        return stats
+                    pattern = re.compile(r"answer.*|query.*|request.*")
+                    stats = {}
+                    for stat, value in results.items():
+                        if stat in previous:
+                            if pattern.match(stat):
+                                diff = value - previous[stat]
+                                if diff >= 0:
+                                    stats[stat] = diff
+                            else:
+                                stats[stat] = value
+                    return stats
+                    # stats = {stat:  value - previous[stat] for stat, value in results.items() if stat in previous}
+                    # if any(stat_value < 0 for stat_value in stats.values()):
+                    #     return {}
+                    # else:
+                    #     return stats
                 finally:
                     self.result_manipulation("w", results)
         except Exception as e:

@@ -76,7 +76,7 @@ class SystemInfo:
         return "fail"
 
     def result_manipulation(self, mode: str, results: dict = None):
-        with open("/etc/whalebone/kres_stats.json", mode) as file:
+        with open("/etc/whalebone/logs/kres_stats.json", mode) as file:
             if mode == "w":
                 json.dump(results, file)
             else:

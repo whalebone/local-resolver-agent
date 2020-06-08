@@ -977,6 +977,9 @@ class LRAgentClient:
         response["data"] = {"status": "success", "message": "Agent seems ok"}
         return response
 
+    async def prefetch_tld(self):
+        pass
+
     async def update_cache(self, response: dict = None, request: dict = None) -> dict:
         if request and "cli" not in request:
             await self.send_acknowledgement(response)
@@ -1016,29 +1019,36 @@ class LRAgentClient:
 
     async def resolver_cache_clear(self, response: dict, request: dict):
         for tty in os.listdir("/etc/whalebone/tty/"):
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(5)
+            message = "cache.clear()" if request["data"]["clear"] == "all" else "cache.clear('{}', true)".format(
+                request["data"]["clear"])
             try:
-                sock.connect("/etc/whalebone/tty/{}".format(tty))
-            except socket.timeout as te:
-                self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
-            except socket.error as msg:
-                self.logger.warning("Connection error {} to socket {}".format(msg, tty))
-            else:
-                try:
-                    args = "" if request["data"]["clear"] == "all" else "'{}', true".format(request["data"]["clear"])
-                    message = "cache.clear({})".format(args).encode("utf-8")
-                    sock.sendall(message)
-                    response["data"] = {"status": "success"}
-                except socket.timeout as re:
-                    self.logger.warning("Failed to get data from socket {}, {}".format(tty, re))
-                except Exception as e:
-                    self.logger.warning("Failed to get data from {}, {}".format(tty, e))
-                finally:
-                    sock.close()
-            if "data" not in response:
+                self.send_to_socket(message.encode("utf-8"), tty)
+            except Exception:
                 response["data"] = {"status": "failure"}
+            else:
+                response["data"] = {"status": "success"}
             return response
+
+    def send_to_socket(self, message: bytes, tty):
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        try:
+            sock.connect(os.path.abspath(tty))
+        except socket.timeout as te:
+            self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
+        except socket.error as msg:
+            self.logger.warning("Connection error {} to socket {}".format(msg, tty))
+        else:
+            try:
+                sock.sendall(message)
+                return
+            except socket.timeout as re:
+                self.logger.warning("Failed to get data from socket {}, {}".format(tty, re))
+            except Exception as e:
+                self.logger.warning("Failed to get data from {}, {}".format(tty, e))
+            finally:
+                sock.close()
+        raise Exception
 
     async def resolver_suicide(self, response: dict):
         await self.send_acknowledgement(response)

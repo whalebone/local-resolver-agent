@@ -240,7 +240,7 @@ class LRAgentClient:
                     status[service]["status"] = "success"
                     if service == "resolver":
                         await self.update_cache()
-                        await self.prefetch_tld()
+                        self.prefetch_tld()
             if "requestId" in response:
                 del response["requestId"]
             response["data"] = status
@@ -634,7 +634,7 @@ class LRAgentClient:
                     else:
                         if service == "resolver":
                             await self.update_cache()
-                            await self.prefetch_tld()
+                            self.prefetch_tld()
                         return {"status": "success"}
 
     def upgrade_save_files(self, request: dict, decoded_data, keys: list) -> dict:
@@ -979,8 +979,7 @@ class LRAgentClient:
         response["data"] = {"status": "success", "message": "Agent seems ok"}
         return response
 
-    async def prefetch_tld(self):
-        await asyncio.sleep(2)
+    def prefetch_tld(self):
         message = b"prefill.config({['.'] = { url = 'https://www.internic.net/domain/root.zone', interval = 86400 }})"
         for tty in os.listdir("/etc/whalebone/tty/"):
             try:
@@ -988,6 +987,7 @@ class LRAgentClient:
             except Exception:
                 self.logger.warning("Failed to send prefetch data to socket")
             else:
+                self.logger.info("Tlds successfully pre fetched.")
                 break
 
     async def update_cache(self, response: dict = None, request: dict = None) -> dict:

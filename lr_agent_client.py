@@ -6,6 +6,8 @@ import socket
 import zipfile
 import yaml
 import os
+import uuid
+import re
 import requests
 import websockets
 
@@ -40,6 +42,10 @@ class LRAgentClient:
         self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect", "updatecache", "suicide"]
         self.error_stash = {}
+        if "RPZ_WHITELIST" in os.environ:
+            self.microsoft_id = uuid.uuid4()
+            self.rpz_period = int(os.environ.get("RPZ_PERIOD", 86400))
+            self.last_update = None
         # if "WEBSOCKET_LOGGING" in os.environ:
         self.enable_websocket_log()
         self.alive = int(os.environ.get('KEEP_ALIVE', 10))
@@ -108,7 +114,7 @@ class LRAgentClient:
             else:
                 self.logger.info("Done persisted upgrade with response: {}".format(response))
                 self.process_response(response)
-            os.remove("{}etc/agent/upgrade.json".format(self.folder))
+            self.delete_file("{}etc/agent/upgrade.json".format(self.folder))
         elif not os.path.exists("{}etc/agent/docker-compose.yml".format(self.folder)):
             request = {"action": "request", "data": {"message": "compose missing"}}
             await self.send(request)
@@ -979,6 +985,61 @@ class LRAgentClient:
         response["data"] = {"status": "success", "message": "Agent seems ok"}
         return response
 
+    def check_rpz_file(self, path: str) -> bool:
+        pattern = re.compile(
+            "^(\*[\.-]?)?(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])\s+CNAME\s+\.$")
+        with open(path, "r") as file:
+            try:
+                for line in file:
+                    if not pattern.match(line.strip()):
+                        return False
+            except Exception as e:
+                self.logger.warning("Failed to validate file {}, {}.".format(path, e))
+        return True
+
+    def get_office365_domains(self):
+        try:
+            req = requests.get(
+                "https://endpoints.office.com/endpoints/worldwide?clientrequestid={}".format(self.microsoft_id))
+        except requests.RequestException as re:
+            self.logger.warning("Request to microsoft service failed, {}.".format(re))
+        else:
+            domains = set()
+            for block in req.json():
+                if "urls" in block:
+                    domains.update(block["urls"])
+            return domains
+
+    async def create_office365_rpz(self):
+        if "RPZ_WHITELIST" in os.environ:
+            if not self.last_update or (datetime.now() - self.last_update).seconds >= self.rpz_period:
+                try:
+                    data = self.get_office365_domains()
+                except Exception as e:
+                    self.logger.warning("Failed to get data from Microsoft list, {}.".format(e))
+                else:
+                    if data:
+                        try:
+                            with open("{}etc/kres/temporary.rpz".format(self.folder), "w") as file:
+                                # for text in ["$ORIGIN whalebone.org.", "$TTL 1H",
+                                #              "@ SOA LOCALHOST. rpz.whalebone.org. (1 1h 15m 30d 2h)", "\tNS LOCALHOST."]:
+                                #     file.write("{}\n".format(text))
+                                for domain in data:
+                                    file.write("{}\tCNAME\t.\n".format(domain))
+                            if self.check_rpz_file("{}etc/kres/temporary.rpz".format(self.folder)):
+                                self.delete_file("{}etc/kres/office365.rpz".format(self.folder))
+                                os.rename("{}etc/kres/temporary.rpz".format(self.folder),
+                                          "{}etc/kres/office365.rpz".format(self.folder))
+                        except Exception as e:
+                            self.logger.warning("Failed to finish office365 rpz operation, {}.".format(e))
+                        else:
+                            self.logger.info(
+                                "Rpz file updated with total {} records, next upgrade in {} seconds.".format(len(data),
+                                                                                                     self.rpz_period))
+                            self.last_update = datetime.now()
+                    else:
+                        self.logger.warning("No data present in Microsoft domains list.")
+
     def prefetch_tld(self):
         message = b"prefill.config({['.'] = { url = 'https://www.internic.net/domain/root.zone', interval = 86400 }})"
         for tty in os.listdir("/etc/whalebone/tty/"):
@@ -1078,10 +1139,7 @@ class LRAgentClient:
 
     async def suicide_delete_certs(self):
         for file_name in ["wb_client.crt", "wb_client.key"]:
-            try:
-                os.remove("{}etc/{}".format(self.folder, file_name))
-            except FileNotFoundError:
-                self.logger.warning()
+            self.delete_file("{}etc/{}".format(self.folder, file_name))
 
     async def suicide_modify_compose(self):
         env_config = {"kresman": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "CA_CRT_BASE64", "CORE_URL"],
@@ -1255,13 +1313,21 @@ class LRAgentClient:
                 repeated = "fail"
         finally:
             try:
-                os.remove(path)
+                self.delete_file(path)
                 if not isinstance(repeated, str):
                     os.rename(path + "_new", path)
                 else:
-                    os.remove(path + "_new")
+                    self.delete_file(path + "_new")
             except Exception:
                 pass
+
+    def delete_file(self, path: str):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            raise
 
     def docker_ps(self) -> str:
         result = []

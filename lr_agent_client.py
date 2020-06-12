@@ -1390,6 +1390,8 @@ class LRAgentClient:
             self.create_required_directory(location)
             with open("{}{}".format(self.folder, location), mode) as file:
                 if file_type == "yml":
+                    if isinstance(content, str):
+                        content = yaml.load(content, Loader=yaml.SafeLoader)
                     yaml.dump(content, file, default_flow_style=False)
                 elif file_type == "json":
                     json.dump(content, file)

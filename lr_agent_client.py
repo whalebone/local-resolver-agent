@@ -525,15 +525,26 @@ class LRAgentClient:
         except Exception as e:
             self.logger.warning("Failed to back up to old config".format(e))
 
+    async def dump_resolver_logs(self):
+        try:
+            logs = self.dockerConnector.container_logs("resolver", tail=1000)
+            self.save_file("logs/resolver_dump.logs", "text", logs)
+        except ConnectionError as ce:
+            self.logger.warning("Failed to get logs of new unhealthy resolver, {}.".format(ce))
+        except IOError as ie:
+            self.logger.warning("Failed to persist logs of new unhealthy resolver, {}.".format(ie))
+
     async def upgrade_check_binding(self, sysinfo_connector, old_config: list):
         for _ in range(10):
             if sysinfo_connector.check_port() == "ok" and sysinfo_connector.check_port("resolver-old") == "ok":
                 return True
             await asyncio.sleep(1)
+        await self.dump_resolver_logs()
         self.upgrade_return_config(old_config)
         return False
 
     async def upgrade_translation_fallback(self, service: str, old_config: list):
+        await self.dump_resolver_logs()
         self.upgrade_return_config(old_config)
         restart = await self.upgrade_worker_method("resolver-old", self.dockerConnector.restart_container,
                                                    "failed to restart old resolver")
@@ -1397,6 +1408,8 @@ class LRAgentClient:
                     json.dump(content, file)
                 elif file_type == "sysinfo":
                     file.write("{}\n".format(json.dumps(content)))
+                elif file_type == "text":
+                    file.write(content)
                 else:
                     for rule in content:
                         file.write(rule + "\n")

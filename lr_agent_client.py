@@ -182,10 +182,10 @@ class LRAgentClient:
                         # "fwmodify": self.modify_rule, "fwdelete": self.delete_rule, "localtest": self.local_api_check,
                         # "logs": self.agent_log_files, "log": self.agent_all_logs, "whitelistadd": self.whitelist_add,
                         # "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,  "saveconfig": self.write_config,
-                        # "test": self.agent_test_message, "containerlogs": self.container_logs,
-                        "updatecache": self.update_cache, "containers": self.list_containers,
+                        # "containerlogs": self.container_logs,
+                        "updatecache": self.update_cache, "containers": self.list_containers, "test": self.agent_test_message,
                          "datacollect": self.pack_files, "trace": self.trace_domain}
-        method_arguments = {"sysinfo": [response, request], "create": [response, request],
+        method_arguments = {"sysinfo": [response, request], "create": [response, request], "test": [response],
                             "upgrade": [response, request], "suicide": [response], "containers": [response],
                             # "restart": [response, request], "rename": [response, request],
                             # "containerlogs": [response, request], "saveconfig": [response, request],
@@ -194,7 +194,7 @@ class LRAgentClient:
                             # "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
                             # "fwmodify": [response, request], "fwdelete": [response, request],
                             # "logs": [response], "log": [response, request],
-                            # "flog": [response, request], "dellogs": [response, request], "test": [response],
+                            # "flog": [response, request], "dellogs": [response, request],
                             # "whitelistadd": [response, request],
                             "datacollect": [response, request], "trace": [response, request]}
 

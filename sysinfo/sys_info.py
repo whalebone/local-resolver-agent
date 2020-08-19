@@ -25,9 +25,9 @@ class SystemInfo:
     def get_interfaces(self):
         interfaces = []
         for interface_name, interface_info_list in psutil.net_if_addrs().items():
-            interface = {'name': interface_name, 'addresses': []}
-            for addr_info in interface_info_list:
-                interface['addresses'].append(addr_info.address)
+            interface = {'name': interface_name, 'addresses': [addr_info.address for addr_info in interface_info_list]}
+            # for addr_info in interface_info_list:
+            #     interface['addresses'].append(addr_info.address)
             interfaces.append(interface)
         return interfaces
 

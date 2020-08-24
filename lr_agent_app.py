@@ -5,7 +5,7 @@ import logging
 import websockets
 
 from lr_agent_client import LRAgentClient
-from lr_agent_local import LRAgentLocalClient
+# from lr_agent_local import LRAgentLocalClient
 from exception.exc import InitException, PongFailedException, TaskFailedException
 from loggingtools.logger import build_logger
 
@@ -71,22 +71,22 @@ async def local_resolver_agent_app():
             #     logger.error("local api runtime error {}".format(e))
             # else:
             #     local_api= await local_client.start_api()
-            #     logger.info(type(local_api))
             #     local_task = asyncio.ensure_future(local_api)
             while True:
                 for periodic_task in (remote_client.send_sys_info, remote_client.validate_host, task_monitor,
                                       remote_client.create_office365_rpz):
                     await asyncio.wait_for(periodic_task(), task_timeout)
                 await asyncio.sleep(interval)
-        except asyncio.exceptions.TimeoutError:
-            logger.error("Periodic task {} failed to finish in time, Retrying in 10 secs... .".format(periodic_task))
-        except Exception:
+        # except asyncio.exceptions.TimeoutError:
+        #     logger.error("Periodic task {} failed to finish in time, Retrying in 10 secs... .".format(periodic_task))
+        except Exception as ge:
             try:
                 te = task.exception()
                 if type(te) in [websockets.exceptions.ConnectionClosed, PongFailedException]:
                     logger.error("Connection error encountered.")
                 else:
-                    logger.error('Generic error: {}'.format(te))
+                    logger.error('Generic error: {}, {}'.format(te, ge))
+                task.cancel()
             except Exception:
                 pass
         finally:

@@ -138,11 +138,12 @@ class LRAgentClient:
 
     def enable_websocket_log(self):
         logger = logging.getLogger('websockets')
-        logger.setLevel(int(os.environ.get("WEBSOCKET_LOGGING", 10)))
-        formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(message)s')
-        handler = RotatingFileHandler("{}/logs/agent-ws.log".format(self.folder), maxBytes=200000000, backupCount=5)
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        if not any(isinstance(handler, RotatingFileHandler) for handler in logger.handlers):
+            logger.setLevel(int(os.environ.get("WEBSOCKET_LOGGING", 10)))
+            formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(message)s')
+            handler = RotatingFileHandler("{}/logs/agent-ws.log".format(self.folder), maxBytes=200000000, backupCount=5)
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
 
     def process_response(self, response: dict):
         for service, error_message in response["data"].items():

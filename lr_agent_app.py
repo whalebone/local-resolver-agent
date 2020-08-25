@@ -85,10 +85,9 @@ async def local_resolver_agent_app():
                 if type(te) in [websockets.exceptions.ConnectionClosed, PongFailedException]:
                     logger.error("Connection error encountered.")
                 else:
-                    logger.error('Generic error: {}, {}'.format(te, ge))
-                task.cancel()
+                    logger.error('Generic error: {}'.format(te))
             except Exception:
-                pass
+                logger.error('Generic error: {}'.format(ge))
         finally:
             try:
                 await websocket.close()

@@ -3,7 +3,7 @@ from logging.handlers import RotatingFileHandler
 import os
 
 
-def build_logger(name: str, log_path: str, log_level: str = "INFO"):
+def build_logger(name: str, log_path: str, log_level: str = "INFO", file_size: int = 20000000, backup_count: int = 12):
     try:
         os.mkdir(log_path)
     except FileExistsError:
@@ -17,7 +17,8 @@ def build_logger(name: str, log_path: str, log_level: str = "INFO"):
 
         formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(levelname)s | %(message)s')
         if "DISABLE_FILE_LOGS" not in os.environ:
-            handler = RotatingFileHandler("{}/agent-{}.log".format(log_path, name), maxBytes=20000000, backupCount=12)
+            handler = RotatingFileHandler("{}/agent-{}.log".format(log_path, name), maxBytes=file_size,
+                                          backupCount=backup_count)
             # handler.setLevel(log_level)
             handler.setFormatter(formatter)
             logger.addHandler(handler)

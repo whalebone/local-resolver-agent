@@ -39,6 +39,8 @@ class LRAgentClient:
         self.log_reader = LogReader()
         self.folder = "/etc/whalebone/"
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
+        self.status_log = build_logger("status", "{}logs/".format(self.folder), file_size=10000000, backup_count=2,
+                                       console_output=False)
         self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect", "updatecache", "suicide"]
         self.error_stash = {}
@@ -144,6 +146,19 @@ class LRAgentClient:
             handler = RotatingFileHandler("{}/logs/agent-ws.log".format(self.folder), maxBytes=200000000, backupCount=5)
             handler.setFormatter(formatter)
             logger.addHandler(handler)
+
+    async def set_agent_status(self):
+        try:
+            running_tasks = [task._coro.__name__ for task in asyncio.all_tasks()]
+            pong_waiter = await self.websocket.ping()
+            await asyncio.wait_for(pong_waiter, timeout=self.alive)
+        except Exception as e:
+            if "running_tasks" in locals():
+                self.status_log.warning("Running tasks {} error encountered with connection {}.".format(running_tasks, e))
+            else:
+                self.status_log.warning("Failed to get status {}.".format(e))
+        else:
+            self.status_log.info("Running tasks: {}, ping sent pong received".format(running_tasks))
 
     def process_response(self, response: dict):
         for service, error_message in response["data"].items():

@@ -74,7 +74,7 @@ async def local_resolver_agent_app():
             #     local_task = asyncio.ensure_future(local_api)
             while True:
                 for periodic_task in (remote_client.send_sys_info, remote_client.validate_host, task_monitor,
-                                      remote_client.create_office365_rpz):
+                                      remote_client.create_office365_rpz, remote_client.set_agent_status):
                     await asyncio.wait_for(periodic_task(), task_timeout)
                 await asyncio.sleep(interval)
         # except asyncio.exceptions.TimeoutError:

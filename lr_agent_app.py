@@ -41,7 +41,7 @@ async def connect():
 
 
 async def task_monitor():
-    if "listen" not in [task._coro.__name__ for task in asyncio.all_tasks() if not task.done()]:
+    if "listen" not in [task._coro.__name__ for task in asyncio.all_tasks()]:
         logger = logging.getLogger("main")
         logger.error("Task listen not found in running tasks.")
         raise TaskFailedException
@@ -49,7 +49,7 @@ async def task_monitor():
 
 async def main_task_monitor():
     while True:
-        if "local_resolver_agent_app" not in [task._coro.__name__ for task in asyncio.all_tasks() if not task.done()]:
+        if "local_resolver_agent_app" not in [task._coro.__name__ for task in asyncio.all_tasks()]:
             logger = logging.getLogger("main")
             logger.error("Task local_resolver_agent_app not found in running tasks.")
             raise TaskFailedException

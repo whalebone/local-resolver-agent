@@ -65,7 +65,7 @@ class DockerConnector:
         if since is not None:
             since = datetime.strptime(since, '%Y-%m-%dT%H:%M:%S')
         try:
-            return self.api_client.logs(name, timestamps=timestamps, tail=int(tail), since=since)
+            return self.api_client.logs(name, timestamps=timestamps, tail=tail, since=since)
         except Exception as e:
             raise ConnectionError(e)
 

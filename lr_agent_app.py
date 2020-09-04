@@ -41,7 +41,7 @@ async def connect():
 
 
 async def task_monitor():
-    if "listen" not in [task._coro.__name__ for task in asyncio.all_tasks() if not task.done()]:
+    if "listen" not in [task._coro.__name__ for task in asyncio.all_tasks()]:
         logger = logging.getLogger("main")
         logger.error("Task listen not found in running tasks.")
         raise TaskFailedException
@@ -49,7 +49,7 @@ async def task_monitor():
 
 async def main_task_monitor():
     while True:
-        if "local_resolver_agent_app" not in [task._coro.__name__ for task in asyncio.all_tasks() if not task.done()]:
+        if "local_resolver_agent_app" not in [task._coro.__name__ for task in asyncio.all_tasks()]:
             logger = logging.getLogger("main")
             logger.error("Task local_resolver_agent_app not found in running tasks.")
             raise TaskFailedException
@@ -66,19 +66,20 @@ async def local_resolver_agent_app():
             remote_client = LRAgentClient(websocket)
             task = asyncio.create_task(remote_client.listen())
             # try:
-            #     dummy_client = LRAgentClient(None)
-            #     local_client = LRAgentLocalClient(dummy_client)
+            #     local_client = LRAgentLocalClient(LRAgentClient(None))
             # except Exception as e:
             #     logger.error("local api runtime error {}".format(e))
             # else:
-            #     await local_client.start_api()
+            #     local_api= await local_client.start_api()
+            #     local_task = asyncio.ensure_future(local_api)
             while True:
-                for periodic_task in (remote_client.send_sys_info, remote_client.validate_host, task_monitor):
+                for periodic_task in (remote_client.send_sys_info, remote_client.validate_host, task_monitor,
+                                      remote_client.create_office365_rpz, remote_client.set_agent_status):
                     await asyncio.wait_for(periodic_task(), task_timeout)
                 await asyncio.sleep(interval)
-        except asyncio.exceptions.TimeoutError:
-            logger.error("Periodic task {} failed to finish in time, Retrying in 10 secs... .".format(periodic_task))
-        except Exception:
+        # except asyncio.exceptions.TimeoutError:
+        #     logger.error("Periodic task {} failed to finish in time, Retrying in 10 secs... .".format(periodic_task))
+        except Exception as ge:
             try:
                 te = task.exception()
                 if type(te) in [websockets.exceptions.ConnectionClosed, PongFailedException]:
@@ -86,10 +87,11 @@ async def local_resolver_agent_app():
                 else:
                     logger.error('Generic error: {}'.format(te))
             except Exception:
-                pass
+                logger.error('Generic error: {}'.format(ge))
         finally:
             try:
                 await websocket.close()
+                # await local_api.close()
                 logger.error('Connection Reset. Retrying in 10 secs...')
             except Exception as ce:
                 logger.warning("Failed to cleanup due to {}.".format(ce))

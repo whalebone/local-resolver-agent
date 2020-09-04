@@ -6,6 +6,8 @@ import socket
 import zipfile
 import yaml
 import os
+import uuid
+import re
 import requests
 import websockets
 
@@ -37,9 +39,15 @@ class LRAgentClient:
         self.log_reader = LogReader()
         self.folder = "/etc/whalebone/"
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
+        self.status_log = build_logger("status", "{}logs/".format(self.folder), file_size=10000000, backup_count=2,
+                                       console_output=False)
         self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
         self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect", "updatecache", "suicide"]
         self.error_stash = {}
+        if "RPZ_WHITELIST" in os.environ:
+            self.microsoft_id = uuid.uuid4()
+            self.rpz_period = int(os.environ.get("RPZ_PERIOD", 86400))
+            self.last_update = None
         # if "WEBSOCKET_LOGGING" in os.environ:
         self.enable_websocket_log()
         self.alive = int(os.environ.get('KEEP_ALIVE', 10))
@@ -108,7 +116,7 @@ class LRAgentClient:
             else:
                 self.logger.info("Done persisted upgrade with response: {}".format(response))
                 self.process_response(response)
-            os.remove("{}etc/agent/upgrade.json".format(self.folder))
+            self.delete_file("{}etc/agent/upgrade.json".format(self.folder))
         elif not os.path.exists("{}etc/agent/docker-compose.yml".format(self.folder)):
             request = {"action": "request", "data": {"message": "compose missing"}}
             await self.send(request)
@@ -132,11 +140,25 @@ class LRAgentClient:
 
     def enable_websocket_log(self):
         logger = logging.getLogger('websockets')
-        logger.setLevel(int(os.environ.get("WEBSOCKET_LOGGING", 10)))
-        formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(message)s')
-        handler = RotatingFileHandler("{}/logs/agent-ws.log".format(self.folder), maxBytes=200000000, backupCount=5)
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        if not any(isinstance(handler, RotatingFileHandler) for handler in logger.handlers):
+            logger.setLevel(int(os.environ.get("WEBSOCKET_LOGGING", 10)))
+            formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(message)s')
+            handler = RotatingFileHandler("{}/logs/agent-ws.log".format(self.folder), maxBytes=200000000, backupCount=5)
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+
+    async def set_agent_status(self):
+        try:
+            running_tasks = [task._coro.__name__ for task in asyncio.all_tasks()]
+            pong_waiter = await self.websocket.ping()
+            await asyncio.wait_for(pong_waiter, timeout=self.alive)
+        except Exception as e:
+            if "running_tasks" in locals():
+                self.status_log.warning("Running tasks {} error encountered with connection {}.".format(running_tasks, e))
+            else:
+                self.status_log.warning("Failed to get status {}.".format(e))
+        else:
+            self.status_log.info("Running tasks: {}, ping sent pong received".format(running_tasks))
 
     def process_response(self, response: dict):
         for service, error_message in response["data"].items():
@@ -169,28 +191,27 @@ class LRAgentClient:
         response["action"] = request["action"]
 
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
-                        "rename": self.rename_container, "containers": self.list_containers,
-                        "restart": self.restart_container,
+                        "suicide": self.resolver_suicide, "clearcache": self.resolver_cache_clear,
+                        # "restart": self.restart_container, "rename": self.rename_container,
                         # "stop": self.stop_container, "remove": self.remove_container,
-                        "containerlogs": self.container_logs, "clearcache": self.resolver_cache_clear,
-                        "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
-                        "fwmodify": self.modify_rule, "fwdelete": self.delete_rule, "suicide": self.resolver_suicide,
-                        "logs": self.agent_log_files, "log": self.agent_all_logs,
-                        "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,
-                        "test": self.agent_test_message, "updatecache": self.update_cache,
-                        "saveconfig": self.write_config, "whitelistadd": self.whitelist_add,
-                        "localtest": self.local_api_check, "datacollect": self.pack_files, "trace": self.trace_domain}
-        method_arguments = {"sysinfo": [response, request], "create": [response, request],
-                            "upgrade": [response, request], "restart": [response, request],
-                            "rename": [response, request], "containers": [response],
-                            "containerlogs": [response, request], "clearcache": [response, request],
-                            # "stop": [response, request], "remove": [response, request],
-                            "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
-                            "fwmodify": [response, request], "fwdelete": [response, request],
-                            "logs": [response], "log": [response, request], "suicide": [response],
-                            "flog": [response, request], "dellogs": [response, request], "test": [response],
-                            "updatecache": [response, request], "saveconfig": [response, request],
-                            "whitelistadd": [response, request], "localtest": [response],
+                        # "fwrules": self.firewall_rules, "fwcreate": self.create_rule, "fwfetch": self.fetch_rule,
+                        # "fwmodify": self.modify_rule, "fwdelete": self.delete_rule, "localtest": self.local_api_check,
+                        # "logs": self.agent_log_files, "log": self.agent_all_logs, "whitelistadd": self.whitelist_add,
+                        # "flog": self.agent_filtered_logs, "dellogs": self.agent_delete_logs,  "saveconfig": self.write_config,
+                        # "containerlogs": self.container_logs,
+                        "updatecache": self.update_cache, "containers": self.list_containers, "test": self.agent_test_message,
+                         "datacollect": self.pack_files, "trace": self.trace_domain}
+        method_arguments = {"sysinfo": [response, request], "create": [response, request], "test": [response],
+                            "upgrade": [response, request], "suicide": [response], "containers": [response],
+                            # "restart": [response, request], "rename": [response, request],
+                            # "containerlogs": [response, request], "saveconfig": [response, request],
+                            "clearcache": [response, request], "updatecache": [response, request],
+                            # "stop": [response, request], "remove": [response, request], "localtest": [response],
+                            # "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
+                            # "fwmodify": [response, request], "fwdelete": [response, request],
+                            # "logs": [response], "log": [response, request],
+                            # "flog": [response, request], "dellogs": [response, request],
+                            # "whitelistadd": [response, request],
                             "datacollect": [response, request], "trace": [response, request]}
 
         if "CONFIRMATION_REQUIRED" in os.environ and request["action"] not in ["updatecache"] and not cli:
@@ -241,13 +262,186 @@ class LRAgentClient:
                     status[service]["status"] = "success"
                     if service == "resolver":
                         await self.update_cache()
+                        self.prefetch_tld()
             if "requestId" in response:
                 del response["requestId"]
             response["data"] = status
         return response
 
+    # async def upgrade_container(self, response: dict, request: dict) -> dict:
+    #     sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
+    #     if "cli" not in request:
+    #         await self.send_acknowledgement(response)
+    #     status = {}
+    #     compose = self.upgrade_load_compose(request, response)
+    #     if "status" in compose:
+    #         return compose
+    #     try:
+    #         parsed_compose = self.compose_parser.create_service(compose)
+    #     except ComposeException as e:
+    #         self.logger.warning(e)
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #     else:
+    #         # if request["data"]["services"]:
+    #         services = request["data"]["services"] if request["data"]["services"] else list(parsed_compose["services"])
+    #         # else:
+    #         #     services = list(parsed_compose["services"].keys())
+    #         if "lr-agent" in services and len(services) != 1:
+    #             request["data"]["services"] = [service for service in services if service != "lr-agent"]
+    #             request["data"]["compose"] = json.dumps({'version': '3', 'services':
+    #                 {key: value for key, value in parsed_compose["services"].items() if key != "lr-agent"}})
+    #             self.save_file("etc/agent/upgrade.json", "json", request)
+    #             services = ["lr-agent"]
+    #         if "resolver" in services:
+    #             try:
+    #                 old_config = self.load_file("etc/kres/kres.conf")
+    #             except IOError as e:
+    #                 status["load"] = {"status": "failure", "body": str(e)}
+    #             result = self.upgrade_save_files(request, compose, ["config"])
+    #             if result:
+    #                 status["dump"] = result
+    #         running_containers = [container.name for container in self.dockerConnector.get_containers()]
+    #         if "lr-agent-old" in running_containers and "lr-agent" not in running_containers:
+    #             try:
+    #                 await self.dockerConnector.rename_container("lr-agent-old", "lr-agent")
+    #             except ContainerException as ce:
+    #                 return {"status": "failure",
+    #                         "message": "agent old running without agent, rename failed, {}".format(ce)}
+    #         for service in services:
+    #             status[service] = {}
+    #             if service not in parsed_compose["services"]:
+    #                 status[service] = {"status": "failure", "message": "{} not present in compose".format(service)}
+    #                 continue
+    #             if service not in ["lr-agent", "resolver"]:
+    #                 await self.upgrade_pull_image(parsed_compose["services"][service]['image'])
+    #                 remove = await self.upgrade_worker_method(service, self.dockerConnector.remove_container,
+    #                                                           "remove old container")
+    #                 if not remove:
+    #                     start = await self.upgrade_start_service(service, parsed_compose["services"][service])
+    #                     if isinstance(start, str):
+    #                         status[service]["status"] = start
+    #                     else:
+    #                         status[service] = start
+    #                 else:
+    #                     status[service] = remove
+    #             else:
+    #                 if service == "resolver" and sysinfo_connector.check_port() == "fail":
+    #                     remove = await self.upgrade_worker_method(service,  self.dockerConnector.remove_container,
+    #                                                               "Failed to remove unhealthy container")
+    #                     if not remove:
+    #                         start = await self.upgrade_start_service(service, parsed_compose["services"][service],
+    #                                                                  "Failed to create new container from unhealthy")
+    #                         if start != "success":
+    #                             status[service] = start
+    #                         else:
+    #                             status[service]["status"] = "success"
+    #                     else:
+    #                         status[service] = remove
+    #
+    #                 else:
+    #                     rename = await self.upgrade_rename_service(service)
+    #                     if rename != "success":
+    #                         status[service] = rename
+    #                     else:
+    #                         start = await self.upgrade_start_service(service, parsed_compose["services"][service])
+    #                         if start != "success":
+    #                             status[service] = start
+    #                             rename = await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
+    #                                                                       "rename rollback", service)
+    #                             if rename:
+    #                                 status[service] = rename
+    #                         else:
+    #                             try:
+    #                                 if service == "resolver":
+    #                                     for _ in range(10):
+    #                                         if sysinfo_connector.check_port() == "ok" and \
+    #                                                 sysinfo_connector.check_port("resolver-old") == "ok":
+    #                                             break
+    #                                         await asyncio.sleep(1)
+    #                                     else:
+    #                                         try:
+    #                                             self.save_file("etc/kres/kres.conf", "text", old_config)
+    #                                         except Exception as e:
+    #                                             self.logger.warning("Failed to back up to old config".format(e))
+    #                                         raise ContainerException("New resolver is not healthy rollback")
+    #                                     stop = await self.upgrade_worker_method("resolver-old",
+    #                                                                             self.dockerConnector.stop_container,
+    #                                                                             "Failed to stop old resolver")
+    #                                     if stop:
+    #                                         raise ContainerException("Failed to stop old resolver")
+    #                                     else:
+    #                                         if sysinfo_connector.check_resolving() == "fail":
+    #                                             try:
+    #                                                 self.save_file("etc/kres/kres.conf", "text", old_config)
+    #                                             except Exception as e:
+    #                                                 self.logger.warning("Failed to back up to old config".format(e))
+    #                                             restart = await self.upgrade_worker_method("resolver-old",
+    #                                                                                        self.dockerConnector.restart_container,
+    #                                                                                        "failed to restart old resolver")
+    #                                             if not restart:
+    #                                                 try:
+    #                                                     await self.upgrade_worker_method(service,
+    #                                                                                      self.dockerConnector.remove_container,
+    #                                                                                      "Filed to remove new resolver.")
+    #                                                     await self.upgrade_worker_method("resolver-old",
+    #                                                                                      self.dockerConnector.rename_container,
+    #                                                                                      "Filed to remove new resolver.",
+    #                                                                                      service)
+    #                                                 except Exception as e:
+    #                                                     self.logger.warning(
+    #                                                         "Failure during healthcheck rollback, {}".format(e))
+    #                                                 self.logger.warning(
+    #                                                     "New resolver is unhealthy, resolving failed")
+    #                                                 status[service] = {"status": "failure",
+    #                                                                    "message": "New resolver is unhealthy, resolving failed",
+    #                                                                    "body": "Resolving healthcheck failed"}
+    #                                             else:
+    #                                                 status[service] = restart
+    #                                 inspect = self.dockerConnector.inspect_config(service)
+    #                                 if inspect["State"]["Running"] is True:
+    #                                     remove = await self.upgrade_worker_method("{}-old".format(service),
+    #                                                                               self.dockerConnector.remove_container,
+    #                                                                               "Failed to remove old {}".format(
+    #                                                                                   service))
+    #                                     if remove:
+    #                                         raise ContainerException(
+    #                                             "Failed to remove old {}, with error {}".format(service, e))
+    #
+    #                                 else:
+    #                                     raise ContainerException("New {} is not running".format(service))
+    #                             except ContainerException as e:
+    #                                 status[service] = {"status": "failure", "message": "removal of old service",
+    #                                                    "body": str(e)}
+    #                                 self.logger.info(e)
+    #                                 remove = await self.upgrade_worker_method(service, self.dockerConnector.remove_container,
+    #                                                                           "removal of old and new service")
+    #                                 if not remove:
+    #                                     rename = await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
+    #                                                                               "removal and rename of old agent",
+    #                                                                               service)
+    #                                     if rename:
+    #                                         status[service] = rename
+    #                                 else:
+    #                                     status[service] = remove
+    #
+    #                             else:
+    #                                 if "status" not in status[service]:
+    #                                     status[service]["status"] = "success"
+    #                                     if service == "resolver":
+    #                                         await self.update_cache()
+    #         try:
+    #             if all(state["status"] == "success" for state in status.values()):
+    #                 result = self.upgrade_save_files(request, compose, ["compose"])
+    #                 if result:
+    #                     status["dump"] = result
+    #         except Exception as e:
+    #             self.logger.warning("Failed to check status {}".format(e))
+    #         if "requestId" in response:
+    #             del response["requestId"]
+    #         response["data"] = status
+    #     return response
+
     async def upgrade_container(self, response: dict, request: dict) -> dict:
-        sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
         if "cli" not in request:
             await self.send_acknowledgement(response)
         status = {}
@@ -257,167 +451,224 @@ class LRAgentClient:
         try:
             parsed_compose = self.compose_parser.create_service(compose)
         except ComposeException as e:
-            self.logger.warning(e)
+            self.logger.warning("Failed to create services from parsed compose, {}".format(e))
             response["data"] = {"status": "failure", "body": str(e)}
         else:
-            # if request["data"]["services"]:
             services = request["data"]["services"] if request["data"]["services"] else list(parsed_compose["services"])
-            # else:
-            #     services = list(parsed_compose["services"].keys())
-            if "lr-agent" in services and len(services) != 1:
-                request["data"]["services"] = [service for service in services if service != "lr-agent"]
-                request["data"]["compose"] = json.dumps({'version': '3', 'services':
-                    {key: value for key, value in parsed_compose["services"].items() if key != "lr-agent"}})
-                self.save_file("etc/agent/upgrade.json", "json", request)
+            if self.upgrade_check_multi_upgrade(services, request, parsed_compose):
                 services = ["lr-agent"]
             if "resolver" in services:
                 try:
-                    old_config = self.load_file("etc/kres/kres.conf")
-                except IOError as e:
-                    status["load"] = {"status": "failure", "body": str(e)}
-                result = self.upgrade_save_files(request, compose, ["config"])
-                if result:
-                    status["dump"] = result
-            running_containers = [container.name for container in self.dockerConnector.get_containers()]
-            if "lr-agent-old" in running_containers and "lr-agent" not in running_containers:
-                try:
-                    await self.dockerConnector.rename_container("lr-agent-old", "lr-agent")
-                except ContainerException as ce:
-                    return {"status": "failure",
-                            "message": "agent old running without agent, rename failed, {}".format(ce)}
+                    old_config = self.upgrade_load_config(request, compose)
+                except Exception as e:
+                    status.update({"config dump": str(e)})
+            else:
+                old_config = None
+            try:
+                await self.upgrade_check_incorrect_name()
+            except ContainerException as ce:
+                return {"status": "failure",
+                        "message": "agent old running without agent, rename failed, {}".format(ce)}
             for service in services:
-                status[service] = {}
                 if service not in parsed_compose["services"]:
                     status[service] = {"status": "failure", "message": "{} not present in compose".format(service)}
                     continue
                 if service not in ["lr-agent", "resolver"]:
-                    await self.upgrade_pull_image(parsed_compose["services"][service]['image'])
-                    remove = await self.upgrade_worker_method(service, self.dockerConnector.remove_container,
-                                                              "remove old container")
-                    if not remove:
-                        start = await self.upgrade_start_service(service, parsed_compose["services"][service])
-                        if isinstance(start, str):
-                            status[service]["status"] = start
-                        else:
-                            status[service] = start
-                    else:
-                        status[service] = remove
+                    status[service] = await self.upgrade_with_downtime(parsed_compose, service)
                 else:
-                    if service == "resolver" and sysinfo_connector.check_port() == "fail":
-                        remove = await self.upgrade_worker_method(service,  self.dockerConnector.remove_container,
-                                                                  "Failed to remove unhealthy container")
-                        if not remove:
-                            start = await self.upgrade_start_service(service, parsed_compose["services"][service],
-                                                                     "Failed to create new container from unhealthy")
-                            if start != "success":
-                                status[service] = start
-                            else:
-                                status[service]["status"] = "success"
-                        else:
-                            status[service] = remove
-
-                    else:
-                        rename = await self.upgrade_rename_service(service)
-                        if rename != "success":
-                            status[service] = rename
-                        else:
-                            start = await self.upgrade_start_service(service, parsed_compose["services"][service])
-                            if start != "success":
-                                status[service] = start
-                                rename = await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
-                                                                          "rename rollback", service)
-                                if rename:
-                                    status[service] = rename
-                            else:
-                                try:
-                                    if service == "resolver":
-                                        for _ in range(10):
-                                            if sysinfo_connector.check_port() == "ok" and \
-                                                    sysinfo_connector.check_port("resolver-old") == "ok":
-                                                break
-                                            await asyncio.sleep(1)
-                                        else:
-                                            try:
-                                                self.save_file("etc/kres/kres.conf", "text", old_config)
-                                            except Exception as e:
-                                                self.logger.warning("Failed to back up to old config".format(e))
-                                            raise ContainerException("New resolver is not healthy rollback")
-                                        stop = await self.upgrade_worker_method("resolver-old",
-                                                                                self.dockerConnector.stop_container,
-                                                                                "Failed to stop old resolver")
-                                        if stop:
-                                            raise ContainerException("Failed to stop old resolver")
-                                        else:
-                                            if sysinfo_connector.check_resolving() == "fail":
-                                                try:
-                                                    self.save_file("etc/kres/kres.conf", "text", old_config)
-                                                except Exception as e:
-                                                    self.logger.warning("Failed to back up to old config".format(e))
-                                                restart = await self.upgrade_worker_method("resolver-old",
-                                                                                           self.dockerConnector.restart_container,
-                                                                                           "failed to restart old resolver")
-                                                if not restart:
-                                                    try:
-                                                        await self.upgrade_worker_method(service,
-                                                                                         self.dockerConnector.remove_container,
-                                                                                         "Filed to remove new resolver.")
-                                                        await self.upgrade_worker_method("resolver-old",
-                                                                                         self.dockerConnector.rename_container,
-                                                                                         "Filed to remove new resolver.",
-                                                                                         service)
-                                                    except Exception as e:
-                                                        self.logger.warning(
-                                                            "Failure during healthcheck rollback, {}".format(e))
-                                                    self.logger.warning(
-                                                        "New resolver is unhealthy, resolving failed")
-                                                    status[service] = {"status": "failure",
-                                                                       "message": "New resolver is unhealthy, resolving failed",
-                                                                       "body": "Resolving healthcheck failed"}
-                                                else:
-                                                    status[service] = restart
-                                    inspect = self.dockerConnector.inspect_config(service)
-                                    if inspect["State"]["Running"] is True:
-                                        remove = await self.upgrade_worker_method("{}-old".format(service),
-                                                                                  self.dockerConnector.remove_container,
-                                                                                  "Failed to remove old {}".format(
-                                                                                      service))
-                                        if remove:
-                                            raise ContainerException(
-                                                "Failed to remove old {}, with error {}".format(service, e))
-
-                                    else:
-                                        raise ContainerException("New {} is not running".format(service))
-                                except ContainerException as e:
-                                    status[service] = {"status": "failure", "message": "removal of old service",
-                                                       "body": str(e)}
-                                    self.logger.info(e)
-                                    remove = await self.upgrade_worker_method(service, self.dockerConnector.remove_container,
-                                                                              "removal of old and new service")
-                                    if not remove:
-                                        rename = await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
-                                                                                  "removal and rename of old agent",
-                                                                                  service)
-                                        if rename:
-                                            status[service] = rename
-                                    else:
-                                        status[service] = remove
-
-                                else:
-                                    if "status" not in status[service]:
-                                        status[service]["status"] = "success"
-                                        if service == "resolver":
-                                            await self.update_cache()
+                    status[service] = await self.upgrade_without_downtime(service, parsed_compose, old_config)
             try:
-                if all(state["status"] == "success" for state in status.values()):
-                    result = self.upgrade_save_files(request, compose, ["compose"])
-                    if result:
-                        status["dump"] = result
-            except Exception as e:
-                self.logger.warning("Failed to check status {}".format(e))
+                self.upgrade_persist_compose(status, request, compose)
+            except Exception as de:
+                status["dump"] = de
             if "requestId" in response:
                 del response["requestId"]
             response["data"] = status
         return response
+
+    async def upgrade_with_downtime(self, parsed_compose: dict, service: str) -> dict:
+        await self.upgrade_pull_image(parsed_compose["services"][service]['image'])
+        try:
+            await self.upgrade_worker_method(service, self.dockerConnector.remove_container)
+        except Exception as e:
+            return {"status": "failure", "message": "failed to remove old {}".format(service), "body": str(e)}
+        else:
+            try:
+                await self.upgrade_start_service(service, parsed_compose["services"][service])
+            except Exception as se:
+                return {"status": "failure", "message": "failed to start new {}".format(service), "body": str(se)}
+            else:
+                return {"status": "success"}
+
+    def upgrade_load_config(self, request: dict, compose: dict):
+        try:
+            old_config = self.load_file("etc/kres/kres.conf")
+        except IOError as e:
+            raise Exception(e)
+        else:
+            self.upgrade_save_files(request, compose, ["config"])
+            return old_config
+
+    def upgrade_check_multi_upgrade(self, services: list, request: dict, parsed_compose: dict) -> bool:
+        if "lr-agent" in services and len(services) != 1:
+            request["data"]["services"] = [service for service in services if service != "lr-agent"]
+            request["data"]["compose"] = json.dumps({'version': '3', 'services':
+                {key: value for key, value in parsed_compose["services"].items() if key != "lr-agent"}})
+            self.save_file("etc/agent/upgrade.json", "json", request)
+            return True
+        return False
+
+    def upgrade_persist_compose(self, status: dict, request: dict, compose: dict):
+        try:
+            if all(state["status"] == "success" for state in status.values()):
+                self.upgrade_save_files(request, compose, ["compose"])
+        except Exception as e:
+            self.logger.warning("There was an error in compose persistence {}".format(e))
+            raise Exception(e)
+
+    async def upgrade_check_incorrect_name(self):
+        running_containers = [container.name for container in self.dockerConnector.get_containers()]
+        if "lr-agent-old" in running_containers and "lr-agent" not in running_containers:
+            # try:
+            await self.dockerConnector.rename_container("lr-agent-old", "lr-agent")
+            # except ContainerException as ce:
+            #     return {"status": "failure",
+            #             "message": "agent old running without agent, rename failed, {}".format(ce)}
+
+    def upgrade_return_config(self, old_config: list):
+        try:
+            self.save_file("etc/kres/kres.conf", "text", old_config)
+        except Exception as e:
+            self.logger.warning("Failed to back up to old config".format(e))
+
+    async def dump_resolver_logs(self):
+        try:
+            logs = self.dockerConnector.container_logs("resolver", tail=1000)
+            self.save_file("logs/resolver_dump.logs", "text", logs)
+        except ConnectionError as ce:
+            self.logger.warning("Failed to get logs of new unhealthy resolver, {}.".format(ce))
+        except IOError as ie:
+            self.logger.warning("Failed to persist logs of new unhealthy resolver, {}.".format(ie))
+
+    async def upgrade_check_binding(self, sysinfo_connector, old_config: list):
+        for _ in range(10):
+            if sysinfo_connector.check_port() == "ok" and sysinfo_connector.check_port("resolver-old") == "ok":
+                return True
+            await asyncio.sleep(1)
+        await self.dump_resolver_logs()
+        self.upgrade_return_config(old_config)
+        return False
+
+    async def upgrade_translation_fallback(self, service: str, old_config: list):
+        await self.dump_resolver_logs()
+        self.upgrade_return_config(old_config)
+        restart = await self.upgrade_worker_method("resolver-old", self.dockerConnector.restart_container,
+                                                   "failed to restart old resolver")
+        if not restart:
+            try:
+                await self.upgrade_worker_method(service, self.dockerConnector.remove_container,
+                                                 "Filed to remove new resolver.")
+                await self.upgrade_worker_method("resolver-old", self.dockerConnector.rename_container,
+                                                 "Filed to remove new resolver.", service)
+            except Exception as e:
+                self.logger.warning("Failure during healthcheck rollback, {}".format(e))
+            self.logger.warning("New resolver is unhealthy, resolving failed")
+            return {"status": "failure", "message": "New resolver is unhealthy, resolving failed",
+                    "body": "Resolving healthcheck failed"}
+        else:
+            return restart
+
+    async def upgrade_container_fallback(self, service: str) -> dict:
+        try:
+            await self.upgrade_worker_method(service, self.dockerConnector.remove_container)
+        except Exception as re:
+            return {"status": "failure", "message": "failed to remove new {}".format(service), "body": str(re)}
+        else:
+            try:
+                await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
+                                                 name=service)
+            except Exception as rn:
+                return {"status": "failure", "message": "failed to rename old {}".format(service), "body": str(rn)}
+
+    async def upgrade_replace_unhealthy_resolver(self, service: str, parsed_compose: dict):
+        try:
+            await self.upgrade_worker_method(service, self.dockerConnector.remove_container)
+        except Exception as re:
+            return self.upgrade_get_error_message("failed to remove unhealthy {}".format(service), re)
+        else:
+            try:
+                await self.upgrade_start_service(service, parsed_compose["services"][service])
+            except Exception as se:
+                return self.upgrade_get_error_message("failed to create new {} from unhealthy".format(service), se)
+            else:
+                return {"status": "success"}
+
+    async def upgrade_check_resolver_resolving(self, sysinfo_connector, old_config: list, service: str) -> dict:
+        if not await self.upgrade_check_binding(sysinfo_connector, old_config):
+            raise ContainerException("New resolver is not healthy due to port not bound, rollback")
+        try:
+            await self.upgrade_worker_method("resolver-old", self.dockerConnector.stop_container)
+        except Exception as se:
+            raise ContainerException("Failed to stop old resolver, {}".format(se))
+        else:
+            if sysinfo_connector.check_resolving() == "fail":
+                return await self.upgrade_translation_fallback(service, old_config)
+
+    def upgrade_check_service_state(self, service: str) -> bool:
+        try:
+            return True if self.dockerConnector.inspect_config(service)["State"]["Running"] else False
+        except Exception:
+            return False
+
+    def upgrade_get_error_message(self, message: str, exception):
+        return {"status": "failure", "message": message, "body": str(exception)}
+
+    async def upgrade_without_downtime(self, service: str, parsed_compose: dict, old_config: list=None) -> dict:
+        sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
+        if service == "resolver" and sysinfo_connector.check_port() == "fail":
+            return await self.upgrade_replace_unhealthy_resolver(service, parsed_compose)
+        else:
+            try:
+                await self.upgrade_rename_service(service)
+            except Exception as or_re:
+                return self.upgrade_get_error_message("failed to rename old {}".format(service), or_re)
+            else:
+                try:
+                    await self.upgrade_start_service(service, parsed_compose["services"][service])
+                except Exception as se:
+                    try:
+                        await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
+                                                              name=service)
+                    except Exception as ren:
+                        return self.upgrade_get_error_message("failed to rollback name for {}".format(service), ren)
+                    else:
+                        return self.upgrade_get_error_message("failed to start new service {}".format(service), se)
+                else:
+                    try:
+                        if service == "resolver":
+                            status = await self.upgrade_check_resolver_resolving(sysinfo_connector, old_config, service)
+                            if status:
+                                return status
+                        if self.upgrade_check_service_state(service):
+                            try:
+                                await self.upgrade_worker_method("{}-old".format(service),
+                                                                 self.dockerConnector.remove_container)
+                            except Exception as ree:
+                                raise ContainerException("Failed to remove old {}, with error {}".format(service, ree))
+                        else:
+                            raise ContainerException("New {} is not running".format(service))
+                    except ContainerException as e:
+                        self.logger.info(e)
+                        error = await self.upgrade_container_fallback(service)
+                        if error:
+                            return error
+                        else:
+                            return self.upgrade_get_error_message("failed the removal of old {}".format(service), e)
+                    else:
+                        if service == "resolver":
+                            await self.update_cache()
+                            self.prefetch_tld()
+                        return {"status": "success"}
 
     def upgrade_save_files(self, request: dict, decoded_data, keys: list) -> dict:
         try:
@@ -426,9 +677,10 @@ class LRAgentClient:
             if "config" in keys and "config" in request["data"]:
                 self.save_file("etc/kres/kres.conf", "text", request["data"]["config"])
         except IOError as e:
-            return {"status": "failure", "body": str(e)}
-        else:
-            return {}
+            raise Exception(e)
+            # return {"status": "failure", "body": str(e)}
+        # else:
+        #     return {}
 
     def upgrade_load_compose(self, request: dict, response: dict):
         if "compose" in request["data"]:
@@ -449,7 +701,7 @@ class LRAgentClient:
         except Exception as e:
             self.logger.info("Failed to pull image before upgrade, {}".format(e))
 
-    async def upgrade_worker_method(self, service: str, action, error_message: str, name: str = None):
+    async def upgrade_worker_method(self, service: str, action, error_message: str="", name: str = None):
         try:
             if service in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
                 if name:
@@ -457,8 +709,9 @@ class LRAgentClient:
                 else:
                     await action(service)
         except ContainerException as e:
-            self.logger.info(e)
-            return {"status": "failure", "message": error_message, "body": str(e)}
+            self.logger.info("Failed to execute action {} for service {} due to {}".format(action, service, e))
+            # return {"status": "failure", "message": error_message, "body": str(e)}
+            raise Exception(e)
 
     async def upgrade_rename_service(self, service: str):
         try:
@@ -470,7 +723,8 @@ class LRAgentClient:
                 await self.dockerConnector.rename_container(service, "{}-old".format(service))
         except ContainerException as e:
             self.logger.warning("Failed to rename {} service, error {}".format(service, e))
-            return {"status": "failure", "message": "rename of new container", "body": str(e)}
+            # return {"status": "failure", "message": "rename of new container", "body": str(e)}
+            raise Exception(e)
         else:
             return "success"
 
@@ -483,7 +737,8 @@ class LRAgentClient:
                 await self.dockerConnector.start_service(compose)  # tries to start new service
         except ContainerException as e:
             self.logger.warning("Failed to create {} service, error {}".format(service, e))
-            return {"status": "failure", "message": error_message, "body": str(e)}
+            # return {"status": "failure", "message": error_message, "body": str(e)}
+            raise Exception(e)
         else:
             return "success"
 
@@ -757,6 +1012,72 @@ class LRAgentClient:
         response["data"] = {"status": "success", "message": "Agent seems ok"}
         return response
 
+    def check_rpz_file(self, path: str) -> bool:
+        pattern = re.compile(
+            "^(\*[\.-]?)?(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])\s+CNAME\s+\.$")
+        with open(path, "r") as file:
+            try:
+                for line in file:
+                    if not pattern.match(line.strip()):
+                        return False
+            except Exception as e:
+                self.logger.warning("Failed to validate file {}, {}.".format(path, e))
+        return True
+
+    def get_office365_domains(self):
+        try:
+            req = requests.get(
+                "https://endpoints.office.com/endpoints/worldwide?clientrequestid={}".format(self.microsoft_id))
+        except requests.RequestException as re:
+            self.logger.warning("Request to microsoft service failed, {}.".format(re))
+        else:
+            domains = set()
+            for block in req.json():
+                if "urls" in block:
+                    domains.update(block["urls"])
+            return domains
+
+    async def create_office365_rpz(self):
+        if "RPZ_WHITELIST" in os.environ:
+            if not self.last_update or (datetime.now() - self.last_update).seconds >= self.rpz_period:
+                try:
+                    data = self.get_office365_domains()
+                except Exception as e:
+                    self.logger.warning("Failed to get data from Microsoft list, {}.".format(e))
+                else:
+                    if data:
+                        try:
+                            with open("{}etc/kres/temporary.rpz".format(self.folder), "w") as file:
+                                # for text in ["$ORIGIN whalebone.org.", "$TTL 1H",
+                                #              "@ SOA LOCALHOST. rpz.whalebone.org. (1 1h 15m 30d 2h)", "\tNS LOCALHOST."]:
+                                #     file.write("{}\n".format(text))
+                                for domain in data:
+                                    file.write("{}\tCNAME\t.\n".format(domain))
+                            if self.check_rpz_file("{}etc/kres/temporary.rpz".format(self.folder)):
+                                self.delete_file("{}etc/kres/office365.rpz".format(self.folder))
+                                os.rename("{}etc/kres/temporary.rpz".format(self.folder),
+                                          "{}etc/kres/office365.rpz".format(self.folder))
+                        except Exception as e:
+                            self.logger.warning("Failed to finish office365 rpz operation, {}.".format(e))
+                        else:
+                            self.logger.info(
+                                "Rpz file updated with total {} records, next upgrade in {} seconds.".format(len(data),
+                                                                                                     self.rpz_period))
+                            self.last_update = datetime.now()
+                    else:
+                        self.logger.warning("No data present in Microsoft domains list.")
+
+    def prefetch_tld(self):
+        message = b"prefill.config({['.'] = { url = 'https://www.internic.net/domain/root.zone', interval = 86400 }})"
+        for tty in os.listdir("/etc/whalebone/tty/"):
+            try:
+                self.send_to_socket(message, tty)
+            except Exception:
+                self.logger.warning("Failed to send prefetch data to socket")
+            else:
+                self.logger.info("Tlds successfully pre fetched.")
+                break
+
     async def update_cache(self, response: dict = None, request: dict = None) -> dict:
         if request and "cli" not in request:
             await self.send_acknowledgement(response)
@@ -796,29 +1117,36 @@ class LRAgentClient:
 
     async def resolver_cache_clear(self, response: dict, request: dict):
         for tty in os.listdir("/etc/whalebone/tty/"):
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(5)
+            message = "cache.clear()" if request["data"]["clear"] == "all" else "cache.clear('{}', true)".format(
+                request["data"]["clear"])
             try:
-                sock.connect("/etc/whalebone/tty/{}".format(tty))
-            except socket.timeout as te:
-                self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
-            except socket.error as msg:
-                self.logger.warning("Connection error {} to socket {}".format(msg, tty))
-            else:
-                try:
-                    args = "" if request["data"]["clear"] == "all" else "'{}', true".format(request["data"]["clear"])
-                    message = "cache.clear({})".format(args).encode("utf-8")
-                    sock.sendall(message)
-                    response["data"] = {"status": "success"}
-                except socket.timeout as re:
-                    self.logger.warning("Failed to get data from socket {}, {}".format(tty, re))
-                except Exception as e:
-                    self.logger.warning("Failed to get data from {}, {}".format(tty, e))
-                finally:
-                    sock.close()
-            if "data" not in response:
+                self.send_to_socket(message.encode("utf-8"), tty)
+            except Exception:
                 response["data"] = {"status": "failure"}
+            else:
+                response["data"] = {"status": "success"}
             return response
+
+    def send_to_socket(self, message: bytes, tty):
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        try:
+            sock.connect("/etc/whalebone/tty/{}".format(tty))
+        except socket.timeout as te:
+            self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
+        except socket.error as msg:
+            self.logger.warning("Connection error {} to socket {}".format(msg, tty))
+        else:
+            try:
+                sock.sendall(message)
+                return
+            except socket.timeout as re:
+                self.logger.warning("Failed to get data from socket {}, {}".format(tty, re))
+            except Exception as e:
+                self.logger.warning("Failed to get data from {}, {}".format(tty, e))
+            finally:
+                sock.close()
+        raise Exception
 
     async def resolver_suicide(self, response: dict):
         await self.send_acknowledgement(response)
@@ -838,10 +1166,7 @@ class LRAgentClient:
 
     async def suicide_delete_certs(self):
         for file_name in ["wb_client.crt", "wb_client.key"]:
-            try:
-                os.remove("{}etc/{}".format(self.folder, file_name))
-            except FileNotFoundError:
-                self.logger.warning()
+            self.delete_file("{}etc/{}".format(self.folder, file_name))
 
     async def suicide_modify_compose(self):
         env_config = {"kresman": ["CLIENT_CRT_BASE64", "CLIENT_KEY_BASE64", "CA_CRT_BASE64", "CORE_URL"],
@@ -1015,13 +1340,21 @@ class LRAgentClient:
                 repeated = "fail"
         finally:
             try:
-                os.remove(path)
+                self.delete_file(path)
                 if not isinstance(repeated, str):
                     os.rename(path + "_new", path)
                 else:
-                    os.remove(path + "_new")
+                    self.delete_file(path + "_new")
             except Exception:
                 pass
+
+    def delete_file(self, path: str):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            raise
 
     def docker_ps(self) -> str:
         result = []
@@ -1084,11 +1417,15 @@ class LRAgentClient:
             self.create_required_directory(location)
             with open("{}{}".format(self.folder, location), mode) as file:
                 if file_type == "yml":
+                    if isinstance(content, str):
+                        content = yaml.load(content, Loader=yaml.SafeLoader)
                     yaml.dump(content, file, default_flow_style=False)
                 elif file_type == "json":
                     json.dump(content, file)
                 elif file_type == "sysinfo":
                     file.write("{}\n".format(json.dumps(content)))
+                elif file_type == "text":
+                    file.write(content)
                 else:
                     for rule in content:
                         file.write(rule + "\n")

@@ -18,6 +18,8 @@ Agent envs:
 - DISABLE_FILE_LOGS: (optional) disables logging to file, keeps logging to console
 - HTTP_TIMEOUT: (optional) explicit requests timeout (default: 5 seconds)
 - CONFIRMATION_REQUIRED: (optional) sets the persistence of upgrade requests
+- RPZ_WHITELIST: (optional) enables periodic rpz file creation for domain whitelisting
+- RPZ_PERIOD:(optional) the amount of time in seconds between each rpz update (default: 86400 seconds)
 - WEBSOCKET_LOGGING: (optional, default: 10) enable logging of Websockets library, should be supplied as integer using Python [logging codes](https://docs.python.org/3/library/logging.html#logging-levels), use levels INFO, DEBUG and ERROR
 - TASK_TIMEOUT: (optional) sets timeout for periodic actions in which they have to finish, otherwise error will be thrown
 
@@ -74,6 +76,7 @@ Used volumes:
 - /var/whalebone/cli/ : /etc/whalebone/cli/ - cli agent interface 
 <!-- - /etc/whalebone/agent/ : /etc/whalebone/compose/ - docker compose and upgrade is exposed  -->
 - /etc/whalebone/:/etc/whalebone/etc/ - suicide folder required for cert deletion 
+- /var/whalebone/requests/:/etc/whalebone/requests/ - folder for persisted requests
 - /var/lib/kres/tty/ : /etc/whalebone/tty/ - tty mapping of resolver processes
 
 

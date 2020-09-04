@@ -4,7 +4,7 @@ WORKDIR /root/
 #RUN git clone https://github.com/secdev/scapy.git
 #WORKDIR /root/scapy/
 #RUN python setup.py install
-RUN pip3 install requests redis pyyaml docker dnspython websockets asyncio
+RUN pip3 install requests redis pyyaml docker dnspython websockets
 ADD . /code
 WORKDIR /code
 CMD ["python3", "tester.py"]

@@ -29,7 +29,8 @@ class SystemInfo:
             # for addr_info in interface_info_list:
             #     interface['addresses'].append(addr_info.address)
             interfaces.append(
-                {'name': interface_name, 'addresses': [addr_info.address for addr_info in interface_info_list]})
+                {'name': interface_name, 'addresses': [addr_info.address for addr_info in interface_info_list if
+                                                       addr_info.family in (socket.AF_INET, socket.AF_INET6)]})
         return interfaces
 
     def get_platform(self):

@@ -537,7 +537,7 @@ class LRAgentClient:
 
     def upgrade_return_config(self, old_config: list):
         try:
-            self.save_file("etc/kres/kres.conf", "text", old_config)
+            self.save_file("etc/kres/kres.conf", "config", old_config)
         except Exception as e:
             self.logger.warning("Failed to back up to old config".format(e))
 
@@ -675,7 +675,7 @@ class LRAgentClient:
             if "compose" in keys and "compose" in request["data"]:
                 self.save_file("etc/agent/docker-compose.yml", "yml", decoded_data)
             if "config" in keys and "config" in request["data"]:
-                self.save_file("etc/kres/kres.conf", "text", request["data"]["config"])
+                self.save_file("etc/kres/kres.conf", "config", request["data"]["config"])
         except IOError as e:
             raise Exception(e)
             # return {"status": "failure", "body": str(e)}
@@ -1424,11 +1424,11 @@ class LRAgentClient:
                     json.dump(content, file)
                 elif file_type == "sysinfo":
                     file.write("{}\n".format(json.dumps(content)))
-                elif file_type == "text":
-                    file.write(content)
-                else:
+                elif file_type == "config":
                     for rule in content:
                         file.write(rule + "\n")
+                else:
+                    file.write(content)
         except Exception as e:
             self.logger.info("Failed to save file: {}".format(e))
             raise IOError(e)

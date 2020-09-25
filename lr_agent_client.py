@@ -106,6 +106,17 @@ class LRAgentClient:
         await self.send(message)
 
     async def validate_host(self):
+        if not os.path.exists("{}resolv/resolv.conf".format(self.folder)) or os.path.islink(
+                "{}resolv/resolv.conf".format(self.folder)):
+            try:
+                os.unlink("{}resolv/resolv.conf".format(self.folder))
+            except Exception:
+                pass
+            finally:
+                try:
+                    copyfile("/opt/host/run/systemd/resolve/resolv.conf", "{}resolv/resolv.conf".format(self.folder))
+                except Exception:
+                    self.write_nameservers()
         if os.path.exists("{}etc/agent/upgrade.json".format(self.folder)):
             with open("{}etc/agent/upgrade.json".format(self.folder), "r") as upgrade:
                 request = json.loads(upgrade.read())
@@ -1196,6 +1207,22 @@ class LRAgentClient:
                 except Exception as e:
                     self.logger.info("Failed to acknowledge suicide, {}.".format(e))
             await self.remove_container({}, {"data": {"containers": [name]}, "cli": "true"})
+
+    def write_nameservers(self):
+        with open("{}resolv/resolv.conf".format(self.folder), "w") as config:
+            for ip in self.nameservers_from_config():
+                config.write("nameserver {}\n".format(ip))
+
+    def nameservers_from_config(self) -> set:
+        try:
+            ips, pattern = set(), re.compile(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
+            for line in self.load_file("etc/kres/kres.conf"):
+                if any(key in line for key in ("policy.suffix", "policy.all")):
+                    ips.update(pattern.findall(line))
+            return ips if ips else {"8.8.8.8"}
+        except Exception as e:
+            self.logger.warning("Failed to get nameservers from config, {}.".format(e))
+        return {"8.8.8.8"}
 
     async def pack_files(self, response: dict, request: dict) -> dict:
         if "cli" not in request:

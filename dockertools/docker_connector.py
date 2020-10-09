@@ -61,11 +61,11 @@ class DockerConnector:
             self.logger.info(e)
             return {}
 
-    def container_logs(self, name: str, timestamps: bool = False, tail: int = "all", since: str = None):
+    def container_logs(self, name: str, timestamps: bool = False, tail: int = "all", since: str = None) -> str:
         if since is not None:
             since = datetime.strptime(since, '%Y-%m-%dT%H:%M:%S')
         try:
-            return self.api_client.logs(name, timestamps=timestamps, tail=tail, since=since)
+            return self.api_client.logs(name, timestamps=timestamps, tail=tail, since=since).decode("utf-8")
         except Exception as e:
             raise ConnectionError(e)
 

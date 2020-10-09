@@ -550,8 +550,7 @@ class LRAgentClient:
 
     async def dump_resolver_logs(self):
         try:
-            logs = self.dockerConnector.container_logs("resolver", tail=1000)
-            self.save_file("logs/resolver_dump.logs", "text", logs)
+            self.save_file("logs/resolver_dump.logs", "text", self.dockerConnector.container_logs("resolver", tail=1000))
         except ConnectionError as ce:
             self.logger.warning("Failed to get logs of new unhealthy resolver, {}.".format(ce))
         except IOError as ie:
@@ -879,7 +878,7 @@ class LRAgentClient:
             response["data"] = {"status": "failure", "body": str(e)}
             self.logger.info(e)
         else:
-            response["data"] = {"body": base64.b64encode(logs).decode("utf-8"), "status": "success"}
+            response["data"] = {"body": self.encode_base64_string(logs), "status": "success"}
         return response
 
     async def firewall_rules(self, response: dict) -> dict:
@@ -1275,8 +1274,7 @@ class LRAgentClient:
                 try:
                     actions["{}_service".format(service)] = {"action": "docker",
                                                              "command": self.dockerConnector.container_logs(service,
-                                                                                                            tail=1000).decode(
-                                                                 "utf-8"),
+                                                                                                            tail=1000),
                                                              "path": "{}/docker.{}.logs".format(folder, service)}
                     actions["{}_inspect".format(service)] = {"action": "docker",
                                                              "command": json.dumps(
@@ -1479,6 +1477,9 @@ class LRAgentClient:
 
     def decode_base64_string(self, b64_string: str) -> str:
         return base64.b64decode(b64_string.encode("utf-8")).decode("utf-8")
+
+    def encode_base64_string(self, input_string: str) -> str:
+        return base64.b64encode(input_string.encode("utf-8")).decode("utf-8")
 
     def getError(self, message: str, request: dict) -> dict:
         error_response = {}

@@ -141,7 +141,7 @@ class SystemInfo:
                 return "cleanup"
         else:
             try:
-                message = b"stats.list()"
+                message = b"stats.list()\n"
                 sock.sendall(message)
                 amount_received, amount_expected = 0, len(message)
                 while amount_received < amount_expected:

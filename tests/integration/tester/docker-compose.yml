@@ -1,7 +1,7 @@
 version: '3'
 services:
   lr-agent:
-    image: harbor.whalebone.io/resolver/agent:1.4.5
+    image: harbor.whalebone.io/resolver/agent:1.4.6
     name: lr-agent
     stdin_open: true
     tty: true
@@ -20,6 +20,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/whalebone/:/etc/whalebone/etc/
+      - /etc/:/etc/whalebone/resolv/
 #      - /etc/whalebone/kres/:/etc/whalebone/resolver/
       - /var/whalebone/cli/:/etc/whalebone/cli/
 ##      - /etc/whalebone/agent/:/etc/whalebone/compose/
@@ -29,7 +30,7 @@ services:
       - /:/opt/host/:ro
       - /var/lib/kres/tty/:/etc/whalebone/tty/
   resolver:
-    image: whalebone/kres:3.2.1-12
+    image: whalebone/kres:5.1.1-4
     labels:
       resolver: "6.0"
     logging:

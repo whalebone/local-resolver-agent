@@ -1,7 +1,7 @@
 version: '3'
 services:
     resolver:
-      image: whalebone/kres:4.3.0-17
+      image: whalebone/kres:5.1.1-4
       labels:
         resolver: "3.0"
       logging:

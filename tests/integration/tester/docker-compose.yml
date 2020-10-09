@@ -1,7 +1,7 @@
 version: '3'
 services:
   lr-agent:
-    image: whalebone/agent:1.4.4
+    image: harbor.whalebone.io/resolver/agent:1.4.5
     name: lr-agent
     stdin_open: true
     tty: true
@@ -22,7 +22,7 @@ services:
       - /etc/whalebone/:/etc/whalebone/etc/
 #      - /etc/whalebone/kres/:/etc/whalebone/resolver/
       - /var/whalebone/cli/:/etc/whalebone/cli/
-#      - /etc/whalebone/agent/:/etc/whalebone/compose/
+##      - /etc/whalebone/agent/:/etc/whalebone/compose/
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/log/whalebone/:/etc/whalebone/sysinfo/
       - /var/sinkhole/:/etc/whalebone/kresman

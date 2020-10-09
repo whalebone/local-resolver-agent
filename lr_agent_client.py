@@ -540,11 +540,7 @@ class LRAgentClient:
     async def upgrade_check_incorrect_name(self):
         running_containers = [container.name for container in self.dockerConnector.get_containers()]
         if "lr-agent-old" in running_containers and "lr-agent" not in running_containers:
-            # try:
             await self.dockerConnector.rename_container("lr-agent-old", "lr-agent")
-            # except ContainerException as ce:
-            #     return {"status": "failure",
-            #             "message": "agent old running without agent, rename failed, {}".format(ce)}
 
     def upgrade_return_config(self, old_config: list):
         try:
@@ -585,7 +581,7 @@ class LRAgentClient:
                 self.logger.warning("Failure during healthcheck rollback, {}".format(e))
             self.logger.warning("New resolver is unhealthy, resolving failed")
             return {"status": "failure", "message": "New resolver is unhealthy, resolving failed",
-                    "body": "Resolving healthcheck failed"}
+                    "body": "Resolving health check failed"}
         else:
             return restart
 
@@ -681,7 +677,7 @@ class LRAgentClient:
                             self.prefetch_tld()
                         return {"status": "success"}
 
-    def upgrade_save_files(self, request: dict, decoded_data, keys: list) -> dict:
+    def upgrade_save_files(self, request: dict, decoded_data, keys: list):
         try:
             if "compose" in keys and "compose" in request["data"]:
                 self.save_file("etc/agent/docker-compose.yml", "yml", decoded_data)
@@ -689,9 +685,6 @@ class LRAgentClient:
                 self.save_file("etc/kres/kres.conf", "config", request["data"]["config"])
         except IOError as e:
             raise Exception(e)
-            # return {"status": "failure", "body": str(e)}
-        # else:
-        #     return {}
 
     def upgrade_load_compose(self, request: dict, response: dict):
         if "compose" in request["data"]:
@@ -721,7 +714,6 @@ class LRAgentClient:
                     await action(service)
         except ContainerException as e:
             self.logger.info("Failed to execute action {} for service {} due to {}".format(action, service, e))
-            # return {"status": "failure", "message": error_message, "body": str(e)}
             raise Exception(e)
 
     async def upgrade_rename_service(self, service: str):
@@ -734,12 +726,9 @@ class LRAgentClient:
                 await self.dockerConnector.rename_container(service, "{}-old".format(service))
         except ContainerException as e:
             self.logger.warning("Failed to rename {} service, error {}".format(service, e))
-            # return {"status": "failure", "message": "rename of new container", "body": str(e)}
             raise Exception(e)
-        else:
-            return "success"
 
-    async def upgrade_start_service(self, service: str, compose: dict, error_message: str = "start of new container"):
+    async def upgrade_start_service(self, service: str, compose: dict):
         try:
             if service not in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
                 await self.dockerConnector.start_service(compose)  # tries to start new service
@@ -748,10 +737,7 @@ class LRAgentClient:
                 await self.dockerConnector.start_service(compose)  # tries to start new service
         except ContainerException as e:
             self.logger.warning("Failed to create {} service, error {}".format(service, e))
-            # return {"status": "failure", "message": error_message, "body": str(e)}
             raise Exception(e)
-        else:
-            return "success"
 
     # def upgrade_agent_persistence(self, compose: dict, request: dict, services: list):
     #     try:

@@ -37,20 +37,20 @@ class Tester():
         self.logger.addHandler(console_handler)
 
     def parse_volumes(self, volumes_list):
-        volumes_dict = {}
+        volumes = {}
         for volume in volumes_list:
             volume_def = volume.split(':')
-            if len(volume_def) < 2 or len(volume_def) > 3:
+            try:
+                volumes[volume_def[0]] = {
+                    'bind': volume_def[1], 'mode': "rw"
+                }
+            except IndexError:
                 raise Exception(
                     "Invalid format(short syntax supported only) of 'volumes' definition: {0}".format(volume))
-            volumes_dict[volume_def[0]] = {
-                'bind': volume_def[1]
-            }
-            if len(volume_def) == 3:
-                volumes_dict[volume_def[0]]['mode'] = volume_def[2]
             else:
-                volumes_dict[volume_def[0]]['mode'] = 'rw'
-        return volumes_dict
+                if len(volume_def) == 3:
+                    volumes[volume_def[0]]['mode'] = volume_def[2]
+        return volumes
 
     def start_agent(self):
         compose = yaml.load(self.compose_reader("agent-compose.yml"), Loader=yaml.SafeLoader)
@@ -112,7 +112,7 @@ class Tester():
                     break
                 else:
                     time.sleep(3)
-            if state == {}:
+            if not state:
                 self.status["start_services"] = "ok"
             else:
                 self.status["start_services"] = {"fail": state}
@@ -133,7 +133,7 @@ class Tester():
             self.logger.info(e)
         else:
             if rec.ok:
-                rec = json.loads(rec.text)
+                rec = rec.json()
                 self.logger.info(rec)
                 successful_rules = [rule for rule, status in rec.items() if status["status"] == "success"]
                 if set(successful_rules) == set(self.firewall_rules):
@@ -186,7 +186,7 @@ class Tester():
                     break
                 else:
                     time.sleep(3)
-            if state == {}:
+            if not state:
                 self.status["upgrade_resolver_{}".format(name)] = "ok"
             else:
                 self.status["upgrade_resolver_{}".format(name)] = {"fail": state}
@@ -233,7 +233,7 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             self.logger.info(rec)
             if rec["status"] == "success":
                 time.sleep(30)
@@ -248,8 +248,6 @@ class Tester():
             else:
                 self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
 
-
-
     def get_sysinfo(self):
         try:
             rec = requests.post(
@@ -257,19 +255,14 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            rec = json.loads(rec.text)
-            containers = ["lr-agent", "resolver", " logrotate", "passivedns", "logstream"]
-            for key, value in rec.items():
+            containers = {"lr-agent", "resolver", " logrotate", "passivedns", "logstream"}
+            for key, value in rec.json().items():
                 if key == "containers":
                     self.logger.info("Containers: {}".format(value))
                     if set(containers).issubset(set(value.keys())):
                         self.logger.info("All services are up")
-                if key == "cpu":
-                    self.logger.info("cpu: " + str(value))
-                if key == "memory":
-                    self.logger.info("memory: " + str(value))
-                if key == "hdd":
-                    self.logger.info("hdd: " + str(value))
+                if key in ("cpu", "memory", "hdd"):
+                    self.logger.info("{}: {}".format(key, value))
             self.status["sysinfo"] = "ok"
 
     def rename_container(self):
@@ -280,7 +273,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             self.logger.info(rec)
             for key, value in rec.items():
                 if value["status"] == "success":
@@ -298,8 +291,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
-            if rec["status"] == "success":
+            if rec.json()["status"] == "success":
                 while True:
                     if self.redis.exists("stop"):
                         status = self.redis_output(self.redis.lpop("stop"))
@@ -326,8 +318,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
-            if rec["status"] == "success":
+            if rec.json()["status"] == "success":
                 while True:
                     if self.redis.exists("remove"):
                         status = self.redis_output(self.redis.lpop("remove"))
@@ -338,7 +329,7 @@ class Tester():
                                 self.status["{}_remove".format(key)] = "ok"
                             else:
                                 self.logger.warning("{} remove unsuccessful with response: {}".format(key, status))
-                                self.status["{}_remove".format(key)] = {"fail": rec}
+                                self.status["{}_remove".format(key)] = {"fail": rec.json()}
                         break
                     else:
                         time.sleep(3)
@@ -391,7 +382,7 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            return json.loads(rec.text)
+            return rec.json()
 
     def get_rules(self):
         try:
@@ -400,7 +391,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             self.logger.info(rec)
             for rule in rec:
                 if rule["info"] in self.firewall_rules:
@@ -415,7 +406,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             self.logger.info(rec)
             if rec["info"] in self.firewall_rules:
                 self.logger.info("Rule found with rule text: {}".format(rec["info"]))
@@ -430,7 +421,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             if rec["0"]["status"] == "success":
                 self.logger.info("Rule deleted successfuly")
             else:
@@ -444,7 +435,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             if rec["status"] == "success":
                 self.logger.info("Rule modified successfully")
             else:
@@ -457,10 +448,10 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            files = ["agent-docker-connector.log", "agent-lr-agent.log", "agent-main.log", 'agent-sys_info.log',
-                     "agent-ws.log"]
-            rec = json.loads(rec.text)
-            if set(rec) == set(files):
+            files = {"agent-docker-connector.log", "agent-lr-agent.log", "agent-main.log", 'agent-sys_info.log',
+                     "agent-ws.log"}
+            rec = rec.json()
+            if set(rec) == files:
                 self.logger.info("Log files are identical")
                 self.status["logs"] = "ok"
             else:
@@ -475,7 +466,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             if rec["agent-docker-connector.log"]["status"] == "success":
                 self.logger.info("Log deleted successfully")
                 self.status["log_deleted"] = "ok"
@@ -490,7 +481,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             if rec["status"] == "success":
                 self.logger.info("Cache updated successfully")
                 self.status["update_cache"] = "ok"
@@ -509,7 +500,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             self.logger.info(rec)
             for key, value in rec.items():
                 if value["status"] == "success":
@@ -631,14 +622,8 @@ class Tester():
                 self.logger.info(response)
                 response = json.loads(response)
                 for key, value in response["data"].items():
-                    if key == "containers":
-                        self.logger.info("Containers: {}".format(value))
-                    if key == "cpu":
-                        self.logger.info("cpu: " + str(value))
-                    if key == "memory":
-                        self.logger.info("memory: " + str(value))
-                    if key == "hdd":
-                        self.logger.info("hdd: " + str(value))
+                    if key in ("cpu", "memory", "hdd", "containers"):
+                        self.logger.info("{}: {}".format(key, value))
 
     def upgrade_resolver_config(self):
         compose = self.compose_reader("resolver-compose-upgraded.yml")
@@ -766,7 +751,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = json.loads(rec.text)
+            rec = rec.json()
             self.logger.info(rec)
             if rec["status"] == "failure":
                 self.logger.info("Failed to pack data")

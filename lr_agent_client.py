@@ -1303,7 +1303,7 @@ class LRAgentClient:
     def create_client_ids(self):
         customer_id, resolver_id = "unknown", "unknown"
         try:
-            with open("/opt/whalebone/certs/client.crt", "r") as file:
+            with open("/opt/agent/certs/client.crt", "r") as file:
                 cert = x509.load_pem_x509_certificate(file.read().encode("utf-8"), default_backend())
         except FileNotFoundError as e:
             self.logger.info("Failed to load cert {}".format(e))

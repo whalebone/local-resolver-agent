@@ -16,9 +16,9 @@ class ComposeParser:
 
     def parse(self, compose_yaml: str) -> dict:
         try:
-            parsed_compose = yaml.load(compose_yaml, Loader=yaml.SafeLoader)
+            parsed_compose = yaml.safe_load(compose_yaml)
             if isinstance(parsed_compose, str):
-                parsed_compose = yaml.load(parsed_compose, Loader=yaml.SafeLoader)
+                parsed_compose = yaml.safe_load(parsed_compose)
         except yaml.YAMLError as e:
             raise ComposeException("Invalid compose YAML format {}".format(e))
         else:

@@ -67,11 +67,10 @@ class LRAgentClient:
                 try:
                     response = await self.process(request)
                 except Exception as e:
-                    request = json.loads(request)
                     response = {"data": {"status": "failure", "body": str(e)}}
-                    for field in ["requestId", "action"]:
-                        if field in request:
-                            response[field] = request[field]
+                    for field, value in json.loads(request).items():
+                        if field in ("requestId", "action"):
+                            response[field] = value
                     self.logger.warning(e)
                 else:
                     try:
@@ -83,7 +82,7 @@ class LRAgentClient:
 
     async def send(self, message: dict):
         try:
-            message = self.encode_base64_json(message)
+            message = self.encode_request(message)
         except Exception as e:
             self.logger.warning(e)
         else:
@@ -96,7 +95,7 @@ class LRAgentClient:
             sys_info = {"action": "sysinfo",
                         "data": SystemInfo(self.dockerConnector, self.sysinfo_logger, self.error_stash).get_system_info()}
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get periodic system info {}.".format(e))
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
         self.save_file("sysinfo/metrics.log", "sysinfo", sys_info["data"], "a")
         await self.send(sys_info)
@@ -108,46 +107,53 @@ class LRAgentClient:
     async def validate_host(self):
         if not os.path.exists("{}resolv/resolv.conf".format(self.folder)) or os.path.islink(
                 "{}resolv/resolv.conf".format(self.folder)):
-            try:
-                os.unlink("{}resolv/resolv.conf".format(self.folder))
-            except Exception:
-                pass
-            finally:
-                try:
-                    copyfile("/opt/host/run/systemd/resolve/resolv.conf", "{}resolv/resolv.conf".format(self.folder))
-                except Exception:
-                    self.write_nameservers()
+            self.fix_resolv_symlink()
         if os.path.exists("{}etc/agent/upgrade.json".format(self.folder)):
-            with open("{}etc/agent/upgrade.json".format(self.folder), "r") as upgrade:
-                request = json.loads(upgrade.read())
-            try:
-                response = await self.upgrade_container({"action": "upgrade"}, request)
-            except Exception as e:
-                self.logger.warning("Failed to resume upgrade, {}".format(e))
-            else:
-                self.logger.info("Done persisted upgrade with response: {}".format(response))
-                self.process_response(response)
-            self.delete_file("{}etc/agent/upgrade.json".format(self.folder))
+            await self.perform_persisted_upgrade()
         elif not os.path.exists("{}etc/agent/docker-compose.yml".format(self.folder)):
-            request = {"action": "request", "data": {"message": "compose missing"}}
-            await self.send(request)
+            await self.send({"action": "request", "data": {"message": "compose missing"}})
         else:
+            await self.check_running_services()
+
+    def fix_resolv_symlink(self):
+        try:
+            os.unlink("{}resolv/resolv.conf".format(self.folder))
+        except Exception:
+            pass
+        finally:
             try:
-                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
-                    parsed_compose = self.compose_parser.create_service(compose)
-                    active_services = [container.name for container in self.dockerConnector.get_containers()]
-                    for service, config in parsed_compose["services"].items():
-                        if service not in active_services:
-                            try:
-                                await self.upgrade_start_service(service, config)
-                            except Exception as e:
-                                self.logger.warning(
-                                    "Service: {} is offline, automatic start failed due to: {}".format(service, e))
-                                continue
-                        if service in self.error_stash:
-                            del self.error_stash[service]
-            except Exception as e:
-                self.logger.warning(e)
+                copyfile("/opt/host/run/systemd/resolve/resolv.conf", "{}resolv/resolv.conf".format(self.folder))
+            except Exception:
+                self.write_nameservers()
+
+    async def perform_persisted_upgrade(self):
+        with open("{}etc/agent/upgrade.json".format(self.folder), "r") as upgrade:
+            request = json.loads(upgrade.read())
+        try:
+            response = await self.upgrade_container({"action": "upgrade"}, request)
+        except Exception as e:
+            self.logger.warning("Failed to resume upgrade, {}".format(e))
+        else:
+            self.logger.info("Done persisted upgrade with response: {}".format(response))
+            self.process_response(response)
+        self.delete_file("{}etc/agent/upgrade.json".format(self.folder))
+
+    async def check_running_services(self):
+        try:
+            with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
+                active_services = [container.name for container in self.dockerConnector.get_containers()]
+                for service, config in self.compose_parser.create_service(compose)["services"].items():
+                    if service not in active_services:
+                        try:
+                            await self.upgrade_start_service(service, config)
+                        except Exception as e:
+                            self.logger.warning(
+                                "Service: {} is offline, automatic start failed due to: {}".format(service, e))
+                            continue
+                    if service in self.error_stash:
+                        del self.error_stash[service]
+        except Exception as se:
+            self.logger.warning("Failed to check running services {}.".format(se))
 
     def enable_websocket_log(self):
         logger = logging.getLogger('websockets')
@@ -176,30 +182,29 @@ class LRAgentClient:
             if isinstance(error_message, dict):
                 if error_message["status"] == "failure":
                     try:
-                        self.error_stash[service] = {response["action"]: error_message["body"]}
-                    except KeyError:
                         self.error_stash[service].update({response["action"]: error_message["body"]})
+                    except KeyError:
+                        self.error_stash[service] = {response["action"]: error_message["body"]}
                 else:
                     if service in self.error_stash and response["action"] in self.error_stash[service]:
                         del self.error_stash[service][response["action"]]
-                        if len(self.error_stash[service]) == 0:
+                        if not self.error_stash[service]:
                             del self.error_stash[service]
 
     async def process(self, request_json, cli=False):
         try:
-            request = self.decode_base64_json(json.loads(request_json))
+            request = self.decode_request(json.loads(request_json))
         except Exception as e:
             self.logger.info("Failed to parse request: {}, {}".format(e, request_json))
             return {"action": "request",
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
         if not cli:
             self.logger.info("Received: {}".format(request))
-        response = {}
+        response = {"action": request["action"]}
         if "action" not in request:
             return self.getError('Missing action in request', request)
         if "requestId" in request:
             response["requestId"] = request["requestId"]
-        response["action"] = request["action"]
 
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
                         "suicide": self.resolver_suicide, "clearcache": self.resolver_cache_clear,
@@ -241,7 +246,7 @@ class LRAgentClient:
             response["data"] = SystemInfo(self.dockerConnector, self.sysinfo_logger, self.error_stash,
                                           request).get_system_info()
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get sys info data {}.".format(e))
             self.getError(str(e), request)
         return response
 
@@ -268,7 +273,7 @@ class LRAgentClient:
                     await self.dockerConnector.start_service(config)
                 except ContainerException as e:
                     status[service] = {"status": "failure", "body": str(e)}
-                    self.logger.info(e)
+                    self.logger.info("Failed to start service {} due to {}.".format(service, e))
                 else:
                     status[service]["status"] = "success"
                     if service == "resolver":
@@ -568,21 +573,19 @@ class LRAgentClient:
     async def upgrade_translation_fallback(self, service: str, old_config: list):
         await self.dump_resolver_logs()
         self.upgrade_return_config(old_config)
-        restart = await self.upgrade_worker_method("resolver-old", self.dockerConnector.restart_container,
-                                                   "failed to restart old resolver")
-        if not restart:
+        try:
+            await self.upgrade_worker_method("resolver-old", self.dockerConnector.restart_container)
+        except Exception as e:
+            self.logger.warning("Failed to restart old resolver {}.".format(e))
+        else:
             try:
-                await self.upgrade_worker_method(service, self.dockerConnector.remove_container,
-                                                 "Filed to remove new resolver.")
-                await self.upgrade_worker_method("resolver-old", self.dockerConnector.rename_container,
-                                                 "Filed to remove new resolver.", service)
+                await self.upgrade_worker_method(service, self.dockerConnector.remove_container)
+                await self.upgrade_worker_method("resolver-old", self.dockerConnector.rename_container, service)
             except Exception as e:
                 self.logger.warning("Failure during healthcheck rollback, {}".format(e))
-            self.logger.warning("New resolver is unhealthy, resolving failed")
-            return {"status": "failure", "message": "New resolver is unhealthy, resolving failed",
+        self.logger.warning("New resolver is unhealthy, resolving failed")
+        return {"status": "failure", "message": "New resolver is unhealthy, resolving failed",
                     "body": "Resolving health check failed"}
-        else:
-            return restart
 
     async def upgrade_container_fallback(self, service: str) -> dict:
         try:
@@ -592,7 +595,7 @@ class LRAgentClient:
         else:
             try:
                 await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
-                                                 name=service)
+                                                 service)
             except Exception as rn:
                 return {"status": "failure", "message": "failed to rename old {}".format(service), "body": str(rn)}
 
@@ -644,7 +647,7 @@ class LRAgentClient:
                 except Exception as se:
                     try:
                         await self.upgrade_worker_method("{}-old".format(service), self.dockerConnector.rename_container,
-                                                              name=service)
+                                                              service)
                     except Exception as ren:
                         return self.upgrade_get_error_message("failed to rollback name for {}".format(service), ren)
                     else:
@@ -704,7 +707,7 @@ class LRAgentClient:
         except Exception as e:
             self.logger.info("Failed to pull image before upgrade, {}".format(e))
 
-    async def upgrade_worker_method(self, service: str, action, error_message: str="", name: str = None):
+    async def upgrade_worker_method(self, service: str, action, name: str = None):
         try:
             if service in [container.name for container in self.dockerConnector.get_containers(stopped=True)]:
                 if name:
@@ -752,19 +755,19 @@ class LRAgentClient:
     #     else:
     #         self.save_file("etc/agent/upgrade.json".format(self.folder), "json", request)
 
-    async def rename_container(self, response: dict, request: dict) -> dict:
-        status = {}
-        for old_name, new_name in request["data"].items():
-            status[old_name] = {}
-            try:
-                await self.dockerConnector.rename_container(old_name, new_name)
-            except ContainerException as e:
-                status[old_name] = {"status": "failure", "body": str(e)}
-                self.logger.info(e)
-            else:
-                status[old_name]["status"] = "success"
-        response["data"] = status
-        return response
+    # async def rename_container(self, response: dict, request: dict) -> dict:
+    #     status = {}
+    #     for old_name, new_name in request["data"].items():
+    #         status[old_name] = {}
+    #         try:
+    #             await self.dockerConnector.rename_container(old_name, new_name)
+    #         except ContainerException as e:
+    #             status[old_name] = {"status": "failure", "body": str(e)}
+    #             self.logger.info(e)
+    #         else:
+    #             status[old_name]["status"] = "success"
+    #     response["data"] = status
+    #     return response
 
     # async def container_action(self, response: dict, request: dict, action) -> dict:
     #     if "cli" not in request:
@@ -788,71 +791,71 @@ class LRAgentClient:
     #     response["data"] = status
     #     return response
 
-    async def restart_container(self, response: dict, request: dict) -> dict:
-        if "cli" not in request:
-            await self.send_acknowledgement(response)
-        status = {}
-        try:
-            for container in request["data"]["containers"]:
-                status[container] = {}
-                try:
-                    await self.dockerConnector.restart_container(container)
-                except ContainerException as e:
-                    status[container] = {"status": "failure", "body": str(e)}
-                    self.logger.info(e)
-                else:
-                    status[container]["status"] = "success"
-        except KeyError:
-            response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
-            return response
-        if "requestId" in response:
-            del response["requestId"]
-        response["data"] = status
-        return response
+    # async def restart_container(self, response: dict, request: dict) -> dict:
+    #     if "cli" not in request:
+    #         await self.send_acknowledgement(response)
+    #     status = {}
+    #     try:
+    #         for container in request["data"]["containers"]:
+    #             status[container] = {}
+    #             try:
+    #                 await self.dockerConnector.restart_container(container)
+    #             except ContainerException as e:
+    #                 status[container] = {"status": "failure", "body": str(e)}
+    #                 self.logger.info(e)
+    #             else:
+    #                 status[container]["status"] = "success"
+    #     except KeyError:
+    #         response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
+    #         return response
+    #     if "requestId" in response:
+    #         del response["requestId"]
+    #     response["data"] = status
+    #     return response
 
-    async def stop_container(self, response: dict, request: dict) -> dict:
-        if "cli" not in request:
-            await self.send_acknowledgement(response)
-        status = {}
-        try:
-            for container in request["data"]["containers"]:
-                status[container] = {}
-                try:
-                    await self.dockerConnector.stop_container(container)
-                except ContainerException as e:
-                    status[container] = {"status": "failure", "body": str(e)}
-                    self.logger.info(e)
-                else:
-                    status[container]["status"] = "success"
-        except KeyError:
-            response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
-            return response
-        if "requestId" in response:
-            del response["requestId"]
-        response["data"] = status
-        return response
+    # async def stop_container(self, response: dict, request: dict) -> dict:
+    #     if "cli" not in request:
+    #         await self.send_acknowledgement(response)
+    #     status = {}
+    #     try:
+    #         for container in request["data"]["containers"]:
+    #             status[container] = {}
+    #             try:
+    #                 await self.dockerConnector.stop_container(container)
+    #             except ContainerException as e:
+    #                 status[container] = {"status": "failure", "body": str(e)}
+    #                 self.logger.info(e)
+    #             else:
+    #                 status[container]["status"] = "success"
+    #     except KeyError:
+    #         response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
+    #         return response
+    #     if "requestId" in response:
+    #         del response["requestId"]
+    #     response["data"] = status
+    #     return response
 
-    async def remove_container(self, response: dict, request: dict) -> dict:
-        if "cli" not in request:
-            await self.send_acknowledgement(response)
-        status = {}
-        try:
-            for container in request["data"]["containers"]:
-                status[container] = {}
-                try:
-                    await self.dockerConnector.remove_container(container)
-                except ContainerException as e:
-                    status[container] = {"status": "failure", "body": str(e)}
-                    self.logger.info(e)
-                else:
-                    status[container]["status"] = "success"
-        except KeyError:
-            response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
-            return response
-        if "requestId" in response:
-            del response["requestId"]
-        response["data"] = status
-        return response
+    # async def remove_container(self, response: dict, request: dict) -> dict:
+    #     if "cli" not in request:
+    #         await self.send_acknowledgement(response)
+    #     status = {}
+    #     try:
+    #         for container in request["data"]["containers"]:
+    #             status[container] = {}
+    #             try:
+    #                 await self.dockerConnector.remove_container(container)
+    #             except ContainerException as e:
+    #                 status[container] = {"status": "failure", "body": str(e)}
+    #                 self.logger.info(e)
+    #             else:
+    #                 status[container]["status"] = "success"
+    #     except KeyError:
+    #         response["data"] = {"status": "failure", "message": "No containers specified in 'containers' key"}
+    #         return response
+    #     if "requestId" in response:
+    #         del response["requestId"]
+    #     response["data"] = status
+    #     return response
 
     async def list_containers(self, response: dict) -> dict:
         data = []
@@ -871,138 +874,138 @@ class LRAgentClient:
             })
         return {**response, "data": data}
 
-    async def container_logs(self, response: dict, request: dict) -> dict:
-        try:
-            logs = self.dockerConnector.container_logs(**request["data"])
-        except ConnectionError as e:
-            response["data"] = {"status": "failure", "body": str(e)}
-            self.logger.info(e)
-        else:
-            response["data"] = {"body": self.encode_base64_string(logs), "status": "success"}
-        return response
+    # async def container_logs(self, response: dict, request: dict) -> dict:
+    #     try:
+    #         logs = self.dockerConnector.container_logs(**request["data"])
+    #     except ConnectionError as e:
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #         self.logger.info(e)
+    #     else:
+    #         response["data"] = {"body": self.encode_base64_string(logs), "status": "success"}
+    #     return response
+    #
+    # async def firewall_rules(self, response: dict) -> dict:
+    #     try:
+    #         data = self.firewall_connector.active_rules()
+    #     except (ConnectionError, Exception) as e:
+    #         self.logger.info(e)
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #     else:
+    #         response["data"] = data
+    #     return response
+    #
+    # async def create_rule(self, response: dict, request: dict) -> dict:
+    #     status = {}
+    #     try:
+    #         for rule in request["data"]["rules"]:
+    #             status[rule] = {}
+    #             try:
+    #                 data = self.firewall_connector.create_rule(rule)
+    #             except (ConnectionError, Exception) as e:
+    #                 self.logger.info(e)
+    #                 status[rule] = {"status": "failure", "body": str(e)}
+    #             else:
+    #                 status[rule] = {"status": "success", "rule": data}
+    #     except KeyError:
+    #         response["data"] = {"status": "failure", "message": "No rules specified in 'rules' key."}
+    #         return response
+    #     successful_rules = [rule for rule in status.keys() if status[rule]["status"] == "success"]
+    #     if len(successful_rules) > 0:
+    #         try:
+    #             self.save_file("kres/firewall.conf", "json", successful_rules)
+    #         except IOError as e:
+    #             self.logger.info(e)
+    #             response["data"] = {"status": "failure", "body": str(e)}
+    #     response["data"] = status
+    #     return response
+    #
+    # async def fetch_rule(self, response: dict, request: dict) -> dict:
+    #     try:
+    #         data = self.firewall_connector.fetch_rule_information(request["data"])
+    #     except (ConnectionError, Exception) as e:
+    #         self.logger.info(e)
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #     else:
+    #         response["data"] = data
+    #     return response
+    #
+    # async def delete_rule(self, response: dict, request: dict) -> dict:
+    #     status = {}
+    #     try:
+    #         for rule in request["data"]["rules_ids"]:
+    #             status[rule] = {}
+    #             try:
+    #                 self.firewall_connector.delete_rule(rule)
+    #             except (ConnectionError, Exception) as e:
+    #                 self.logger.info(e)
+    #                 status[rule] = {"status": "failure", "body": str(e)}
+    #             else:
+    #                 status[rule] = {"status": "success"}
+    #     except KeyError:
+    #         response["data"] = {"status": "failure", "message": "No rules_ids specified in 'rules' key."}
+    #         return response
+    #     response["data"] = status
+    #     return response
+    #
+    # async def modify_rule(self, response: dict, request: dict) -> dict:
+    #     try:
+    #         self.firewall_connector.modify_rule(*request["data"]["rule"])
+    #     except (ConnectionError, Exception) as e:
+    #         self.logger.info(e)
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #     except KeyError:
+    #         response["data"] = {"status": "failure", "message": "No rule specified in 'rule' key."}
+    #         return response
+    #     else:
+    #         response["data"] = {"status": "success"}
+    #     return response
 
-    async def firewall_rules(self, response: dict) -> dict:
-        try:
-            data = self.firewall_connector.active_rules()
-        except (ConnectionError, Exception) as e:
-            self.logger.info(e)
-            response["data"] = {"status": "failure", "body": str(e)}
-        else:
-            response["data"] = data
-        return response
-
-    async def create_rule(self, response: dict, request: dict) -> dict:
-        status = {}
-        try:
-            for rule in request["data"]["rules"]:
-                status[rule] = {}
-                try:
-                    data = self.firewall_connector.create_rule(rule)
-                except (ConnectionError, Exception) as e:
-                    self.logger.info(e)
-                    status[rule] = {"status": "failure", "body": str(e)}
-                else:
-                    status[rule] = {"status": "success", "rule": data}
-        except KeyError:
-            response["data"] = {"status": "failure", "message": "No rules specified in 'rules' key."}
-            return response
-        successful_rules = [rule for rule in status.keys() if status[rule]["status"] == "success"]
-        if len(successful_rules) > 0:
-            try:
-                self.save_file("kres/firewall.conf", "json", successful_rules)
-            except IOError as e:
-                self.logger.info(e)
-                response["data"] = {"status": "failure", "body": str(e)}
-        response["data"] = status
-        return response
-
-    async def fetch_rule(self, response: dict, request: dict) -> dict:
-        try:
-            data = self.firewall_connector.fetch_rule_information(request["data"])
-        except (ConnectionError, Exception) as e:
-            self.logger.info(e)
-            response["data"] = {"status": "failure", "body": str(e)}
-        else:
-            response["data"] = data
-        return response
-
-    async def delete_rule(self, response: dict, request: dict) -> dict:
-        status = {}
-        try:
-            for rule in request["data"]["rules_ids"]:
-                status[rule] = {}
-                try:
-                    self.firewall_connector.delete_rule(rule)
-                except (ConnectionError, Exception) as e:
-                    self.logger.info(e)
-                    status[rule] = {"status": "failure", "body": str(e)}
-                else:
-                    status[rule] = {"status": "success"}
-        except KeyError:
-            response["data"] = {"status": "failure", "message": "No rules_ids specified in 'rules' key."}
-            return response
-        response["data"] = status
-        return response
-
-    async def modify_rule(self, response: dict, request: dict) -> dict:
-        try:
-            self.firewall_connector.modify_rule(*request["data"]["rule"])
-        except (ConnectionError, Exception) as e:
-            self.logger.info(e)
-            response["data"] = {"status": "failure", "body": str(e)}
-        except KeyError:
-            response["data"] = {"status": "failure", "message": "No rule specified in 'rule' key."}
-            return response
-        else:
-            response["data"] = {"status": "success"}
-        return response
-
-    async def agent_log_files(self, response: dict) -> dict:
-        try:
-            files = self.log_reader.list_files()
-        except FileNotFoundError as e:
-            self.logger.info(e)
-            response["data"] = {"status": "failure", "body": str(e)}
-        else:
-            response["data"] = files
-        return response
-
-    async def agent_all_logs(self, response: dict, request: dict) -> dict:
-        try:
-            lines = self.log_reader.view_log(request["data"])
-        except IOError as e:
-            self.logger.info(e)
-            response["data"] = {"status": "failure", "body": str(e)}
-        else:
-            response["data"] = lines
-        return response
-
-    async def agent_filtered_logs(self, response: dict, request: dict) -> dict:
-        try:
-            lines = self.log_reader.filter_logs(**request["data"])
-        except Exception as e:
-            self.logger.info(e)
-            response["data"] = {"status": "failure", "body": str(e)}
-        else:
-            response["data"] = lines
-        return response
-
-    async def agent_delete_logs(self, response: dict, request: dict) -> dict:
-        status = {}
-        try:
-            for file in request["data"]["files"]:
-                status[file] = {}
-                try:
-                    self.log_reader.delete_log(file)
-                except IOError as e:
-                    status[file] = {"status": "failure", "body": str(e)}
-                else:
-                    status[file] = {"status": "success"}
-        except KeyError:
-            response["data"] = {"status": "failure", "message": "No files specified in 'files' key."}
-            return response
-        response["data"] = status
-        return response
+    # async def agent_log_files(self, response: dict) -> dict:
+    #     try:
+    #         files = self.log_reader.list_files()
+    #     except FileNotFoundError as e:
+    #         self.logger.info(e)
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #     else:
+    #         response["data"] = files
+    #     return response
+    #
+    # async def agent_all_logs(self, response: dict, request: dict) -> dict:
+    #     try:
+    #         lines = self.log_reader.view_log(request["data"])
+    #     except IOError as e:
+    #         self.logger.info(e)
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #     else:
+    #         response["data"] = lines
+    #     return response
+    #
+    # async def agent_filtered_logs(self, response: dict, request: dict) -> dict:
+    #     try:
+    #         lines = self.log_reader.filter_logs(**request["data"])
+    #     except Exception as e:
+    #         self.logger.info(e)
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #     else:
+    #         response["data"] = lines
+    #     return response
+    #
+    # async def agent_delete_logs(self, response: dict, request: dict) -> dict:
+    #     status = {}
+    #     try:
+    #         for file in request["data"]["files"]:
+    #             status[file] = {}
+    #             try:
+    #                 self.log_reader.delete_log(file)
+    #             except IOError as e:
+    #                 status[file] = {"status": "failure", "body": str(e)}
+    #             else:
+    #                 status[file] = {"status": "success"}
+    #     except KeyError:
+    #         response["data"] = {"status": "failure", "message": "No files specified in 'files' key."}
+    #         return response
+    #     response["data"] = status
+    #     return response
 
     async def agent_test_message(self, response: dict) -> dict:
         response["data"] = {"status": "success", "message": "Agent seems ok"}
@@ -1017,7 +1020,7 @@ class LRAgentClient:
                     if not pattern.match(line.strip()):
                         return False
             except Exception as e:
-                self.logger.warning("Failed to validate file {}, {}.".format(path, e))
+                self.logger.warning("Failed to validate rpz file {}, {}.".format(path, e))
         return True
 
     def get_office365_domains(self):
@@ -1191,7 +1194,7 @@ class LRAgentClient:
                                      "message": "All those moments will be lost in time, like tears in rain. Time to die."})
                 except Exception as e:
                     self.logger.info("Failed to acknowledge suicide, {}.".format(e))
-            await self.remove_container({}, {"data": {"containers": [name]}, "cli": "true"})
+            await self.dockerConnector.remove_container(name)
 
     def write_nameservers(self):
         with open("{}resolv/resolv.conf".format(self.folder), "w") as config:
@@ -1317,7 +1320,7 @@ class LRAgentClient:
         try:
             zip_file = zipfile.ZipFile(logs_zip, "w", zipfile.ZIP_DEFLATED)
         except zipfile.BadZipFile as ze:
-            self.logger.info("Error when creating zip file")
+            self.logger.info("Error when creating zip file {}.".format(ze))
         else:
             for root, dirs, files in os.walk(folder):
                 for file in files:
@@ -1388,7 +1391,7 @@ class LRAgentClient:
                         if data["type"] == "json":
                             json.dump(data["data"], file)
                         elif data["type"] == "base64":
-                            file.write(base64.b64decode(data["data"].encode("utf-8")))
+                            file.write(self.decode_base64_string(data["data"]))
                         else:
                             for line in data["data"]:
                                 file.write("{}\n".format(line))
@@ -1399,29 +1402,26 @@ class LRAgentClient:
         response["data"] = status
         return response
 
-    async def whitelist_add(self, response: dict, request: dict) -> dict:
-        try:
-            response["data"] = request["data"]
-        except KeyError as e:
-            response["data"] = {"status": "failure", "body": str(e)}
-        return response
+    # async def whitelist_add(self, response: dict, request: dict) -> dict:
+    #     try:
+    #         response["data"] = request["data"]
+    #     except KeyError as e:
+    #         response["data"] = {"status": "failure", "body": str(e)}
+    #     return response
 
-    async def local_api_check(self, response: dict):
-        try:
-            port = os.environ["LOCAL_API_PORT"]
-        except KeyError:
-            port = "8765"
-        async with websockets.connect('ws://localhost:{}'.format(port)) as websocket:
-            try:
-                await websocket.send(json.dumps({"action": "test"}))
-                resp = await websocket.recv()
-            except Exception as e:
-                self.logger.info("Local api healthcheck failed, {}".format(e))
-                response["data"] = {"status": "failure", "body": str(e)}
-            else:
-                if json.loads(resp)["data"]["status"] == "success":
-                    response["data"] = {"status": "success", "message": "Local api is up"}
-            return response
+    # async def local_api_check(self, response: dict):
+    #     port = os.environ.get("LOCAL_API_PORT", "8765")
+    #     async with websockets.connect('ws://localhost:{}'.format(port)) as websocket:
+    #         try:
+    #             await websocket.send(json.dumps({"action": "test"}))
+    #             resp = await websocket.recv()
+    #         except Exception as e:
+    #             self.logger.info("Local api healthcheck failed, {}".format(e))
+    #             response["data"] = {"status": "failure", "body": str(e)}
+    #         else:
+    #             if json.loads(resp)["data"]["status"] == "success":
+    #                 response["data"] = {"status": "success", "message": "Local api is up"}
+    #         return response
 
     def save_file(self, location: str, file_type: str, content, mode: str = "w"):
         try:
@@ -1441,7 +1441,7 @@ class LRAgentClient:
                 else:
                     file.write(content)
         except Exception as e:
-            self.logger.info("Failed to save file: {}".format(e))
+            self.logger.info("Failed to save file {} due to {}".format(location, e))
             raise IOError(e)
 
     def create_required_directory(self, name: str):
@@ -1457,22 +1457,23 @@ class LRAgentClient:
             self.logger.info("Failed to load content: {}".format(e))
             raise IOError(e)
 
-    def decode_base64_json(self, message: dict) -> dict:
+    def decode_request(self, message: dict) -> dict:
         if "data" in message:
             if not isinstance(message["data"], dict):
                 '''
                  If data field is dict, it arrived from local services and is not encoded in base64
                  Was therefore correctly decoded in process().
                 '''
+                decoded_string = self.decode_base64_string(message["data"])
                 try:
-                    message["data"] = json.loads(base64.b64decode(message["data"].encode("utf-8")).decode("utf-8"))
+                    message["data"] = json.loads(decoded_string)
                 except json.JSONDecodeError:
-                    message["data"] = self.decode_base64_string(message["data"])
+                    message["data"] = decoded_string
         return message
 
-    def encode_base64_json(self, message: dict) -> dict:
+    def encode_request(self, message: dict) -> dict:
         if "data" in message:
-            message["data"] = base64.b64encode(json.dumps(message["data"]).encode("utf-8")).decode("utf-8")
+            message["data"] = self.encode_base64_string(json.dumps(message["data"]))
         return message
 
     def decode_base64_string(self, b64_string: str) -> str:

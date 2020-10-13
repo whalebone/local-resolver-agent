@@ -17,8 +17,11 @@ class ComposeParser:
     def parse(self, compose_yaml: str) -> dict:
         try:
             parsed_compose = yaml.load(compose_yaml, Loader=yaml.SafeLoader)
-            if type(parsed_compose) == str:
+            if isinstance(parsed_compose, str):
                 parsed_compose = yaml.load(parsed_compose, Loader=yaml.SafeLoader)
+        except yaml.YAMLError as e:
+            raise ComposeException("Invalid compose YAML format {}".format(e))
+        else:
             if 'version' in parsed_compose:
                 return parsed_compose
             else:
@@ -27,8 +30,6 @@ class ComposeParser:
                     'version': '1',
                     'services': parsed_compose
                 }
-        except yaml.YAMLError as e:
-            raise ComposeException("Invalid compose YAML format {}".format(e))
 
     def validate(self, parsed_compose: dict):
         if parsed_compose['version'] not in SUPPORTED_VERSIONS:

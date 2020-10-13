@@ -2,6 +2,7 @@ version: '2'
 services:
   api:
     image: harbor.whalebone.io/whalebone/agent:api-testing-1
+    container_name: "api"
     environment:
         AGENT_ID: '101'
         REDIS_ADDRESS: 'localhost'
@@ -12,6 +13,7 @@ services:
   tester:
     image: harbor.whalebone.io/whalebone/agent:tester-testing-1
     stdin_open: true
+    container_name: "tester"
     tty: true
     network_mode: host
     environment:
@@ -23,9 +25,11 @@ services:
       - /etc/whalebone/:/etc/whalebone/
   redis:
     image: redis:4.0
+    container_name: "redis"
     network_mode: host
   wsproxy:
     stdin_open: true
+    container_name: "wsproxy"
     tty: true
     network_mode: host
     image: harbor.whalebone.io/whalebone/wsproxy:testing-5

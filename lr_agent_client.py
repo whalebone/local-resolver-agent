@@ -71,7 +71,7 @@ class LRAgentClient:
                     for field, value in json.loads(request).items():
                         if field in ("requestId", "action"):
                             response[field] = value
-                    self.logger.warning(e)
+                    self.logger.warning("Failed to get action response {}.".format(e))
                 else:
                     try:
                         if response["action"] in self.async_actions and response["action"] != "updatecache":

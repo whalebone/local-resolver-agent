@@ -62,7 +62,7 @@ class SystemInfo:
         res.lifetime = 1
         for domain in domains:
             try:
-                res.query(domain)
+                res.resolve(domain)
                 return "ok"
             except Exception:
                 pass

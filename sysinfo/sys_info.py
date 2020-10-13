@@ -55,7 +55,7 @@ class SystemInfo:
         return round(stat / (1024 ** 3), 1)
 
     def check_resolving(self):
-        domains = ["google.com", "microsoft.com", "apple.com", "facebook.com"]
+        domains = ("google.com", "microsoft.com", "apple.com", "facebook.com")
         res = resolver.Resolver()
         res.nameservers = ["127.0.0.1"]
         res.timeout = 1

@@ -747,18 +747,22 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/datacollect".format(self.proxy_address, self.agent_id),
-                data= "")
+                data="http://localhost:8000/slack")
         except Exception as e:
             self.logger.info(e)
         else:
-            rec = rec.json()
-            self.logger.info(rec)
-            if rec["status"] == "failure":
-                self.logger.info("Failed to pack data")
-                self.status["pack_data"] = {"fail": {}}
-            else:
-                self.logger.info("Pack data success")
-                self.status["pack_data"] = "ok"
+            while True:
+                if self.redis.exists("datacollect"):
+                    status = self.redis_output(self.redis.lpop("datacollect"))
+                    self.logger.info(status)
+                    if "text" in status and "New customer log archive was uploaded" in status["text"]:
+                        self.logger.info("Pack data success")
+                        self.status["pack_data"] = "ok"
+                    else:
+                        self.status["pack_data"] = {"fail": status}
+                        self.logger.info("Failed to pack data")
+                else:
+                    time.sleep(5)
 
     def create_file(self):
         for name in ["wb_client.crt", "wb_client.key"]:

@@ -76,8 +76,9 @@ class Tester():
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
                       "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http', ''whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
@@ -151,8 +152,9 @@ class Tester():
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
                       "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http','whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
@@ -199,8 +201,9 @@ class Tester():
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
                       "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
@@ -489,6 +492,42 @@ class Tester():
                 self.logger.info("Cache update failed")
                 self.status["update_cache"] = {"fail": rec}
 
+    def clear_cache(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/clearcache".format(self.proxy_address, self.agent_id),
+                json={"clear": "all"})
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = rec.json()
+            try:
+                if rec["status"] == "success":
+                    self.logger.info("Cache cleared successfully")
+                    self.status["clear_cache"] = "ok"
+                else:
+                    self.logger.info("Cache clear failed")
+                    self.status["clear_cache"] = {"fail": rec}
+            except KeyError:
+                self.logger.info("Cache clear failed")
+                self.logger.info(rec)
+
+    def trace_domain(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/trace".format(self.proxy_address, self.agent_id),
+                json={"domain": "whalebone.io", "type": "A"})
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            rec = rec.json()
+            if rec["status"] == "success":
+                self.logger.info("Trace domain successful")
+                self.status["trace_domain"] = "ok"
+            else:
+                self.logger.info("Trace domain failed")
+                self.status["trace_domain"] = {"fail": rec}
+
     def save_config(self):
         try:
             rec = requests.post(
@@ -633,9 +672,10 @@ class Tester():
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
                       "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/fgnsgnsfgn/nbondbosobn/cache'",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
@@ -670,10 +710,11 @@ class Tester():
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
                       "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
                                  "policy.forward('127.0.0.1')",
+                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
@@ -714,9 +755,10 @@ class Tester():
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
                 json={"compose": compose,
                       "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'whalebone' }",
+                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http', 'whalebone' }",
                                  "cache.storage = 'lmdb:///var/lib/kres/cache'",
                                  "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
                                  "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
@@ -753,14 +795,17 @@ class Tester():
         else:
             while True:
                 if self.redis.exists("datacollect"):
-                    status = self.redis_output(self.redis.lpop("datacollect"))
-                    self.logger.info(status)
-                    if "text" in status and "New customer log archive was uploaded" in status["text"]:
-                        self.logger.info("Pack data success")
-                        self.status["pack_data"] = "ok"
+                    for _ in range(2):
+                        status = self.redis_output(self.redis.lpop("datacollect"))
+                        self.logger.info(status)
+                        if "text" in status and "New customer log archive was uploaded" in status["text"]:
+                            self.logger.info("Pack data success")
+                            self.status["pack_data"] = "ok"
+                            break
                     else:
                         self.status["pack_data"] = {"fail": status}
                         self.logger.info("Failed to pack data")
+                    break
                 else:
                     time.sleep(5)
 
@@ -911,6 +956,14 @@ class Tester():
         #     self.logger.info(e)
         try:
             self.update_cache()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.clear_cache()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.trace_domain()
         except Exception as e:
             self.logger.info(e)
         # try:

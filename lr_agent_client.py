@@ -237,8 +237,8 @@ class LRAgentClient:
         else:
             try:
                 return await method_calls[request["action"]](*method_arguments[request["action"]])
-            except KeyError as e:
-                self.logger.info(e)
+            except KeyError as ke:
+                self.logger.info("Unknown action '{}'".format(ke))
                 return self.getError('Unknown action', request)
 
     async def system_info(self, response: dict, request: dict) -> dict:
@@ -1138,7 +1138,6 @@ class LRAgentClient:
         else:
             try:
                 sock.sendall(message)
-                return
             except socket.timeout as re:
                 self.logger.warning("Failed to get data from socket {}, {}".format(tty, re))
             except Exception as e:

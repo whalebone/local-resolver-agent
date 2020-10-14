@@ -15,7 +15,7 @@ services:
       volumes:
       - /etc/whalebone/kres:/etc/kres/
       - /var/log/whalebone/:/var/log/whalebone/
-      - /var/lib/kres/tty:/tty/tty
+      - /var/lib/kres/tty:/tty/control/
       - /var/whalebone/:/var/whalebone/
       network_mode: host
       privileged: true

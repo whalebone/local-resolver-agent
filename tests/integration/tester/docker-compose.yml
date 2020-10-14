@@ -44,7 +44,7 @@ services:
     - /etc/whalebone/kres:/etc/kres/
     - /var/log/whalebone/:/var/log/whalebone/
     - /var/lib/kres:/var/lib/kres
-    - /var/lib/kres/tty:/tty/tty
+    - /var/lib/kres/tty:/tty/control/
     - /var/whalebone/:/var/whalebone/
     restart: always
     environment:

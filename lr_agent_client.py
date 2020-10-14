@@ -1223,27 +1223,11 @@ class LRAgentClient:
             os.mkdir(folder)
         self.gather_static_files(folder)
         customer_id, resolver_id = self.create_client_ids()
-
-        logs_zip = "/opt/whalebone/{}-{}-{}-wblogs.zip".format(customer_id,
+        logs_zip = "{}/{}-{}-{}-wblogs.zip".format(folder, customer_id,
                                                                datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
                                                                resolver_id)
         self.pack_logs(logs_zip, folder)
-        try:
-            files = {'upload_file': open(logs_zip, 'rb')}
-            req = requests.post("https://transfer.whalebone.io", files=files)
-        except Exception as e:
-            self.logger.info("Failed to send files to transfer.whalebone.io, {}".format(e))
-            response["data"] = {"status": "failure", "message": "Data upload failed", "body": str(e)}
-        else:
-            if req.ok:
-                try:
-                    requests.post(request["data"],
-                                  json={"text": "New customer log archive was uploaded:\n{}".format(
-                                      req.content.decode("utf-8"))}, timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
-                except Exception as e:
-                    self.logger.info("Failed to send notification to Slack, {}".format(e))
-                else:
-                    response["data"] = {"status": "success", "message": "Data uploaded"}
+        response["data"] = self.upload_logs(logs_zip, request["data"])
         try:
             rmtree(folder)
         except Exception:
@@ -1251,6 +1235,46 @@ class LRAgentClient:
         if "requestId" in response:
             del response["requestId"]
         return response
+
+    def upload_logs(self, logs_zip: str, target_url: str) -> dict:
+        try:
+            files = {'upload_file': open(logs_zip, 'rb')}
+            req = requests.post("https://transfer.whalebone.io", files=files)
+        except Exception as e:
+            self.logger.info("Failed to send files to transfer.whalebone.io, {}".format(e))
+            return {"status": "failure", "message": "Data upload failed", "body": str(e)}
+        else:
+            if req.ok:
+                try:
+                    requests.post(target_url,
+                                  json={"text": "New customer log archive was uploaded:\n{}".format(
+                                      req.content.decode("utf-8"))}, timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
+                except Exception as e:
+                    self.logger.info("Failed to send notification to Slack, {}".format(e))
+                else:
+                    return {"status": "success", "message": "Data uploaded"}
+            else:
+                self.logger.warning("Failed to upload file to transfer {}, {}.".format(req.status_code, req.content))
+
+    def load_container_info(self, folder: str):
+        with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
+            parsed_compose = self.compose_parser.create_service(compose)
+            for service in parsed_compose["services"]:
+                try:
+                    with open("{}/docker.{}.logs".format(folder, service), "w") as file:
+                        file.write(self.dockerConnector.container_logs(service, tail=1000))
+                    with open("{}/docker.{}.inspect".format(folder, service), "w") as file:
+                        json.dump(self.dockerConnector.inspect_config(service))
+                except Exception as e:
+                    self.logger.info("Service {} not found, {}".format(service, e))
+
+    def move_agent_logs(self, log_directory: str, target_directory: str):
+        for file in os.listdir(log_directory):
+            try:
+                if "agent-ws" not in file:
+                    copyfile(file, target_directory)
+            except Exception as me:
+                self.logger.warning("Failed to move file {} to {} due to {}".format(file, target_directory, me))
 
     def gather_static_files(self, folder: str):
         actions = {"release": {"action": "copy_file", "command": ("/etc/os-release", "{}/release".format(folder))},
@@ -1271,27 +1295,16 @@ class LRAgentClient:
                    "list_containers": {"action": "docker", "command": self.docker_ps(),
                                        "path": "{}/docker_ps".format(folder)},
                    }
-        with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
-            parsed_compose = self.compose_parser.create_service(yaml.load(compose, Loader=yaml.SafeLoader))
-            for service in parsed_compose["services"]:
-                try:
-                    actions["{}_service".format(service)] = {"action": "docker",
-                                                             "command": self.dockerConnector.container_logs(service,
-                                                                                                            tail=1000),
-                                                             "path": "{}/docker.{}.logs".format(folder, service)}
-                    actions["{}_inspect".format(service)] = {"action": "docker",
-                                                             "command": json.dumps(
-                                                                 self.dockerConnector.inspect_config(service)),
-                                                             "path": "{}/docker.{}.inspect".format(folder, service)}
-                except Exception as e:
-                    self.logger.info("Service {} not found, {}".format(service, e))
-
+        self.load_container_info(folder)
         for action, specification in actions.items():
             try:
                 if specification["action"] == "copy_file":
                     copyfile(*specification["command"])
                 elif specification["action"] == "copy_dir":
-                    copytree(*specification["command"])
+                    if action == "agent_log":
+                        self.move_agent_logs(*specification["command"])
+                    else:
+                        copytree(*specification["command"])
                 elif specification["action"] == "docker":
                     with open(specification["path"], "w") as file:
                         file.write(specification["command"])
@@ -1379,28 +1392,28 @@ class LRAgentClient:
             self.logger.info("Failed to acquire docker ps info, {}".format(e))
         return "".join(result)
 
-    async def write_config(self, response: dict, request: dict) -> dict:
-        write_type = {"base64": "wb", "json": "w", "text": "w"}
-        status = {}
-        for key, value in request["data"]["config"].items():
-            if not os.path.exists("{}/{}".format(self.folder, key)):
-                os.mkdir("{}/{}".format(self.folder, key))
-            for data in value:
-                try:
-                    with open("{}/{}/{}".format(self.folder, key, data["path"]), write_type[data["type"]]) as file:
-                        if data["type"] == "json":
-                            json.dump(data["data"], file)
-                        elif data["type"] == "base64":
-                            file.write(self.decode_base64_string(data["data"]))
-                        else:
-                            for line in data["data"]:
-                                file.write("{}\n".format(line))
-                except Exception as e:
-                    status[key] = {"status": "failure", "message": "Failed to dump config", "body": str(e)}
-                else:
-                    status[key] = {"status": "success", "message": "Config dump successful"}
-        response["data"] = status
-        return response
+    # async def write_config(self, response: dict, request: dict) -> dict:
+    #     write_type = {"base64": "wb", "json": "w", "text": "w"}
+    #     status = {}
+    #     for key, value in request["data"]["config"].items():
+    #         if not os.path.exists("{}/{}".format(self.folder, key)):
+    #             os.mkdir("{}/{}".format(self.folder, key))
+    #         for data in value:
+    #             try:
+    #                 with open("{}/{}/{}".format(self.folder, key, data["path"]), write_type[data["type"]]) as file:
+    #                     if data["type"] == "json":
+    #                         json.dump(data["data"], file)
+    #                     elif data["type"] == "base64":
+    #                         file.write(self.decode_base64_string(data["data"]))
+    #                     else:
+    #                         for line in data["data"]:
+    #                             file.write("{}\n".format(line))
+    #             except Exception as e:
+    #                 status[key] = {"status": "failure", "message": "Failed to dump config", "body": str(e)}
+    #             else:
+    #                 status[key] = {"status": "success", "message": "Config dump successful"}
+    #     response["data"] = status
+    #     return response
 
     # async def whitelist_add(self, response: dict, request: dict) -> dict:
     #     try:

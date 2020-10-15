@@ -58,8 +58,8 @@ class SystemInfo:
         domains = ("google.com", "microsoft.com", "apple.com", "facebook.com")
         res = resolver.Resolver()
         res.nameservers = ["127.0.0.1"]
-        res.timeout = 1
-        res.lifetime = 1
+        res.timeout = int(os.environ.get("DNS_TIMEOUT", 1))
+        res.lifetime = int(os.environ.get("DNS_LIFETIME", 1))
         for domain in domains:
             try:
                 res.resolve(domain)
@@ -134,6 +134,8 @@ class SystemInfo:
             sock.connect(tty)
         except socket.timeout as te:
             self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
+        except PermissionError:
+            pass
         except socket.error as msg:
             self.logger.warning("Connection error {} to socket {}".format(msg, tty))
             if msg.errno == errno.ECONNREFUSED and self.check_resolver_process(tty.split("/")[-1]) == "":

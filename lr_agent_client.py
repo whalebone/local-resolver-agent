@@ -615,6 +615,7 @@ class LRAgentClient:
     async def upgrade_check_resolver_resolving(self, sysinfo_connector, old_config: list, service: str) -> dict:
         if not await self.upgrade_check_binding(sysinfo_connector, old_config):
             raise ContainerException("New resolver is not healthy due to port not bound, rollback")
+        await asyncio.sleep(int(os.environ.get("UPGRADE_SLEEP", 0)))
         try:
             await self.upgrade_worker_method("resolver-old", self.dockerConnector.stop_container)
         except Exception as se:

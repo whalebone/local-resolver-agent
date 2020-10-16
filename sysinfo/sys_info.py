@@ -58,8 +58,8 @@ class SystemInfo:
         domains = ("google.com", "microsoft.com", "apple.com", "facebook.com")
         res = resolver.Resolver()
         res.nameservers = ["127.0.0.1"]
-        res.timeout = int(os.environ.get("DNS_TIMEOUT", 1))
-        res.lifetime = int(os.environ.get("DNS_LIFETIME", 1))
+        res.timeout = int(os.environ.get("DNS_TIMEOUT", 3))
+        res.lifetime = int(os.environ.get("DNS_LIFETIME", 3))
         for domain in domains:
             try:
                 res.resolve(domain)

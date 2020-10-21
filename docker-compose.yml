@@ -21,7 +21,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/whalebone/:/etc/whalebone/etc/
-      - /etc/:/etc/whalebone/resolv/
       - /var/whalebone/cli/:/etc/whalebone/cli/
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/log/whalebone/:/etc/whalebone/sysinfo/

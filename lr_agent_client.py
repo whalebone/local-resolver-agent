@@ -105,26 +105,12 @@ class LRAgentClient:
         await self.send(message)
 
     async def validate_host(self):
-        if not os.path.exists("{}resolv/resolv.conf".format(self.folder)) or os.path.islink(
-                "{}resolv/resolv.conf".format(self.folder)):
-            self.fix_resolv_symlink()
         if os.path.exists("{}etc/agent/upgrade.json".format(self.folder)):
             await self.perform_persisted_upgrade()
         elif not os.path.exists("{}etc/agent/docker-compose.yml".format(self.folder)):
             await self.send({"action": "request", "data": {"message": "compose missing"}})
         else:
             await self.check_running_services()
-
-    def fix_resolv_symlink(self):
-        try:
-            os.unlink("{}resolv/resolv.conf".format(self.folder))
-        except Exception:
-            pass
-        finally:
-            try:
-                copyfile("/opt/host/run/systemd/resolve/resolv.conf", "{}resolv/resolv.conf".format(self.folder))
-            except Exception:
-                self.write_nameservers()
 
     async def perform_persisted_upgrade(self):
         with open("{}etc/agent/upgrade.json".format(self.folder), "r") as upgrade:

@@ -1209,13 +1209,13 @@ class LRAgentClient:
             os.mkdir(folder)
         self.gather_static_files(folder)
         customer_id, resolver_id = self.create_client_ids()
-        logs_zip = "{}/{}-{}-{}-wblogs.zip".format(folder, customer_id,
-                                                               datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
-                                                               resolver_id)
+        logs_zip = "/opt/agent/{}-{}-{}-wblogs.zip".format(customer_id, datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
+                                                           resolver_id)
         self.pack_logs(logs_zip, folder)
         response["data"] = self.upload_logs(logs_zip, request["data"])
         try:
             rmtree(folder)
+            os.remove(logs_zip)
         except Exception:
             pass
         if "requestId" in response:
@@ -1250,7 +1250,7 @@ class LRAgentClient:
                     with open("{}/docker.{}.logs".format(folder, service), "w") as file:
                         file.write(self.dockerConnector.container_logs(service, tail=1000))
                     with open("{}/docker.{}.inspect".format(folder, service), "w") as file:
-                        json.dump(self.dockerConnector.inspect_config(service))
+                        json.dump(self.dockerConnector.inspect_config(service), file)
                 except Exception as e:
                     self.logger.info("Service {} not found, {}".format(service, e))
 
@@ -1258,7 +1258,7 @@ class LRAgentClient:
         for file in os.listdir(log_directory):
             try:
                 if "agent-ws" not in file:
-                    copyfile(file, target_directory)
+                    copyfile(os.path.join(log_directory, file), target_directory)
             except Exception as me:
                 self.logger.warning("Failed to move file {} to {} due to {}".format(file, target_directory, me))
 
@@ -1323,12 +1323,12 @@ class LRAgentClient:
         else:
             for root, dirs, files in os.walk(folder):
                 for file in files:
-                    if os.path.getsize(os.path.join(root, file)) >= 20000000:
-                        try:
-                            self.tail_file(os.path.join(root, file), 2000)
-                        except Exception:
-                            pass
                     if os.path.exists(os.path.join(root, file)):
+                        if os.path.getsize(os.path.join(root, file)) >= 20000000:
+                            try:
+                                self.tail_file(os.path.join(root, file), 2000)
+                            except Exception:
+                                pass
                         zip_file.write(os.path.join(root, file))
             zip_file.close()
 

@@ -69,6 +69,20 @@ class Tester():
             self.logger.info("Failed to pull agent")
         self.docker_client.containers.run(detach=True, **compose["services"]["lr-agent"])
 
+    def docker_rename_container(self, container_name: str, name: str):
+        try:
+            self.api_client.rename(container_name, name)
+        except Exception as e:
+            self.logger.warning("Failed to rename container {}, {}.".format(container_name, e))
+            raise Exception("Failed to rename container")
+
+    def docker_remove_container(self, container_name: str):
+        try:
+            self.api_client.remove_container(container_name, force=True)
+        except Exception as e:
+            self.logger.warning("Failed to remove container {}, {}.".format(container_name, e))
+            raise Exception("Failed to remove container")
+
     def start_resolver(self):
         compose = self.compose_reader("resolver-compose.yml")
         try:
@@ -193,6 +207,113 @@ class Tester():
             else:
                 self.status["upgrade_resolver_{}".format(name)] = {"fail": state}
 
+    def upgrade_resolver_with_missing(self):
+        compose = self.compose_reader("resolver-compose-upgraded.yml")
+        try:
+            self.docker_remove_container("resolver")
+        except Exception as e:
+            self.logger.warning("Faield to remove container {}".format(e))
+        else:
+            try:
+                rec = requests.post(
+                    "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                    json={"compose": compose,
+                          "config": ['net.ipv6 = false',
+                                     "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http','whalebone' }",
+                                     "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                     "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
+                                     "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                     "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
+                          "services": ["resolver"]})
+            except Exception as e:
+                self.logger.warning(e)
+            else:
+                state = {}
+                while True:
+                    if self.redis.exists("upgrade"):
+                        status = self.redis_output(self.redis.lpop("upgrade"))
+                        self.logger.info(status)
+                        if "message" in status and status["message"] == "Command received":
+                            continue
+                        for key, value in status.items():
+                            if value["status"] == "success":
+                                self.logger.info("{} upgrade successful".format(key))
+                            else:
+                                self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                                state[key] = value["body"]
+                        for config in self.view_config():
+                            if config["name"] in ["resolver"] and config["labels"][config["name"]] != "3.0":
+                                self.logger.warning("{} upgrade config label check unsuccessful".format(config["name"]))
+                        break
+                    else:
+                        time.sleep(3)
+                if not state and "resolver" in [container.name for container in self.docker_client.containers.list()]:
+                    self.status["upgrade_resolver_not_present"] = "ok"
+                else:
+                    self.status["upgrade_resolver_not_present"] = {"fail": state}
+
+    def upgrade_resolver_with_old_present(self):
+        compose = self.compose_reader("resolver-compose-upgraded.yml")
+        try:
+            self.docker_rename_container("resolver", "resolver-old")
+        except Exception as e:
+            self.logger.warning("Faield to remove container {}".format(e))
+        else:
+            time.sleep(70)
+            try:
+                rec = requests.post(
+                    "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                    json={"compose": compose,
+                          "config": ['net.ipv6 = false',
+                                     "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http','whalebone' }",
+                                     "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                     "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
+                                     "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                     "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
+                          "services": ["resolver"]})
+            except Exception as e:
+                self.logger.warning(e)
+            else:
+                state = {}
+                while True:
+                    if self.redis.exists("upgrade"):
+                        status = self.redis_output(self.redis.lpop("upgrade"))
+                        self.logger.info(status)
+                        if "message" in status and status["message"] == "Command received":
+                            continue
+                        for key, value in status.items():
+                            if value["status"] == "success":
+                                self.logger.info("{} upgrade successful".format(key))
+                            else:
+                                self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
+                                state[key] = value["body"]
+                        for config in self.view_config():
+                            if config["name"] in ["resolver"] and config["labels"][config["name"]] != "3.0":
+                                self.logger.warning("{} upgrade config label check unsuccessful".format(config["name"]))
+                        break
+                    else:
+                        time.sleep(3)
+                if not state:
+                    containers = [container.name for container in self.docker_client.containers.list()]
+                    if "resolver" in containers and "resolver-old" not in containers:
+                        self.status["upgrade_resolver_with_old"] = "ok"
+                    else:
+                        self.status["upgrade_resolver_with_old"] = {"fail": containers}
+                else:
+                    self.status["upgrade_resolver_with_old"] = {"fail": state}
+
     def upgrade_all(self, services: list, scenario: str):
         compose = self.compose_reader("docker-compose.yml")
         # services = []
@@ -250,6 +371,36 @@ class Tester():
                         break
             else:
                 self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
+
+    def upgrade_agent_with_old(self):
+        try:
+            self.docker_rename_container("lr-agent", "lr-agent-old")
+        except Exception:
+            pass
+        else:
+            compose = self.compose_reader("agent-compose-upgraded.yml")
+            try:
+                rec = requests.post(
+                    "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                    json={"compose": compose, "services": ["lr-agent"]})
+            except Exception as e:
+                self.logger.warning(e)
+            else:
+                rec = rec.json()
+                self.logger.info(rec)
+                if rec["status"] == "success":
+                    time.sleep(30)
+                    for config in self.view_config():
+                        if config["name"] == "lr-agent":
+                            if config["labels"]["lr-agent"] == "3.0":
+                                self.logger.info("Agent upgrade config check successful")
+                                self.status["upgrade_agent_with_old"] = "ok"
+                            else:
+                                self.status["upgrade_agent_with_old"] = {"fail": {"version": config["labels"]["lr-agent"]}}
+                            break
+                else:
+                    self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
+
 
     def get_sysinfo(self):
         try:
@@ -338,6 +489,25 @@ class Tester():
                         time.sleep(3)
             else:
                 self.logger.info("Failed to deliver remove")
+
+    def test_inactive_action(self):
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/remove".format(self.proxy_address, self.agent_id),
+                json={"containers": ["passivedns"]})
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            try:
+                if rec.json()["message"] == "Unknown action":
+                    self.logger.info("Inactive action detected")
+                    self.status["inactive_action"] = "ok"
+                else:
+                    self.logger.info("Inactive action failed to be detected")
+                    self.status["inactive_action"] = {"fail": rec.json()}
+            except KeyError:
+                self.logger.info("Inactive action failed to be detected")
+                self.status["inactive_action"] = {"fail": rec.json()}
 
     # def dns_queries(self):
     #     try:
@@ -549,6 +719,16 @@ class Tester():
                     self.logger.info("Config dump failed {}".format(value))
                     self.status["save_{}_config".format(key)] = {"fail": {}}
 
+    def check_resolver_logs_dump(self) -> bool:
+        try:
+            if os.path.exists("/var/log/whalebone/agent/resolver_dump.logs") and os.stat(
+                    "/var/log/whalebone/agent/resolver_dump.logs").st_size > 0:
+                os.remove("/var/log/whalebone/agent/resolver_dump.logs")
+                return True
+        except Exception as e:
+            self.logger.warning("Failed to check resolver dump presence, {}.".format(e))
+        return False
+
     async def local_test_remove(self):
         async with websockets.connect('ws://localhost:8765') as websocket:
             # remove all services
@@ -693,8 +873,12 @@ class Tester():
                     self.logger.info(status)
                     for key, value in status.items():
                         if value["status"] == "failure":
-                            self.logger.info("{} upgrade successful with failed check(config)".format(key))
-                            self.status["upgrade_config"] = "ok"
+                            if self.check_resolver_logs_dump():
+                                self.logger.info("{} upgrade successful with failed check(config)".format(key))
+                                self.status["upgrade_config"] = "ok"
+                            else:
+                                self.logger.warning("{} upgrade unsuccessful with missing resolver dump")
+                                self.status["upgrade_config"] = {"fail": "missing resolver dump"}
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
                             self.status["upgrade_config"] = {"fail": status}
@@ -738,8 +922,12 @@ class Tester():
                     self.logger.info(status)
                     for key, value in status.items():
                         if value["status"] == "failure":
-                            self.logger.info("{} upgrade successful with failed check(redirect)".format(key))
-                            self.status["upgrade_redirect"] = "ok"
+                            if self.check_resolver_logs_dump():
+                                self.logger.info("{} upgrade successful with failed check(redirect)".format(key))
+                                self.status["upgrade_redirect"] = "ok"
+                            else:
+                                self.logger.warning("{} upgrade unsuccessful with missing resolver dump")
+                                self.status["upgrade_redirect"] = {"fail": "missing resolver dump"}
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, status))
                             self.status["upgrade_redirect"] = {"fail": {}}
@@ -847,6 +1035,12 @@ class Tester():
                     self.logger.warning("Found running containers {}".format(containers))
             else:
                 self.logger.warning("Files found")
+
+    def delete_compose(self):
+        try:
+            os.remove("/etc/whalebone/agent/docker-compose.yml")
+        except FileNotFoundError:
+            pass
 
     def upgrade_agent_with_old_present(self):
         compose = self.compose_reader("agent-compose-upgraded.yml")
@@ -1008,6 +1202,23 @@ class Tester():
             self.upgrade_all(["logrotate", "logstream", "passivedns"], "some")
         except Exception as e:
             self.logger.info(e)
+        self.delete_compose()
+        try:
+            self.test_inactive_action()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.upgrade_agent_with_old()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.upgrade_resolver_with_missing()
+        except Exception as e:
+            self.logger.info(e)
+        try:
+            self.upgrade_resolver_with_old_present()
+        except Exception as e:
+            self.logger.info(e)
         time.sleep(3)
         try:
             self.commit_suicide()
@@ -1053,7 +1264,4 @@ class Tester():
 if __name__ == '__main__':
     tester = Tester()
     tester.run_test()
-    try:
-        os.remove("/etc/whalebone/agent/docker-compose.yml")
-    except FileNotFoundError:
-        pass
+    tester.delete_compose()

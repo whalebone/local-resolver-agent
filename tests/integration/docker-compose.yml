@@ -1,7 +1,7 @@
 version: '2'
 services:
   api:
-    image: harbor.whalebone.io/whalebone/agent:api-testing-1
+    image: harbor.whalebone.io/whalebone/agent:api-testing-2
     container_name: "api"
     environment:
         AGENT_ID: '101'
@@ -23,6 +23,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/whalebone/:/etc/whalebone/
+      - /var/log/whalebone/agent/:/var/log/whalebone/agent/
   redis:
     image: redis:4.0
     container_name: "redis"

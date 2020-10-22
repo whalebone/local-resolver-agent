@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 RUN apt-get update -y && \
-    apt-get install -y python3-pip nano
+    apt-get install -y python3-pip nano net-tools
 
 RUN pip3 install --no-cache-dir "docker==3.0.1" psutil "websockets==8.0.2" pyaml netifaces dnspython cryptography requests
 

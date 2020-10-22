@@ -19,14 +19,9 @@ class Tester():
         self.docker_client = docker.DockerClient(base_url='unix://var/run/docker.sock')
         self.api_client = docker.APIClient(base_url='unix://var/run/docker.sock')
         self.firewall_rules = ["src = 127.0.0.1 pass", "qname = whalebone.io deny"]
-        try:
-            self.proxy_address = os.environ["PROXY_ADDRESS"]
-        except KeyError:
-            self.proxy_address = "localhost"
-        try:
-            self.agent_id = os.environ["AGENT_ID"]
-        except KeyError:
-            self.agent_id = 101
+        self.proxy_address = os.environ.get("PROXY_ADDRESS", "localhost")
+        self.agent_id = os.environ.get("AGENT_ID", "101")
+        self.max_retry = 10
         self.redis = redis.Redis(os.environ["REDIS_ADDRESS"])
         # logging.basicConfig(level=logging.DEBUG)
         self.status = {}
@@ -113,9 +108,9 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            state = {}
-            while True:
+            for _ in range(self.max_retry):
                 if self.redis.exists("create"):
+                    state = {}
                     status = self.redis_output(self.redis.lpop("create"))
                     self.logger.info(status)
                     for key, value in status.items():
@@ -124,13 +119,13 @@ class Tester():
                         else:
                             self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, value["body"]))
                             state[key] = value["body"]
+                    if not state:
+                        self.status["start_services"] = "ok"
+                    else:
+                        self.status["start_services"] = {"fail": state}
                     break
                 else:
                     time.sleep(3)
-            if not state:
-                self.status["start_services"] = "ok"
-            else:
-                self.status["start_services"] = {"fail": state}
 
     def redis_output(self, redis_in):
         return ast.literal_eval(redis_in.decode("utf-8"))
@@ -181,9 +176,9 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            state = {}
-            while True:
+            for _ in range(self.max_retry):
                 if self.redis.exists("upgrade"):
+                    state = {}
                     status = self.redis_output(self.redis.lpop("upgrade"))
                     self.logger.info(status)
                     if "message" in status and status["message"] == "Command received":
@@ -199,13 +194,13 @@ class Tester():
                             self.logger.info("{} upgrade config check successful".format(config["name"]))
                         elif config["name"] in services and config["labels"][config["name"]] != "3.0":
                             self.logger.warning("{} upgrade config label check unsuccessful".format(config["name"]))
+                    if not state:
+                        self.status["upgrade_resolver_{}".format(name)] = "ok"
+                    else:
+                        self.status["upgrade_resolver_{}".format(name)] = {"fail": state}
                     break
                 else:
                     time.sleep(3)
-            if not state:
-                self.status["upgrade_resolver_{}".format(name)] = "ok"
-            else:
-                self.status["upgrade_resolver_{}".format(name)] = {"fail": state}
 
     def upgrade_resolver_with_missing(self):
         compose = self.compose_reader("resolver-compose-upgraded.yml")
@@ -234,9 +229,9 @@ class Tester():
             except Exception as e:
                 self.logger.warning(e)
             else:
-                state = {}
-                while True:
+                for _ in range(self.max_retry):
                     if self.redis.exists("upgrade"):
+                        state = {}
                         status = self.redis_output(self.redis.lpop("upgrade"))
                         self.logger.info(status)
                         if "message" in status and status["message"] == "Command received":
@@ -250,13 +245,13 @@ class Tester():
                         for config in self.view_config():
                             if config["name"] in ["resolver"] and config["labels"][config["name"]] != "3.0":
                                 self.logger.warning("{} upgrade config label check unsuccessful".format(config["name"]))
+                        if not state and "resolver" in self.get_container_names():
+                            self.status["upgrade_resolver_not_present"] = "ok"
+                        else:
+                            self.status["upgrade_resolver_not_present"] = {"fail": state}
                         break
                     else:
                         time.sleep(3)
-                if not state and "resolver" in [container.name for container in self.docker_client.containers.list()]:
-                    self.status["upgrade_resolver_not_present"] = "ok"
-                else:
-                    self.status["upgrade_resolver_not_present"] = {"fail": state}
 
     def upgrade_resolver_with_old_present(self):
         compose = self.compose_reader("resolver-compose-upgraded.yml")
@@ -286,9 +281,9 @@ class Tester():
             except Exception as e:
                 self.logger.warning(e)
             else:
-                state = {}
-                while True:
+                for _ in range(self.max_retry):
                     if self.redis.exists("upgrade"):
+                        state = {}
                         status = self.redis_output(self.redis.lpop("upgrade"))
                         self.logger.info(status)
                         if "message" in status and status["message"] == "Command received":
@@ -302,17 +297,17 @@ class Tester():
                         for config in self.view_config():
                             if config["name"] in ["resolver"] and config["labels"][config["name"]] != "3.0":
                                 self.logger.warning("{} upgrade config label check unsuccessful".format(config["name"]))
+                        if not state:
+                            containers = self.get_container_names()
+                            if "resolver" in containers and "resolver-old" not in containers:
+                                self.status["upgrade_resolver_with_old"] = "ok"
+                            else:
+                                self.status["upgrade_resolver_with_old"] = {"fail": containers}
+                        else:
+                            self.status["upgrade_resolver_with_old"] = {"fail": state}
                         break
                     else:
                         time.sleep(3)
-                if not state:
-                    containers = [container.name for container in self.docker_client.containers.list()]
-                    if "resolver" in containers and "resolver-old" not in containers:
-                        self.status["upgrade_resolver_with_old"] = "ok"
-                    else:
-                        self.status["upgrade_resolver_with_old"] = {"fail": containers}
-                else:
-                    self.status["upgrade_resolver_with_old"] = {"fail": state}
 
     def upgrade_all(self, services: list, scenario: str):
         compose = self.compose_reader("docker-compose.yml")
@@ -337,14 +332,13 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            i = 0
-            while i <= 7:
+            for _ in range(self.max_retry):
                 time.sleep(10)
                 if not os.path.exists("/etc/whalebone/agent/upgrade.json"):
                     self.logger.info("Upgrade Received")
-                    self.status["upgrade_all_{}".format(scenario)]= "ok"
+                    self.status["upgrade_all_{}".format(scenario)] = "ok"
+                    # add proper check for not running containers
                     break
-                i +=1
             else:
                 self.status["upgrade_all_{}".format(scenario)] = {"fail": {}}
 
@@ -400,7 +394,6 @@ class Tester():
                             break
                 else:
                     self.logger.warning("Agent upgrade unsuccessful with response: {}".format(rec))
-
 
     def get_sysinfo(self):
         try:
@@ -867,7 +860,7 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            while True:
+            for _ in range(self.max_retry):
                 if self.redis.exists("upgrade"):
                     status = self.redis_output(self.redis.lpop("upgrade"))
                     self.logger.info(status)
@@ -916,7 +909,7 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            while True:
+            for _ in range(self.max_retry):
                 if self.redis.exists("upgrade"):
                     status = self.redis_output(self.redis.lpop("upgrade"))
                     self.logger.info(status)
@@ -958,7 +951,7 @@ class Tester():
         except Exception as e:
             self.logger.warning(e)
         else:
-            while True:
+            for _ in range(self.max_retry):
                 if self.redis.exists("upgrade"):
                     status = self.redis_output(self.redis.lpop("upgrade"))
                     self.logger.info(status)
@@ -981,7 +974,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         else:
-            while True:
+            for _ in range(self.max_retry):
                 if self.redis.exists("datacollect"):
                     for _ in range(2):
                         status = self.redis_output(self.redis.lpop("datacollect"))
@@ -1021,7 +1014,7 @@ class Tester():
         else:
             time.sleep(6)
             if all(not self.check_file(name) for name in ["wb_client.crt", "wb_client.key"]):
-                containers = [container.name for container in self.docker_client.containers.list()]
+                containers = self.get_container_names()
                 if all(container not in containers for container in ["logstream", "lr-agent"]):
                     for cont_name, envs in env_config.items():
                         for env_var in self.inspect_container(cont_name):
@@ -1035,6 +1028,9 @@ class Tester():
                     self.logger.warning("Found running containers {}".format(containers))
             else:
                 self.logger.warning("Files found")
+
+    def get_container_names(self)-> list:
+        return [container.name for container in self.docker_client.containers.list()]
 
     def delete_compose(self):
         try:
@@ -1059,7 +1055,7 @@ class Tester():
                 self.logger.info(rec)
                 if rec["status"] == "success":
                     time.sleep(10)
-                    if "lr-agent" in [container.name for container in self.docker_client.containers.list()]:
+                    if "lr-agent" in self.get_container_names():
                         self.status["upgrade_agent_with_old"] = "ok"
                     else:
                         self.status["upgrade_agent_with_old"] = {"fail": rec}

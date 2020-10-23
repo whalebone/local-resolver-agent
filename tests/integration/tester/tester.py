@@ -403,14 +403,18 @@ class Tester():
             self.logger.warning(e)
         else:
             containers = {"lr-agent", "resolver", " logrotate", "passivedns", "logstream"}
-            for key, value in rec.json().items():
-                if key == "containers":
-                    self.logger.info("Containers: {}".format(value))
-                    if set(containers).issubset(set(value.keys())):
-                        self.logger.info("All services are up")
-                if key in ("cpu", "memory", "hdd"):
-                    self.logger.info("{}: {}".format(key, value))
-            self.status["sysinfo"] = "ok"
+            try:
+                for key, value in rec.json().items():
+                    if key == "containers":
+                        self.logger.info("Containers: {}".format(value))
+                        if set(containers).issubset(set(value.keys())):
+                            self.logger.info("All services are up")
+                    if key in ("cpu", "memory", "hdd"):
+                        self.logger.info("{}: {}".format(key, value))
+            except Exception as e:
+                self.status["sysinfo"] = {"fail": {}}
+            else:
+                self.status["sysinfo"] = "ok"
 
     def rename_container(self):
         try:
@@ -1029,7 +1033,7 @@ class Tester():
             else:
                 self.logger.warning("Files found")
 
-    def get_container_names(self)-> list:
+    def get_container_names(self) -> list:
         return [container.name for container in self.docker_client.containers.list()]
 
     def delete_compose(self):
@@ -1087,105 +1091,27 @@ class Tester():
         try:
             self.upgrade_agent()
         except Exception as e:
-            self.logger.warning("{}".format(traceback.print_exc()))
             self.logger.info(e)
         time.sleep(8)
-        # try:
-        #     self.inject_rules()
-        # except Exception as e:
-        #     self.logger.info(e)
         try:
             self.upgrade_resolver("initial")
         except Exception as e:
-            self.logger.warning("{}".format(traceback.print_exc()))
             self.logger.info(e)
-        # try:
-        #     self.dns_queries()
-        # except Exception as e:
-        #     self.logger.info(e)
         try:
             self.get_sysinfo()
         except Exception as e:
             self.logger.info(e)
-            self.status["start_services"] = {"fail": {}}
-        # try:
-        #     self.rename_container()
-        # except Exception as e:
-        #     self.logger.info(e)
-        # try:
-        #     self.stop_container("mega_rotate")
-        # except Exception as e:
-        #     self.logger.info(e)
-        # try:
-        #     self.remove_container()
-        # except Exception as e:
-        #     self.logger.info(e)
-        # try:
-        #     self.get_rules()
-        # except Exception as e:
-        #     self.logger.info(e)
-        # try:
-        #     self.get_rule_info()
-        # except Exception:
-        #     pass
-        # try:
-        #     self.delete_rule()
-        # except Exception as e:
-        #     self.logger.info(e)
-        # try:
-        #     self.modify_rule()
-        # except Exception as e:
-        #     self.logger.info(e)
-        # try:
-        #     self.get_logs()
-        # except Exception as e:
-        #     self.logger.info(e)
-        # try:
-        #     self.delete_log()
-        # except Exception as e:
-        #     self.logger.info(e)
-        try:
-            self.update_cache()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.clear_cache()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.trace_domain()
-        except Exception as e:
-            self.logger.info(e)
-        # try:
-        #     self.save_config()
-        # except Exception as e:
-        #     self.logger.info(e)
-        try:
-            self.upgrade_resolver_config()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.upgrade_resolver_redirect()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.upgrade_resolver_image()
-        except Exception as e:
-            self.logger.info(e)
+        for test_method in (self.update_cache, self.clear_cache, self.trace_domain, self.upgrade_resolver_config,
+                            self.upgrade_resolver_redirect, self.upgrade_resolver_image):
+            try:
+                test_method()
+            except Exception as e:
+                self.logger.warning("Failed to execute test {}, {}".format(test_method.__name__, e))
         # time.sleep(5)
-        # try:
-        #     self.upgrade_agent_with_old_present()
-        # except Exception as e:
-        #     self.logger.info(e)
-        time.sleep(5)
         try:
             self.pack_data()
         except Exception as e:
             self.logger.info(e)
-        # try:
-        #     self.stop_container("resolver")
-        # except Exception as e:
-        #     self.logger.info(e)
         try:
             self.upgrade_resolver("final")
         except Exception as e:
@@ -1199,33 +1125,17 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         self.delete_compose()
-        try:
-            self.test_inactive_action()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.upgrade_agent_with_old()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.upgrade_resolver_with_missing()
-        except Exception as e:
-            self.logger.info(e)
-        try:
-            self.upgrade_resolver_with_old_present()
-        except Exception as e:
-            self.logger.info(e)
-        time.sleep(3)
+        for test_method in (self.test_inactive_action, self.upgrade_agent_with_old, self.upgrade_resolver_with_missing,
+                            self.upgrade_resolver_with_old_present):
+            try:
+                test_method()
+            except Exception as e:
+                self.logger.warning("Failed to execute test {}, {}".format(test_method.__name__, e))
+        # time.sleep(3)
         try:
             self.commit_suicide()
         except Exception as e:
             self.logger.info(e)
-        # time.sleep(10)
-        # try:
-        #     self.upgrade_all(["lr-agent", "resolver", "kresman"])
-        # except Exception as e:
-        #     self.logger.info(e)
-        # time.sleep(60)
         # loop = asyncio.get_event_loop()
         # try:
         #     loop.run_until_complete(self.local_test_remove())

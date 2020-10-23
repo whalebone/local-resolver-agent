@@ -21,7 +21,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/whalebone/:/etc/whalebone/etc/
-      - /etc/:/etc/whalebone/resolv/
 #      - /etc/whalebone/kres/:/etc/whalebone/resolver/
       - /var/whalebone/cli/:/etc/whalebone/cli/
 #      - /etc/whalebone/agent/:/etc/whalebone/compose/

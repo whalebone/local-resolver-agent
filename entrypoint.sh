@@ -1,11 +1,6 @@
 #!/bin/bash
 set -e
 
-CURRENT_UID=${uid:-9999}
-
-useradd --shell /bin/bash -u $CURRENT_UID -o -c "" -m agent
-export HOME=/home/agent
-
 SOCK_DOCKER_GID=`ls -ng /var/run/docker.sock | cut -f3 -d' '`
 
 if ! groups agent | grep -q docker; then

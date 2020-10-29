@@ -10,7 +10,8 @@ RUN apt-get update -y && \
     gpg --verify /usr/local/bin/gosu.asc && \
     rm /usr/local/bin/gosu.asc && \
     rm -rf /var/lib/apt/lists/* && \
-    chmod +x /usr/local/bin/gosu
+    chmod +x /usr/local/bin/gosu && \
+    useradd -d /home/agent -s /bin/bash -u 9999 -o agent
 
 RUN pip3 install --no-cache-dir "docker==3.0.1" psutil "websockets==8.0.2" pyaml netifaces dnspython cryptography requests
 

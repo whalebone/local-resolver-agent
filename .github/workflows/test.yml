@@ -20,7 +20,7 @@ jobs:
         env:
           HARBOR_LOGIN : ${{ secrets.HarborLogin }}
           HARBOR_PASSWORD: ${{ secrets.HarborPassword }}
-        run: docker login harbor.whalebone.io -p HARBOR_LOGIN -u HARBOR_PASSWORD
+        run: docker login -p HARBOR_PASSWORD -u HARBOR_LOGIN harbor.whalebone.io
       - name: Build the stack
         working-directory: ./tests/integration/
         run: docker-compose up -d

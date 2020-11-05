@@ -17,10 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Docker login
-        env:
-          HARBOR_LOGIN : ${{ secrets.HarborLogin }}
-          HARBOR_PASSWORD: ${{ secrets.HarborPassword }}
-        run: docker login -p HARBOR_PASSWORD -u HARBOR_LOGIN harbor.whalebone.io
+        run: docker login -p ${{ secrets.HarborPassword }} -u ${{ secrets.HarborLogin }} harbor.whalebone.io
       - name: Build the stack
         working-directory: ./tests/integration/
         run: docker-compose up -d

@@ -21,6 +21,9 @@ class SystemInfo:
         self.error_stash = error_stash
         self.request = request
         self.logger = logger
+        self.net_mapping = {"bytes_sent": "bytes_sent", "bytes_recv": "bytes_received", "packets_sent": "packets_sent",
+                            "packets_recv": "packets_recv", "errin": "err_receiving", "errout": "err_sending",
+                            "dropin": "dropped_in", "dropout": "dropped_out"}
 
     def get_interfaces(self) -> list:
         interfaces = []
@@ -32,6 +35,17 @@ class SystemInfo:
                 {'name': interface_name, 'addresses': [addr_info.address for addr_info in interface_info_list if
                                                        addr_info.family in (socket.AF_INET, socket.AF_INET6)]})
         return interfaces
+
+    def get_network_info(self) -> dict:
+        network_stats = {}
+        try:
+            counters = psutil.net_io_counters()
+        except Exception as e:
+            self.logger.warning("Failed to get ioc counters {}.".format(e))
+            return network_stats
+        else:
+            for psutil_attr, attr_name in self.net_mapping.items():
+                network_stats[attr_name] = getattr(counters, psutil_attr, 0)
 
     def get_platform(self) -> str:
         try:
@@ -247,6 +261,7 @@ class SystemInfo:
                 'free': self.to_gigabytes(swap.free),
                 'usage': swap.percent,
             },
+            "network_info": self.get_network_info(),
             "docker": self.docker_connector.docker_version(),
             "check": {"resolve": self.check_resolving(), "port": self.check_port()},
             "containers": {container.name: container.status for container in self.docker_connector.get_containers()},

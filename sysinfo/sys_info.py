@@ -22,7 +22,7 @@ class SystemInfo:
         self.request = request
         self.logger = logger
 
-    def get_interfaces(self):
+    def get_interfaces(self) -> list:
         interfaces = []
         for interface_name, interface_info_list in psutil.net_if_addrs().items():
             # interface = {'name': interface_name, 'addresses': [addr_info.address for addr_info in interface_info_list]}
@@ -33,7 +33,7 @@ class SystemInfo:
                                                        addr_info.family in (socket.AF_INET, socket.AF_INET6)]})
         return interfaces
 
-    def get_platform(self):
+    def get_platform(self) -> str:
         try:
             with open("/opt/host/etc/os-release", "r") as file:
                 for line in file:
@@ -42,7 +42,7 @@ class SystemInfo:
         except Exception:
             return "Unknown"
 
-    def get_images(self):
+    def get_images(self) -> dict:
         containers = {}
         for container in self.docker_connector.get_containers():
             try:
@@ -51,10 +51,10 @@ class SystemInfo:
                 pass
         return containers
 
-    def to_gigabytes(self, stat):
+    def to_gigabytes(self, stat: int) -> int:
         return round(stat / (1024 ** 3), 1)
 
-    def check_resolving(self):
+    def check_resolving(self) -> str:
         domains = ("google.com", "microsoft.com", "apple.com", "facebook.com")
         res = resolver.Resolver()
         res.nameservers = ["127.0.0.1"]
@@ -68,7 +68,7 @@ class SystemInfo:
                 pass
         return "fail"
 
-    def check_port(self, service: str = "resolver"):
+    def check_port(self, service: str = "resolver") -> str:
         try:
             if "kresd" in self.docker_connector.container_exec(service,
                                                                ["sh", "-c", "netstat -tupan | grep kresd | grep 53"]):

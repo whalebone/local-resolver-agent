@@ -21,9 +21,11 @@ class SystemInfo:
         self.error_stash = error_stash
         self.request = request
         self.logger = logger
-        self.net_mapping = {"bytes_sent": "bytes_sent", "bytes_recv": "bytes_received", "packets_sent": "packets_sent",
-                            "packets_recv": "packets_recv", "errin": "err_receiving", "errout": "err_sending",
+        self.net_mapping = {"bytes_sent": "bytes_sent", "bytes_received": "bytes_received", "packets_sent": "packets_sent",
+                            "packets_recv": "packets_received", "errin": "err_receiving", "errout": "err_sending",
                             "dropin": "dropped_in", "dropout": "dropped_out"}
+        self.disk_mapping = ("read_count", "write_count", "read_bytes", "write_bytes", "read_time", "write_time",
+                             "busy_time")
 
     def get_interfaces(self) -> list:
         interfaces = []
@@ -41,11 +43,22 @@ class SystemInfo:
         try:
             counters = psutil.net_io_counters()
         except Exception as e:
-            self.logger.warning("Failed to get ioc counters {}.".format(e))
-            return network_stats
+            self.logger.warning("Failed to get network counters {}.".format(e))
         else:
             for psutil_attr, attr_name in self.net_mapping.items():
                 network_stats[attr_name] = getattr(counters, psutil_attr, 0)
+        return network_stats
+
+    def get_disk_info(self) -> dict:
+        disk_stats = {}
+        try:
+            counters = psutil.disk_io_counters()
+        except Exception as e:
+            self.logger.warning("Failed to get disk iops counters {}.".format(e))
+        else:
+            for attr_name in self.disk_mapping:
+                disk_stats[attr_name] = getattr(counters, attr_name, 0)
+        return disk_stats
 
     def get_platform(self) -> str:
         try:
@@ -262,6 +275,7 @@ class SystemInfo:
                 'usage': swap.percent,
             },
             "network_info": self.get_network_info(),
+            "disk_iops": self.get_disk_info(),
             "docker": self.docker_connector.docker_version(),
             "check": {"resolve": self.check_resolving(), "port": self.check_port()},
             "containers": {container.name: container.status for container in self.docker_connector.get_containers()},

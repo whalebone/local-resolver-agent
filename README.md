@@ -26,7 +26,8 @@ Agent envs:
 - DNS_TIMEOUT: (optional, default: 1s) dns resolve timeout parameter
 - DNS_LIFETIME: (optional, default 1s) dns resolve lifetime parameter
 - TRACE_LISTENER: (optional, default: '127.0.0.1:8453') knot http endpoint for domain tracing 
-
+- KRESMAN_PASSWORD: (optional, default: test value) password to use for obtaining Kresman access token 
+- KRESMAN_LOGIN: (optional, default: test value) login to use for obtaining Kresman access token
 
 
 Messages:

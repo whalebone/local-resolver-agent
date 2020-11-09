@@ -51,6 +51,7 @@ class LRAgentClient:
         # if "WEBSOCKET_LOGGING" in os.environ:
         self.enable_websocket_log()
         self.alive = int(os.environ.get('KEEP_ALIVE', 10))
+        self.sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
 
     async def listen(self):
         # async for request in self.websocket:
@@ -92,8 +93,7 @@ class LRAgentClient:
 
     async def send_sys_info(self):
         try:
-            sys_info = {"action": "sysinfo",
-                        "data": SystemInfo(self.dockerConnector, self.sysinfo_logger, self.error_stash).get_system_info()}
+            sys_info = {"action": "sysinfo", "data": self.sysinfo_logger.get_system_info(self.error_stash)}
         except Exception as e:
             self.logger.info("Failed to get periodic system info {}.".format(e))
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
@@ -229,8 +229,8 @@ class LRAgentClient:
 
     async def system_info(self, response: dict, request: dict) -> dict:
         try:
-            response["data"] = SystemInfo(self.dockerConnector, self.sysinfo_logger, self.error_stash,
-                                          request).get_system_info()
+            cli_request = True if "requestId" in request and request["requestId"] == "666" else False
+            response["data"] = self.sysinfo_connector.get_system_info(self.error_stash, cli_request)
         except Exception as e:
             self.logger.info("Failed to get sys info data {}.".format(e))
             self.getError(str(e), request)
@@ -547,9 +547,9 @@ class LRAgentClient:
         except IOError as ie:
             self.logger.warning("Failed to persist logs of new unhealthy resolver, {}.".format(ie))
 
-    async def upgrade_check_binding(self, sysinfo_connector, old_config: list):
+    async def upgrade_check_binding(self, old_config: list):
         for _ in range(10):
-            if sysinfo_connector.check_port() == "ok" and sysinfo_connector.check_port("resolver-old") == "ok":
+            if self.sysinfo_connector.check_port() == "ok" and self.sysinfo_connector.check_port("resolver-old") == "ok":
                 return True
             await asyncio.sleep(1)
         await self.dump_resolver_logs()
@@ -598,16 +598,16 @@ class LRAgentClient:
             else:
                 return {"status": "success"}
 
-    async def upgrade_check_resolver_resolving(self, sysinfo_connector, old_config: list, service: str) -> dict:
+    async def upgrade_check_resolver_resolving(self, old_config: list, service: str) -> dict:
         await asyncio.sleep(int(os.environ.get("UPGRADE_SLEEP", 0)))
-        if not await self.upgrade_check_binding(sysinfo_connector, old_config):
+        if not await self.upgrade_check_binding(old_config):
             raise ContainerException("New resolver is not healthy due to port not bound, rollback")
         try:
             await self.upgrade_worker_method("resolver-old", self.dockerConnector.stop_container)
         except Exception as se:
             raise ContainerException("Failed to stop old resolver, {}".format(se))
         else:
-            if sysinfo_connector.check_resolving() == "fail":
+            if self.sysinfo_connector.check_resolving() == "fail":
                 return await self.upgrade_translation_fallback(service, old_config)
 
     def upgrade_check_service_state(self, service: str) -> bool:
@@ -620,8 +620,7 @@ class LRAgentClient:
         return {"status": "failure", "message": message, "body": str(exception)}
 
     async def upgrade_without_downtime(self, service: str, parsed_compose: dict, old_config: list=None) -> dict:
-        sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
-        if service == "resolver" and sysinfo_connector.check_port() == "fail":
+        if service == "resolver" and self.sysinfo_connector.check_port() == "fail":
             return await self.upgrade_replace_unhealthy_resolver(service, parsed_compose)
         else:
             try:
@@ -642,7 +641,7 @@ class LRAgentClient:
                 else:
                     try:
                         if service == "resolver":
-                            status = await self.upgrade_check_resolver_resolving(sysinfo_connector, old_config, service)
+                            status = await self.upgrade_check_resolver_resolving(old_config, service)
                             if status:
                                 return status
                         if self.upgrade_check_service_state(service):

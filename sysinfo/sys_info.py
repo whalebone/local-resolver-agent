@@ -12,14 +12,8 @@ from dns import resolver
 
 class SystemInfo:
 
-    def __init__(self, docker_connector, logger, error_stash: dict = None, request: dict = None):
-        if error_stash is None:
-            error_stash = {}
-        if request is None:
-            request = {}
+    def __init__(self, docker_connector, logger):
         self.docker_connector = docker_connector
-        self.error_stash = error_stash
-        self.request = request
         self.logger = logger
         self.net_mapping = {"bytes_sent": "bytes_sent", "bytes_received": "bytes_received", "packets_sent": "packets_sent",
                             "packets_recv": "packets_received", "errin": "err_receiving", "errout": "err_sending",
@@ -186,10 +180,12 @@ class SystemInfo:
                 result["{}.{}".format(splitted_line[0], splitted_line[1])] = splitted_line[2]
         return result
 
-    def result_diff(self, results: dict) -> dict:
+    def result_diff(self, results: dict, cli_request: bool) -> dict:
         try:
             if results:
-                if "requestId" in self.request and self.request["requestId"] == "666":
+                # if "requestId" in request and request["requestId"] == "666":
+                #     return results
+                if cli_request:
                     return results
                 try:
                     previous = self.result_manipulation("r")
@@ -218,7 +214,7 @@ class SystemInfo:
             self.logger.warning("Failed to create resolver diff {}".format(e))
         return {"error": "no data"}
 
-    def process_stats_output(self) -> dict:
+    def process_stats_output(self, cli_request: bool) -> dict:
         stats_results = {}
         for tty in os.listdir("/etc/whalebone/tty/"):
             try:
@@ -238,9 +234,11 @@ class SystemInfo:
                         break
             except Exception as e:
                 self.logger.warning("Failed to get data from kres instance {}, {}".format(tty, e))
-        return self.result_diff(stats_results)
+        return self.result_diff(stats_results, cli_request)
 
-    def get_info_static(self) -> dict:
+    def get_info_static(self, error_stash: dict) -> dict:
+        if error_stash is None:
+            error_stash = {}
         mem = psutil.virtual_memory()
         swap = psutil.swap_memory()
         du = psutil.disk_usage('/')
@@ -274,14 +272,14 @@ class SystemInfo:
             "containers": {container.name: container.status for container in self.docker_connector.get_containers()},
             "images": self.get_images(),
             "kresman": self.get_kresman_metrics(),
-            "error_messages": self.error_stash,
+            "error_messages": error_stash,
             "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             'interfaces': self.get_interfaces()
         }
 
-    def get_system_info(self):
-        static_info = self.get_info_static()
-        resolver_data = self.process_stats_output()
+    def get_system_info(self, error_stash: dict = None, cli_request: bool = False):
+        static_info = self.get_info_static(error_stash)
+        resolver_data = self.process_stats_output(cli_request)
         if "error" in resolver_data:
             static_info["check"]["resolve"] = "recovery"
         static_info["resolver"] = resolver_data

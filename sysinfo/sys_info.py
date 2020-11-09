@@ -30,35 +30,28 @@ class SystemInfo:
     def get_interfaces(self) -> list:
         interfaces = []
         for interface_name, interface_info_list in psutil.net_if_addrs().items():
-            # interface = {'name': interface_name, 'addresses': [addr_info.address for addr_info in interface_info_list]}
-            # for addr_info in interface_info_list:
-            #     interface['addresses'].append(addr_info.address)
             interfaces.append(
                 {'name': interface_name, 'addresses': [addr_info.address for addr_info in interface_info_list if
                                                        addr_info.family in (socket.AF_INET, socket.AF_INET6)]})
         return interfaces
 
     def get_network_info(self) -> dict:
-        network_stats = {}
         try:
             counters = psutil.net_io_counters()
         except Exception as e:
             self.logger.warning("Failed to get network counters {}.".format(e))
+            return {}
         else:
-            for psutil_attr, attr_name in self.net_mapping.items():
-                network_stats[attr_name] = getattr(counters, psutil_attr, 0)
-        return network_stats
+            return {attr_name: getattr(counters, psutil_attr, 0) for psutil_attr, attr_name in self.net_mapping.items()}
 
     def get_disk_info(self) -> dict:
-        disk_stats = {}
         try:
             counters = psutil.disk_io_counters()
         except Exception as e:
             self.logger.warning("Failed to get disk iops counters {}.".format(e))
+            return {}
         else:
-            for attr_name in self.disk_mapping:
-                disk_stats[attr_name] = getattr(counters, attr_name, 0)
-        return disk_stats
+            return {attr_name: getattr(counters, attr_name, 0) for attr_name in self.disk_mapping}
 
     def get_platform(self) -> str:
         try:

@@ -61,8 +61,8 @@ class SystemInfo:
         containers = {}
         for container in self.docker_connector.get_containers():
             try:
-                containers[container.name] = container.image.tags[0]
-            except IndexError:
+                containers[container.name] = container.attrs["Config"]["Image"]
+            except KeyError:
                 pass
         return containers
 

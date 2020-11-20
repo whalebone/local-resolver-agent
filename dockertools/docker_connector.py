@@ -17,21 +17,21 @@ class DockerConnector:
         try:
             return self.docker_client.images.list()
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get images {}.".format(e))
             return []
 
     def get_containers(self, stopped: bool = False) -> list:
         try:
             return self.docker_client.containers.list(all=stopped)
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get containers {}.".format(e))
             return []
 
     def get_container(self, name: str):
         try:
             return self.docker_client.containers.get(name)
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get container {}, {}.".format(name, e))
             return ""
 
     def get_volumes(self) -> list:
@@ -47,7 +47,7 @@ class DockerConnector:
             try:
                 result = service.exec_run(command)
             except Exception as e:
-                self.logger.info(e)
+                self.logger.info("Failed to execute command {} in {} due to {}".format(command, name, e))
             else:
                 return result.output.decode("utf-8")
         else:
@@ -71,7 +71,7 @@ class DockerConnector:
         try:
             return self.api_client.version()
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get docker version {}.".format(e))
             return {}
 
     def container_logs(self, name: str, timestamps: bool = False, tail: int = "all", since: str = None) -> str:

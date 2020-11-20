@@ -12,10 +12,11 @@ from dns import resolver
 
 class SystemInfo:
 
-    def __init__(self, docker_connector, logger, token: str):
+    def __init__(self, docker_connector, logger):
         self.docker_connector = docker_connector
         self.logger = logger
-        self.kresman_token = token
+        # self.kresman_token = token
+        self.kresman_timeout = int(os.environ.get("HTTP_TIMEOUT", 10))
         self.net_mapping = {"bytes_sent": "bytes_sent", "bytes_received": "bytes_received", "packets_sent": "packets_sent",
                             "packets_recv": "packets_received", "errin": "err_receiving", "errout": "err_sending",
                             "dropin": "dropped_in", "dropout": "dropped_out"}
@@ -102,32 +103,33 @@ class SystemInfo:
     def get_kresman_metrics(self) -> dict:
         address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
-            msg = requests.get("{}/api/countentities".format(address), timeout=int(os.environ.get("HTTP_TIMEOUT", 10)),
-                               headers={'accept': '*/*', 'Content-Type': 'application/json',
-                                        'Authorization': 'Bearer {}'.format(self.kresman_token)}, verify=False)
+            msg = requests.get("{}/api/general/countentities".format(address), timeout=self.kresman_timeout,
+                               # headers={'accept': '*/*', 'Content-Type': 'application/json',
+                               #          'Authorization': 'Bearer {}'.format(self.kresman_token)}
+                               verify=False)
         except requests.exceptions.RequestException as e:
             self.logger.info("Failed to get data from kresman, {}".format(e))
             return {"error": str(e)}
         else:
             try:
-                self.logger.warning("{}".format(msg.json()))
-                return {metric: int(value.split(".")[0]) for metric, value in msg.json().items()}
+                return {metric["table"]: metric["count"] for metric in msg.json()}
             except Exception as e:
                 return {"error": str(e)}
 
     def get_kresman_internal(self) -> dict:
         address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
-            msg = requests.get("{}/api/metrics".format(address), timeout=int(os.environ.get("HTTP_TIMEOUT", 10)),
-                               headers={'accept': '*/*', 'Content-Type': 'application/json',
-                                        'Authorization': 'Bearer {}'.format(self.kresman_token)}, verify=False)
+            msg = requests.get("{}/api/general/metrics".format(address), timeout=self.kresman_timeout,
+                               # headers={'accept': '*/*', 'Content-Type': 'application/json',
+                               #          'Authorization': 'Bearer {}'.format(self.kresman_token)}
+                               verify=False)
         except requests.exceptions.RequestException as e:
             self.logger.info("Failed to get data from kresman, {}".format(e))
             return {"error": str(e)}
         else:
             try:
-                self.logger.warning("{}".format(msg.json()))
-                return {metric: int(value.split(".")[0]) for metric, value in msg.json().items()}
+                self.logger.warning("{}".format(msg.content))
+                return {metric["name"]: metric["value"] for metric in msg.json()}
             except Exception as e:
                 return {"error": str(e)}
 
@@ -292,7 +294,7 @@ class SystemInfo:
             "containers": {container.name: container.status for container in self.docker_connector.get_containers()},
             "images": self.get_images(),
             "kresman": self.get_kresman_metrics(),
-            "kresman_internal": self.get_kresman_internal(),
+            # "kresman_internal": self.get_kresman_internal(),
             "error_messages": error_stash,
             "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             'interfaces': self.get_interfaces()

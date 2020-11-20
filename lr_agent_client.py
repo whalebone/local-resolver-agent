@@ -51,6 +51,8 @@ class LRAgentClient:
         # if "WEBSOCKET_LOGGING" in os.environ:
         self.enable_websocket_log()
         self.alive = int(os.environ.get('KEEP_ALIVE', 10))
+        # self.kresman_token = self.get_kresman_credentials()
+        # self.sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger, self.kresman_token)
         self.sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
 
     async def listen(self):
@@ -93,7 +95,7 @@ class LRAgentClient:
 
     async def send_sys_info(self):
         try:
-            sys_info = {"action": "sysinfo", "data": self.sysinfo_logger.get_system_info(self.error_stash)}
+            sys_info = {"action": "sysinfo", "data": self.sysinfo_connector.get_system_info(self.error_stash)}
         except Exception as e:
             self.logger.info("Failed to get periodic system info {}.".format(e))
             sys_info = {"action": "sysinfo", "data": {"status": "failure", "body": str(e)}}
@@ -1063,13 +1065,33 @@ class LRAgentClient:
                 self.logger.info("Tlds successfully pre fetched.")
                 break
 
+    def get_kresman_credentials(self) -> str:
+        try:
+            listener = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
+            req = requests.post("{}/api/authorization/Login".format(listener), verify=False,
+                                headers={'Content-Type': 'application/json'},
+                                json={'emailAddress': os.environ.get("KRESMAN_LOGIN", 'admin@whalebone.io'),
+                                      'password': os.environ.get("KRESMAN_PASSWORD",
+                                                                 '47cd985a73d1af0f0ee2283437fb0176')})
+        except requests.RequestException as re:
+            self.logger.warning("Failed to login to Kresman due to {}.".format(re))
+        else:
+            try:
+                return req.json()['accessToken']
+            except Exception as e:
+                self.logger.warning("Failed to get request token from Kresman {}, {}.".format(req.content, e))
+        return ""
+
     async def update_cache(self, response: dict = None, request: dict = None) -> dict:
         if request and "cli" not in request:
             await self.send_acknowledgement(response)
         address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
             # msg = requests.get("{}/updatenow".format(address), json={}, timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
-            msg = requests.get("{}/updatenow".format(address), json={})
+            msg = requests.get("{}/api/general/updatenow".format(address), json={}, verify=False,
+                               # headers={'accept': '*/*', 'Content-Type': 'application/json',
+                               #          'Authorization': 'Bearer {}'.format(self.kresman_token)}
+                               )
         except requests.exceptions.RequestException as e:
             if response:
                 response["data"] = {"status": "failure", "body": str(e)}

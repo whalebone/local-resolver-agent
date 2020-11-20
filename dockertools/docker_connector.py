@@ -34,6 +34,13 @@ class DockerConnector:
             self.logger.info(e)
             return ""
 
+    def get_volumes(self) -> list:
+        try:
+            return self.docker_client.volumes.list()
+        except Exception as e:
+            self.logger.warning("Failed to get volumes {}.".format(e))
+            return []
+
     def container_exec(self, name: str, command: list) -> str:
         service = self.get_container(name)
         if service != "":
@@ -45,6 +52,12 @@ class DockerConnector:
                 return result.output.decode("utf-8")
         else:
             return ""
+
+    async def create_volume(self, name: str, **options):
+        try:
+            self.docker_client.volumes.create(name, **options)
+        except Exception as e:
+            raise ContainerException(e)
 
     async def start_service(self, parsed_compose: dict):
         kwargs = create_docker_run_kwargs(parsed_compose)

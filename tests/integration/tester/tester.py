@@ -409,10 +409,13 @@ class Tester():
                         self.logger.info("Containers: {}".format(value))
                         if set(containers).issubset(set(value.keys())):
                             self.logger.info("All services are up")
-                    if key in ("cpu", "memory", "hdd"):
-                        self.logger.info("{}: {}".format(key, value))
+                    if key in ("cpu", "memory", "hdd", "network_info", "disk_iops", "kresman", "images"):
+                        if isinstance(value, dict) and value:
+                            self.logger.info("{}: {}".format(key, value))
+                        else:
+                            raise KeyError(key)
             except Exception as e:
-                self.status["sysinfo"] = {"fail": {}}
+                self.status["sysinfo"] = {"fail": {"incorrect/missing key {}".format(e)}}
             else:
                 self.status["sysinfo"] = "ok"
 
@@ -1131,11 +1134,10 @@ class Tester():
                 test_method()
             except Exception as e:
                 self.logger.warning("Failed to execute test {}, {}".format(test_method.__name__, e))
-        # time.sleep(3)
-        try:
-            self.commit_suicide()
-        except Exception as e:
-            self.logger.info(e)
+        # try:
+        #     self.commit_suicide()
+        # except Exception as e:
+        #     self.logger.info(e)
         # loop = asyncio.get_event_loop()
         # try:
         #     loop.run_until_complete(self.local_test_remove())

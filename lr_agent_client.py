@@ -251,6 +251,8 @@ class LRAgentClient:
             self.logger.warning(e)
             response["data"] = {"status": "failure", "body": str(e)}
         else:
+            if "volumes" in parsed_compose:
+                await self.check_named_volumes(parsed_compose["volumes"])
             if "resolver" in parsed_compose["services"]:
                 result = self.upgrade_save_files(request, decoded_data, ["compose", "config"])
                 if result:
@@ -448,7 +450,7 @@ class LRAgentClient:
     async def upgrade_container(self, response: dict, request: dict) -> dict:
         if "cli" not in request:
             await self.send_acknowledgement(response)
-        status = {}
+        status, old_config = {}, None
         compose = self.upgrade_load_compose(request, response)
         if "status" in compose:
             return compose
@@ -458,6 +460,8 @@ class LRAgentClient:
             self.logger.warning("Failed to create services from parsed compose, {}".format(e))
             response["data"] = {"status": "failure", "body": str(e)}
         else:
+            if "volumes" in parsed_compose:
+                await self.check_named_volumes(parsed_compose["volumes"])
             services = request["data"]["services"] if request["data"]["services"] else list(parsed_compose["services"])
             if self.upgrade_check_multi_upgrade(services, request, parsed_compose):
                 services = ["lr-agent"]
@@ -466,8 +470,6 @@ class LRAgentClient:
                     old_config = self.upgrade_load_config(request, compose)
                 except Exception as e:
                     status.update({"config dump": str(e)})
-            else:
-                old_config = None
             try:
                 await self.upgrade_check_incorrect_name()
             except ContainerException as ce:
@@ -666,6 +668,15 @@ class LRAgentClient:
                             await self.update_cache()
                             self.prefetch_tld()
                         return {"status": "success"}
+
+    async def check_named_volumes(self, config: dict):
+        try:
+            volume_names = [volume.name for volume in self.dockerConnector.get_volumes()]
+            for volume_name, volume_attr in config.items():
+                if volume_name not in volume_names:
+                    await self.dockerConnector.create_volume(volume_name, **volume_attr)
+        except Exception as e:
+            self.logger.warning("Failed to create named volume due to {}.".format(e))
 
     def upgrade_save_files(self, request: dict, decoded_data, keys: list):
         try:

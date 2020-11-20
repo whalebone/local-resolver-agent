@@ -27,7 +27,7 @@ services:
         LOG_THREAT: 127.0.0.1
         LOG_CONTENT: 127.0.0.1
     kresman:
-      image: harbor.whalebone.io/resolver/kresman:3.2.2
+      image: harbor.whalebone.io/resolver/kresman:3.2.6
       labels:
          kresman: "2.0"
       restart: always
@@ -43,7 +43,7 @@ services:
         RESOLVERAPI_URL: 'https://resolverapi.whalebone.io:443/sinkit/rest/protostream/resolvercache'
         RESOLVERAPI_UPDATE_INTERVAL_S: 3600
         KRES_UPDATE_INTERVAL_S: 300
-        PRIVATE_API_LISTENER: http://127.0.0.1:8080/
+        PRIVATE_API_LISTENER: "http://127.0.0.1:8080/"
         RADIUS_PORT: 0
         RADIUS_ENABLED: false
         UDP_LOGGER_PORT: 0

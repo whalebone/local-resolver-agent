@@ -30,7 +30,7 @@ services:
       - /:/opt/host/:ro
       - /var/lib/kres/tty/:/etc/whalebone/tty/
   resolver:
-    image: harbor.whalebone.io/resolver/kres:5.1.3-3-66
+    image: harbor.whalebone.io/resolver/kres:5.1.3-3-2
     labels:
       resolver: "6.0"
     logging:
@@ -52,7 +52,7 @@ services:
       SINKIPV6: '::1'
       SINKTTL: 1
   kresman:
-      image: harbor.whalebone.io/resolver/kresman:3.2.2
+      image: harbor.whalebone.io/resolver/kresman:3.2.6
       labels:
         kresman: "6.0"
       restart: always
@@ -119,7 +119,40 @@ services:
         options:
           max-size: "10m"
           max-file: "1"
-
+  logcat:
+    image: harbor.whalebone.io/resolver/logcat:1.1
+    labels:
+      logcat: "1.1"
+    volumes:
+      - /var/log/whalebone:/var/log/whalebone
+    environment:
+      HOST: '127.0.0.1:4000'
+      PATH_OUT: '/var/log/whalebone/'
+      FILENAME: 'whalebone.log'
+    restart: always
+    network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "1"
+  logcat-content:
+    image: harbor.whalebone.io/resolver/logcat:1.1
+    labels:
+      logcat-content: "1.1"
+    volumes:
+      - /var/log/whalebone:/var/log/whalebone
+    environment:
+      HOST: '127.0.0.1:4001'
+      PATH_OUT: '/var/log/whalebone/'
+      FILENAME: 'content.log'
+    restart: always
+    network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "1"
 volumes:
   registry:
     external: true

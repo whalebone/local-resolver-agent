@@ -124,6 +124,7 @@ class LRAgentClient:
         else:
             self.logger.info("Done persisted upgrade with response: {}".format(response))
             self.process_response(response)
+            await self.send(response)
         self.delete_file("{}etc/agent/upgrade.json".format(self.folder))
 
     async def check_running_services(self):

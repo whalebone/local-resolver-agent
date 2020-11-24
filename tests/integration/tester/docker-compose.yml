@@ -46,6 +46,7 @@ services:
     - /var/lib/kres:/var/lib/kres
     - /var/lib/kres/tty:/tty/control/
     - /var/whalebone/:/var/whalebone/
+    - dnstap:/tmp/dnstap
     restart: always
     environment:
       SINKIP: '159.100.251.128'
@@ -153,6 +154,18 @@ services:
       options:
         max-size: "100m"
         max-file: "1"
+  dnstag:
+    command: /go/bin/app -b -w /var/log/whalebone/dnstag.log --u=/tmp/dnstap/dnstap.sock
+    image: whalebone/dnstag:1.2
+    labels:
+      dnstag: '1.2'
+    volumes:
+    - dnstap:/tmp/dnstap
+    - /var/log/whalebone:/var/log/whalebone
 volumes:
   registry:
     external: true
+  dnstap:
+    driver_opts:
+      device: tmpfs
+      type: tmpfs

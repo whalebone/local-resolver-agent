@@ -112,7 +112,7 @@ class SystemInfo:
             return {"error": str(e)}
         else:
             try:
-                return {metric["table"]: metric["count"] for metric in msg.json()}
+                return {metric["id"]: metric["count"] for metric in msg.json()}
             except Exception as e:
                 return {"error": str(e)}
 
@@ -128,8 +128,7 @@ class SystemInfo:
             return {"error": str(e)}
         else:
             try:
-                self.logger.warning("{}".format(msg.content))
-                return {metric["name"]: metric["value"] for metric in msg.json()}
+                return {metric["id"]: metric["value"] for metric in msg.json()}
             except Exception as e:
                 return {"error": str(e)}
 
@@ -294,7 +293,7 @@ class SystemInfo:
             "containers": {container.name: container.status for container in self.docker_connector.get_containers()},
             "images": self.get_images(),
             "kresman": self.get_kresman_metrics(),
-            # "kresman_internal": self.get_kresman_internal(),
+            "kresman_internal": self.get_kresman_internal(),
             "error_messages": error_stash,
             "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             'interfaces': self.get_interfaces()

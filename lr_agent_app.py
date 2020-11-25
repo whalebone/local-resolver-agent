@@ -31,8 +31,9 @@ async def connect():
     ssl_context.load_cert_chain(client_cert)
     # sslContext.load_cert_chain(WHALEBONE_LR_CLIENT_CERT)
     logger = logging.getLogger("main")
+    alive = int(os.environ.get('KEEP_ALIVE', 10))
     try:
-        connection = await websockets.connect(proxy_address, ssl=ssl_context)
+        connection = await websockets.connect(proxy_address, ssl=ssl_context, ping_interval=alive, ping_timeout=alive)
     except Exception as ce:
         raise InitException("Failed to connect to {} due to {}.".format(proxy_address, ce))
     else:

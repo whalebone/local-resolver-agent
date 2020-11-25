@@ -10,6 +10,8 @@ import uuid
 import re
 import requests
 import websockets
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from collections import deque
 from shutil import copyfile, copytree, rmtree
@@ -1294,7 +1296,9 @@ class LRAgentClient:
                                    "path": "{}/docker.service".format(folder)},
                    "ps": {"action": "list", "command": ["ps", "-aux"], "path": "{}/ps".format(folder)},
                    "list_containers": {"action": "docker", "command": self.docker_ps(),
-                                       "path": "{}/docker_ps".format(folder)},
+                                       "path": "{}/docker_ps".format(folder)}
+                   # "docker_stats": {"action": "docker", "command": self.docker_stats(),
+                   #                  "path": "{}/docker_stats".format(folder)}
                    }
         self.load_container_info(folder)
         for action, specification in actions.items():
@@ -1392,6 +1396,29 @@ class LRAgentClient:
         except Exception as e:
             self.logger.info("Failed to acquire docker ps info, {}".format(e))
         return "".join(result)
+
+    # def docker_stats(self) -> str:
+    #     result = []
+    #     try:
+    #         for container in [container for container in self.dockerConnector.get_containers(stopped=True)]:
+    #             stats = container.stats(stream=False)
+    #             result.append("{} {}\n".format(container.name, self.prepare_stats(stats)))
+    #     except Exception as e:
+    #         self.logger.info("Failed to acquire docker ps info, {}".format(e))
+    #     return "".join(result)
+    #
+    # def prepare_stats(self, stats: dict) -> str:
+    #     return "{} {}/{}".format(
+    #         stats["cpu_stats"]["cpu_usage"]["total_usage"] / stats["cpu_stats"]["system_cpu_usage"],
+    #         self.convert_bytes(stats["memory_stats"]["stats"]["active_anon"]),
+    #         self.convert_bytes(stats["memory_stats"]["limit"]))
+    #
+    # def convert_bytes(self, size: int):
+    #     for x in ['bytes', 'KiB', 'MiB', 'GiB', 'TiB']:
+    #         if size < 1024.0:
+    #             return "%3.1f %s" % (size, x)
+    #         size /= 1024.0
+    #     return size
 
     # async def write_config(self, response: dict, request: dict) -> dict:
     #     write_type = {"base64": "wb", "json": "w", "text": "w"}

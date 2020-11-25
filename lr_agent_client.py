@@ -25,24 +25,24 @@ from sysinfo.sys_info import SystemInfo
 from exception.exc import ContainerException, ComposeException, PongFailedException
 from dockertools.compose_parser import ComposeParser
 from loggingtools.logger import build_logger
-from loggingtools.log_reader import LogReader
-from resolvertools.resolver_connector import FirewallConnector
+# from loggingtools.log_reader import LogReader
+# from resolvertools.resolver_connector import FirewallConnector
 
 
 class LRAgentClient:
 
-    def __init__(self, websocket):
+    def __init__(self, websocket, cli: bool = False):
         self.websocket = websocket
         self.dockerConnector = DockerConnector()
         self.compose_parser = ComposeParser()
-        self.firewall_connector = FirewallConnector()
-        self.log_reader = LogReader()
+        # self.firewall_connector = FirewallConnector()
+        # self.log_reader = LogReader()
         self.folder = "/etc/whalebone/"
         self.logger = build_logger("lr-agent", "{}logs/".format(self.folder))
         self.status_log = build_logger("status", "{}logs/".format(self.folder), file_size=10000000, backup_count=2,
                                        console_output=False)
         self.sysinfo_logger = build_logger("sys_info", "{}logs/".format(self.folder))
-        self.async_actions = ["stop", "remove", "create", "upgrade", "datacollect", "updatecache", "suicide"]
+        self.async_actions = ("stop", "remove", "create", "upgrade", "datacollect", "updatecache", "suicide")
         self.error_stash = {}
         if "RPZ_WHITELIST" in os.environ:
             self.microsoft_id = uuid.uuid4()
@@ -50,6 +50,7 @@ class LRAgentClient:
             self.last_update = None
         # if "WEBSOCKET_LOGGING" in os.environ:
         self.enable_websocket_log()
+        self.cli = cli
         self.alive = int(os.environ.get('KEEP_ALIVE', 10))
         # self.kresman_token = self.get_kresman_credentials()
         # self.sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger, self.kresman_token)
@@ -68,20 +69,17 @@ class LRAgentClient:
                     raise PongFailedException("Failed to receive pong")
             else:
                 try:
-                    response = await self.process(request)
+                    status, parsed_request = await self.process(request)
                 except Exception as e:
-                    response = {"data": {"status": "failure", "body": str(e)}}
-                    for field, value in json.loads(request).items():
-                        if field in ("requestId", "action"):
-                            response[field] = value
+                    status, parsed_request = {"status": "failure", "body": str(e)}, json.loads(request)
                     self.logger.warning("Failed to get action response {}.".format(e))
                 else:
                     try:
-                        if response["action"] in self.async_actions and response["action"] != "updatecache":
-                            self.process_response(response)
+                        if parsed_request["action"] in self.async_actions and parsed_request["action"] != "updatecache":
+                            self.process_response(status, parsed_request["action"])
                     except Exception as e:
                         self.logger.info("Error during exception persistence, {}".format(e))
-                await self.send(response)
+                await self.send(self.prepare_response(status, parsed_request))
 
     async def send(self, message: dict):
         try:
@@ -102,6 +100,14 @@ class LRAgentClient:
         self.save_file("sysinfo/metrics.log", "sysinfo", sys_info["data"], "a")
         await self.send(sys_info)
 
+    def prepare_response(self, status: dict, request: dict) -> dict:
+        status = status if status else {"Action finished with unknown issue, no status returned"}
+        response = {"action": request.get("action", "unknown"),
+                    "data": {"action_status": status, "uid": request["data"].get("uid", "")}}
+        if "requestId" in request and request["action"] not in self.async_actions:
+            response["requestId"] = request["requestId"]
+        return response
+
     async def send_acknowledgement(self, message: dict):
         message["data"] = {"status": "success", "message": "Command received"}
         await self.send(message)
@@ -116,15 +122,15 @@ class LRAgentClient:
 
     async def perform_persisted_upgrade(self):
         with open("{}etc/agent/upgrade.json".format(self.folder), "r") as upgrade:
-            request = json.loads(upgrade.read())
+            request = json.load(upgrade)
         try:
-            response = await self.upgrade_container({"action": "upgrade"}, request)
+            status = await self.upgrade_container(**request["data"])
         except Exception as e:
             self.logger.warning("Failed to resume upgrade, {}".format(e))
         else:
-            self.logger.info("Done persisted upgrade with response: {}".format(response))
-            self.process_response(response)
-            await self.send(response)
+            self.logger.info("Done persisted upgrade with response: {}".format(status))
+            self.process_response(status, "upgrade")
+            await self.send(self.prepare_response(status, request))
         self.delete_file("{}etc/agent/upgrade.json".format(self.folder))
 
     async def check_running_services(self):
@@ -166,34 +172,32 @@ class LRAgentClient:
         else:
             self.status_log.info("Running tasks: {}, ping sent pong received".format(running_tasks))
 
-    def process_response(self, response: dict):
-        for service, error_message in response["data"].items():
-            if isinstance(error_message, dict):
-                if error_message["status"] == "failure":
-                    try:
-                        self.error_stash[service].update({response["action"]: error_message["body"]})
-                    except KeyError:
-                        self.error_stash[service] = {response["action"]: error_message["body"]}
-                else:
-                    if service in self.error_stash and response["action"] in self.error_stash[service]:
-                        del self.error_stash[service][response["action"]]
-                        if not self.error_stash[service]:
-                            del self.error_stash[service]
+    def process_response(self, status: dict, action: str):
+        if isinstance(status, dict) and status:
+            for service, error_message in status.items():
+                if isinstance(error_message, dict):
+                    if error_message["status"] == "failure":
+                        try:
+                            self.error_stash[service].update({action: error_message["body"]})
+                        except KeyError:
+                            self.error_stash[service] = {action: error_message["body"]}
+                    else:
+                        if service in self.error_stash and action in self.error_stash[service]:
+                            del self.error_stash[service][action]
+                            if not self.error_stash[service]:
+                                del self.error_stash[service]
 
-    async def process(self, request_json, cli=False):
+    async def process(self, request_json: str):
         try:
             request = self.decode_request(json.loads(request_json))
         except Exception as e:
             self.logger.info("Failed to parse request: {}, {}".format(e, request_json))
             return {"action": "request",
                     "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
-        if not cli:
+        if not self.cli:
             self.logger.info("Received: {}".format(request))
-        response = {"action": request["action"]}
-        if "action" not in request:
-            return self.getError('Missing action in request', request)
-        if "requestId" in request:
-            response["requestId"] = request["requestId"]
+            if request["action"] in self.async_actions:
+                await self.send_acknowledgement({"action": request["action"], "requestId": request["requestId"]})
 
         method_calls = {"sysinfo": self.system_info, "create": self.create_container, "upgrade": self.upgrade_container,
                         "suicide": self.resolver_suicide, "clearcache": self.resolver_cache_clear,
@@ -206,74 +210,73 @@ class LRAgentClient:
                         # "containerlogs": self.container_logs,
                         "updatecache": self.update_cache, "containers": self.list_containers, "test": self.agent_test_message,
                          "datacollect": self.pack_files, "trace": self.trace_domain}
-        method_arguments = {"sysinfo": [response, request], "create": [response, request], "test": [response],
-                            "upgrade": [response, request], "suicide": [response], "containers": [response],
-                            # "restart": [response, request], "rename": [response, request],
-                            # "containerlogs": [response, request], "saveconfig": [response, request],
-                            "clearcache": [response, request], "updatecache": [response, request],
-                            # "stop": [response, request], "remove": [response, request], "localtest": [response],
-                            # "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
-                            # "fwmodify": [response, request], "fwdelete": [response, request],
-                            # "logs": [response], "log": [response, request],
-                            # "flog": [response, request], "dellogs": [response, request],
-                            # "whitelistadd": [response, request],
-                            "datacollect": [response, request], "trace": [response, request]}
+        # method_arguments = {"sysinfo": [response, request], "create": [response, request], "test": [response],
+        #                     "upgrade": [response, request], "suicide": [response], "containers": [response],
+        #                     # "restart": [response, request], "rename": [response, request],
+        #                     # "containerlogs": [response, request], "saveconfig": [response, request],
+        #                     "clearcache": [response, request], "updatecache": [response, request],
+        #                     # "stop": [response, request], "remove": [response, request], "localtest": [response],
+        #                     # "fwrules": [response], "fwcreate": [response, request], "fwfetch": [response, request],
+        #                     # "fwmodify": [response, request], "fwdelete": [response, request],
+        #                     # "logs": [response], "log": [response, request],
+        #                     # "flog": [response, request], "dellogs": [response, request],
+        #                     # "whitelistadd": [response, request],
+        #                     "datacollect": [response, request], "trace": [response, request]}
 
-        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] not in ["updatecache"] and not cli:
+        if "CONFIRMATION_REQUIRED" in os.environ and request["action"] not in ["updatecache"] and not self.cli:
             self.persist_request(request)
-            response["data"] = {"message": "Request successfully persisted.", "status": "success"}
-            return response
+            # response["data"] = {"message": "Request successfully persisted.", "status": "success"}
+            return {"message": "Request successfully persisted.", "status": "success"}, request
         else:
             try:
-                return await method_calls[request["action"]](*method_arguments[request["action"]])
+                # return await method_calls[request["action"]](*method_arguments[request["action"]])
+                return await method_calls[request["action"]](**request["data"]), request
             except KeyError as ke:
-                self.logger.info("Unknown action '{}'".format(ke))
-                return self.getError('Unknown action', request)
+                self.logger.warning("Unknown action '{}'".format(ke))
+                return {"status": "failure", "message": "Action {} is not supported.".format(ke)}, request
+            except TypeError as te:
+                self.logger.info("Method {}".format(te))
+                return {"status": "failure", "message": "Method {}".format(te)}, request
 
-    async def system_info(self, response: dict, request: dict) -> dict:
+    async def system_info(self, **_) -> dict:
         try:
-            cli_request = True if "requestId" in request and request["requestId"] == "666" else False
-            response["data"] = self.sysinfo_connector.get_system_info(self.error_stash, cli_request)
+            return self.sysinfo_connector.get_system_info(self.error_stash, self.cli)
         except Exception as e:
             self.logger.info("Failed to get sys info data {}.".format(e))
-            self.getError(str(e), request)
-        return response
+            return {}
 
-    async def create_container(self, response: dict, request: dict) -> dict:
-        if "cli" not in request:
-            await self.send_acknowledgement(response)
+    async def create_container(self, compose: str = "", config: list = None, **_) -> dict:
         status = {}
-        decoded_data = self.upgrade_load_compose(request, response)
-        if "status" in decoded_data:
-            return decoded_data
         try:
-            parsed_compose = self.compose_parser.create_service(decoded_data)
-        except ComposeException as e:
+            decoded_data = self.upgrade_load_compose(compose)
+        except Exception as e:
             self.logger.warning(e)
-            response["data"] = {"status": "failure", "body": str(e)}
         else:
-            if "volumes" in parsed_compose:
-                await self.check_named_volumes(parsed_compose["volumes"])
-            if "resolver" in parsed_compose["services"]:
-                result = self.upgrade_save_files(request, decoded_data, ["compose", "config"])
-                if result:
-                    status["dump"] = result
-            for service, config in parsed_compose["services"].items():
-                status[service] = {}
-                try:
-                    await self.dockerConnector.start_service(config)
-                except ContainerException as e:
-                    status[service] = {"status": "failure", "body": str(e)}
-                    self.logger.info("Failed to start service {} due to {}.".format(service, e))
-                else:
-                    status[service]["status"] = "success"
-                    if service == "resolver":
-                        await self.update_cache()
-                        self.prefetch_tld()
-            if "requestId" in response:
-                del response["requestId"]
-            response["data"] = status
-        return response
+            try:
+                parsed_compose = self.compose_parser.create_service(decoded_data)
+            except ComposeException as e:
+                self.logger.warning(e)
+                return {"status": "failure", "body": str(e)}
+            else:
+                if "volumes" in parsed_compose:
+                    await self.check_named_volumes(parsed_compose["volumes"])
+                if "resolver" in parsed_compose["services"]:
+                    result = self.upgrade_save_files(decoded_data, config)
+                    if result:
+                        status["dump"] = result
+                for service, service_config in parsed_compose["services"].items():
+                    status[service] = {}
+                    try:
+                        await self.dockerConnector.start_service(service_config)
+                    except ContainerException as e:
+                        status[service] = {"status": "failure", "body": str(e)}
+                        self.logger.info("Failed to start service {} due to {}.".format(service, e))
+                    else:
+                        status[service]["status"] = "success"
+                        if service == "resolver":
+                            await self.update_cache()
+                            self.prefetch_tld()
+        return status
 
     # async def upgrade_container(self, response: dict, request: dict) -> dict:
     #     sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
@@ -448,27 +451,27 @@ class LRAgentClient:
     #         response["data"] = status
     #     return response
 
-    async def upgrade_container(self, response: dict, request: dict) -> dict:
-        if "cli" not in request:
-            await self.send_acknowledgement(response)
+    async def upgrade_container(self, compose: str = "", config: list = None, services: list = None, uid: str = "",
+                                **_) -> dict:
         status, old_config = {}, None
-        compose = self.upgrade_load_compose(request, response)
-        if "status" in compose:
-            return compose
+        try:
+            compose = self.upgrade_load_compose(compose)
+        except Exception as e:
+            self.logger.warning(e)
         try:
             parsed_compose = self.compose_parser.create_service(compose)
         except ComposeException as e:
             self.logger.warning("Failed to create services from parsed compose, {}".format(e))
-            response["data"] = {"status": "failure", "body": str(e)}
+            return {"status": "failure", "body": str(e)}
         else:
             if "volumes" in parsed_compose:
                 await self.check_named_volumes(parsed_compose["volumes"])
-            services = request["data"]["services"] if request["data"]["services"] else list(parsed_compose["services"])
-            if self.upgrade_check_multi_upgrade(services, request, parsed_compose):
+            services = services if services else list(parsed_compose["services"])
+            if self.upgrade_check_multi_upgrade(services, parsed_compose, uid):
                 services = ["lr-agent"]
             if "resolver" in services:
                 try:
-                    old_config = self.upgrade_load_config(request, compose)
+                    old_config = self.upgrade_load_config(config)
                 except Exception as e:
                     status.update({"config dump": str(e)})
             try:
@@ -485,13 +488,10 @@ class LRAgentClient:
                 else:
                     status[service] = await self.upgrade_without_downtime(service, parsed_compose, old_config)
             try:
-                self.upgrade_persist_compose(status, request, compose)
+                self.upgrade_persist_compose(status, compose)
             except Exception as de:
                 status["dump"] = de
-            if "requestId" in response:
-                del response["requestId"]
-            response["data"] = status
-        return response
+        return status
 
     async def upgrade_with_downtime(self, parsed_compose: dict, service: str) -> dict:
         await self.upgrade_pull_image(parsed_compose["services"][service]['image'])
@@ -507,28 +507,30 @@ class LRAgentClient:
             else:
                 return {"status": "success"}
 
-    def upgrade_load_config(self, request: dict, compose: dict):
+    def upgrade_load_config(self, config: list):
         try:
             old_config = self.load_file("etc/kres/kres.conf")
         except IOError as e:
             raise Exception(e)
         else:
-            self.upgrade_save_files(request, compose, ["config"])
+            self.upgrade_save_files(config=config)
             return old_config
 
-    def upgrade_check_multi_upgrade(self, services: list, request: dict, parsed_compose: dict) -> bool:
+    def upgrade_check_multi_upgrade(self, services: list, parsed_compose: dict, uid: str) -> bool:
         if "lr-agent" in services and len(services) != 1:
-            request["data"]["services"] = [service for service in services if service != "lr-agent"]
-            request["data"]["compose"] = json.dumps({'version': '3', 'services':
-                {key: value for key, value in parsed_compose["services"].items() if key != "lr-agent"}})
+            request = {"action": "upgrade",
+                       "data": {"services": [service for service in services if service != "lr-agent"], "uid": uid}}
+            request["data"]["compose"] = json.dumps({'version': '3', 'services': {key: value for key, value in
+                                                                                  parsed_compose["services"].items() if
+                                                                                  key != "lr-agent"}})
             self.save_file("etc/agent/upgrade.json", "json", request)
             return True
         return False
 
-    def upgrade_persist_compose(self, status: dict, request: dict, compose: dict):
+    def upgrade_persist_compose(self, status: dict, compose: str):
         try:
             if all(state["status"] == "success" for state in status.values()):
-                self.upgrade_save_files(request, compose, ["compose"])
+                self.upgrade_save_files(compose, None)
         except Exception as e:
             self.logger.warning("There was an error in compose persistence {}".format(e))
             raise Exception(e)
@@ -679,27 +681,24 @@ class LRAgentClient:
         except Exception as e:
             self.logger.warning("Failed to create named volume due to {}.".format(e))
 
-    def upgrade_save_files(self, request: dict, decoded_data, keys: list):
+    def upgrade_save_files(self, compose: str = None, config: list = None):
         try:
-            if "compose" in keys and "compose" in request["data"]:
-                self.save_file("etc/agent/docker-compose.yml", "yml", decoded_data)
-            if "config" in keys and "config" in request["data"]:
-                self.save_file("etc/kres/kres.conf", "config", request["data"]["config"])
+            if compose:
+                self.save_file("etc/agent/docker-compose.yml", "yml", compose)
+            if config:
+                self.save_file("etc/kres/kres.conf", "config", config)
         except IOError as e:
             raise Exception(e)
 
-    def upgrade_load_compose(self, request: dict, response: dict):
-        if "compose" in request["data"]:
-            return request["data"]["compose"]
+    def upgrade_load_compose(self, compose: str) -> str:
+        if compose:
+            return compose
         else:
             try:
-                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
-                    return compose.read()
+                with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose_file:
+                    return compose_file.read()
             except FileNotFoundError:
-                del response["requestId"]
-                response["data"] = {"status": "failure",
-                                    "message": "compose not supplied and local compose not present"}
-                return response
+                raise Exception("Compose not supplied and local compose not present")
 
     async def upgrade_pull_image(self, name: str):
         try:
@@ -857,7 +856,7 @@ class LRAgentClient:
     #     response["data"] = status
     #     return response
 
-    async def list_containers(self, response: dict) -> dict:
+    async def list_containers(self, **_) -> dict:
         data = []
         for container in self.dockerConnector.get_containers():
             data.append({
@@ -872,7 +871,7 @@ class LRAgentClient:
                 "name": container.name,
                 "status": container.status
             })
-        return {**response, "data": data}
+        return data
 
     # async def container_logs(self, response: dict, request: dict) -> dict:
     #     try:
@@ -1007,9 +1006,8 @@ class LRAgentClient:
     #     response["data"] = status
     #     return response
 
-    async def agent_test_message(self, response: dict) -> dict:
-        response["data"] = {"status": "success", "message": "Agent seems ok"}
-        return response
+    async def agent_test_message(self, **_) -> dict:
+        return {"status": "success", "message": "Agent seems ok"}
 
     def check_rpz_file(self, path: str) -> bool:
         pattern = re.compile(
@@ -1094,9 +1092,7 @@ class LRAgentClient:
                 self.logger.warning("Failed to get request token from Kresman {}, {}.".format(req.content, e))
         return ""
 
-    async def update_cache(self, response: dict = None, request: dict = None) -> dict:
-        if request and "cli" not in request:
-            await self.send_acknowledgement(response)
+    async def update_cache(self,  **_) -> dict:
         address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
             # msg = requests.get("{}/updatenow".format(address), json={}, timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
@@ -1105,46 +1101,39 @@ class LRAgentClient:
                                #          'Authorization': 'Bearer {}'.format(self.kresman_token)}
                                )
         except requests.exceptions.RequestException as e:
-            if response:
-                response["data"] = {"status": "failure", "body": str(e)}
+            return {"status": "failure", "body": str(e)}
         else:
-            if response:
-                if msg.ok:
-                    response["data"] = {"status": "success", "message": "Cache update successful"}
-                else:
-                    response["data"] = {"status": "failure", "message": "Cache update failed"}
-        return response
+            if msg.ok:
+                return {"status": "success", "message": "Cache update successful"}
+            else:
+                return {"status": "failure", "message": "Cache update failed"}
 
-    async def trace_domain(self, response: dict, request: dict):
+    async def trace_domain(self, domain: str, query_type: str = "", **_):
         try:
             address = os.environ["TRACE_LISTENER"]
         except KeyError:
             address = "http://127.0.0.1:8453"
-        query_type = request["data"]["type"] if "type" in request["data"] else ""
         try:
-            msg = requests.get("{}/trace/{}/{}".format(address, request["data"]["domain"], query_type),
+            msg = requests.get("{}/trace/{}/{}".format(address, domain, query_type),
                                timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
         except requests.exceptions.RequestException as e:
-            response["data"] = {"status": "failure", "body": str(e)}
+            return {"status": "failure", "body": str(e)}
         else:
             if msg.ok:
-                response["data"] = {"status": "success", "trace": msg.content.decode("utf-8")}
+                return {"status": "success", "trace": msg.content.decode("utf-8")}
             else:
-                response["data"] = {"status": "failure", "message": "Trace failed",
+                return {"status": "failure", "message": "Trace failed",
                                     "error": msg.content.decode("utf-8")}
-        return response
 
-    async def resolver_cache_clear(self, response: dict, request: dict):
+    async def resolver_cache_clear(self, clear: str = "all", **_) -> dict:
         for tty in os.listdir("/etc/whalebone/tty/"):
-            message = "cache.clear()" if request["data"]["clear"] == "all" else "cache.clear('{}', true)".format(
-                request["data"]["clear"])
+            message = "cache.clear()" if clear == "all" else "cache.clear('{}', true)".format(clear)
             try:
                 self.send_to_socket(message.encode("utf-8"), tty)
             except Exception:
-                response["data"] = {"status": "failure"}
+                return {"status": "failure"}
             else:
-                response["data"] = {"status": "success"}
-            return response
+                return {"status": "success"}
 
     def send_to_socket(self, message: bytes, tty):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -1166,8 +1155,7 @@ class LRAgentClient:
                 sock.close()
         raise Exception
 
-    async def resolver_suicide(self, response: dict):
-        await self.send_acknowledgement(response)
+    async def resolver_suicide(self, **_):
         status = {}
         for action in [self.suicide_delete_certs, self.suicide_modify_compose, self.suicide_delete_containers]:
             try:
@@ -1201,9 +1189,7 @@ class LRAgentClient:
                         parsed_compose["services"][name]["environment"][env] = "some string"
                     except KeyError as ke:
                         self.logger.warning("Failed to alter variable {} for {}, key {} is missing".format(env, name, ke))
-            await self.upgrade_container({},
-                                         {"data": {"services": ["kresman"], "compose": yaml.dump(parsed_compose)},
-                                          "cli": "true"})
+            await self.upgrade_container(services=["kresman"], compose=yaml.dump(parsed_compose))
 
     async def suicide_delete_containers(self, status: dict):
         for name in ["logstream", "lr-agent"]:
@@ -1231,9 +1217,7 @@ class LRAgentClient:
             self.logger.warning("Failed to get nameservers from config, {}.".format(e))
         return {"8.8.8.8"}
 
-    async def pack_files(self, response: dict, request: dict) -> dict:
-        if "cli" not in request:
-            await self.send_acknowledgement(response)
+    async def pack_files(self, url: str, **_) -> dict:
         folder = "{}{}".format(self.folder, "temp")
         try:
             os.mkdir(folder)
@@ -1245,15 +1229,13 @@ class LRAgentClient:
         logs_zip = "/opt/agent/{}-{}-{}-wblogs.zip".format(customer_id, datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
                                                            resolver_id)
         self.pack_logs(logs_zip, folder)
-        response["data"] = self.upload_logs(logs_zip, request["data"])
+        status = self.upload_logs(logs_zip, url)
         try:
             rmtree(folder)
             os.remove(logs_zip)
         except Exception:
             pass
-        if "requestId" in response:
-            del response["requestId"]
-        return response
+        return status
 
     def upload_logs(self, logs_zip: str, target_url: str) -> dict:
         try:
@@ -1496,11 +1478,15 @@ class LRAgentClient:
                  If data field is dict, it arrived from local services and is not encoded in base64
                  Was therefore correctly decoded in process().
                 '''
-                decoded_string = self.decode_base64_string(message["data"])
-                try:
-                    message["data"] = json.loads(decoded_string)
-                except json.JSONDecodeError:
-                    message["data"] = decoded_string
+                if not message["data"]:
+                    message["data"] = {}
+                else:
+                    decoded_string = self.decode_base64_string(message["data"])
+                    try:
+                        message["data"] = json.loads(decoded_string)
+                    except json.JSONDecodeError as je:
+                        self.logger.warning("Failed to json parse data {} due to {}.".format(decoded_string, je))
+                        # message["data"] = decoded_string
         return message
 
     def encode_request(self, message: dict) -> dict:

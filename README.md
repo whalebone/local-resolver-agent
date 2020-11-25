@@ -68,8 +68,8 @@ Pending configuration request deleted.
 
 Testing:
 ----------
-Testing is initiated by docker-compose file in tests/integration/ folder. Test result will be display in the logs 
-of _current_directory__tester_1 container. Wsproxy is required from Whalebone, the rest can be downloaded/built.
+Testing is started by creating containers using **docker-compose.yml** file in tests/integration/ folder. Test result will be display in the logs 
+of **tester** container. Testing containers require harbor login to be pulled.
 
 
 Used volumes:

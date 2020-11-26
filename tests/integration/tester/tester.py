@@ -1099,9 +1099,12 @@ class Tester():
             pass
 
     def cleanup(self):
-        self.clean_directory("/var/log/whalebone/agent/")
-        self.clean_directory("/var/lib/kres/tty/")
-        self.clean_directory("/etc/whalebone/agent/")
+        try:
+            self.clean_directory("/var/log/whalebone/agent/")
+            self.clean_directory("/var/lib/kres/tty/")
+            self.clean_directory("/etc/whalebone/agent/")
+        except Exception:
+            pass
 
     def final_print(self):
         print("==============Test evaluation==============")

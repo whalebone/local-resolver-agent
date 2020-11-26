@@ -145,22 +145,23 @@ class SystemInfo:
             self.logger.info("Successfully deleted orphaned tty {}".format(tty))
 
     def resurrect_resolver(self, pid: str) -> bool:
-        try:
-            returned_text = self.docker_connector.container_exec("resolver", ["sh", "-c", "kill -9 {}".format(pid)])
-        except Exception as e:
-            self.logger.warning("Failed to kill tty {}, {}".format(pid, e))
-        else:
-            self.logger.info("Recovery: kill sent with response: {}".format(returned_text))
         if self.check_resolver_process(pid) != "":
-            self.logger.info("Recovery: pid found in ps")
-            if "resolver-old" not in [container.name for container in self.docker_connector.get_containers()]:
-                try:
-                    self.docker_connector.restart_resolver()
-                except Exception as e:
-                    self.logger.warning("Failed to restart resolver, {}".format(e))
-                else:
-                    self.logger.info("Recovery: resolver restart command sent")
-                    return True
+            try:
+                returned_text = self.docker_connector.container_exec("resolver", ["sh", "-c", "kill -9 {}".format(pid)])
+            except Exception as e:
+                self.logger.warning("Failed to kill tty {}, {}".format(pid, e))
+            else:
+                self.logger.info("Recovery: kill sent with response: {}".format(returned_text))
+            if self.check_resolver_process(pid) != "":
+                self.logger.info("Recovery: pid found in ps")
+                if "resolver-old" not in [container.name for container in self.docker_connector.get_containers()]:
+                    try:
+                        self.docker_connector.restart_resolver()
+                    except Exception as e:
+                        self.logger.warning("Failed to restart resolver, {}".format(e))
+                    else:
+                        self.logger.info("Recovery: resolver restart command sent")
+                        return True
 
     def get_resolver_stats(self, tty: str) -> str:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -169,8 +170,6 @@ class SystemInfo:
             sock.connect(tty)
         except socket.timeout as te:
             self.logger.warning("Timeout of socket {} reading, {}".format(tty, te))
-        except PermissionError:
-            pass
         except socket.error as msg:
             self.logger.warning("Connection error {} to socket {}".format(msg, tty))
             if msg.errno == errno.ECONNREFUSED and self.check_resolver_process(tty.split("/")[-1]) == "":

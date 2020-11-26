@@ -9,6 +9,5 @@ echo ${CLIENT_KEY_BASE64} | base64 -d > /opt/agent/certs/client.key
 cat /opt/agent/certs/client.crt /opt/agent/certs/client.key > /opt/agent/certs/client.pem
 cp /opt/agent/cli.sh /etc/whalebone/cli/
 
-export LR_CLIENT_CERT=/opt/agent/certs/client.pem
 
 python3 lr_agent_app.py

@@ -11,17 +11,13 @@ from loggingtools.logger import build_logger
 
 
 def validate_settings():
-    try:
-        client_cert = os.environ['LR_CLIENT_CERT']
-    except KeyError:
-        raise InitException('System env LR_CLIENT_CERT must be set')
+    client_cert = "/opt/agent/certs/client.pem"
     try:
         proxy_address = os.environ['PROXY_ADDRESS']
     except KeyError:
         raise InitException('System env PROXY_ADDRESS must be set')
-        # raise InitException('System env WHALEBONE_LR_CLIENT_CERT_PASS must be set')
     if not os.path.exists(client_cert) or os.stat(client_cert).st_size == 0:  # change to None or len()=0
-        raise InitException('Client certificate {0} must exist and mustn\'t be empty'.format(client_cert))
+        raise InitException('Client certificate {0} must exist and must not be empty'.format(client_cert))
     return client_cert, proxy_address
 
 

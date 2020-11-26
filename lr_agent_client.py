@@ -1296,9 +1296,9 @@ class LRAgentClient:
                                    "path": "{}/docker.service".format(folder)},
                    "ps": {"action": "list", "command": ["ps", "-aux"], "path": "{}/ps".format(folder)},
                    "list_containers": {"action": "docker", "command": self.docker_ps(),
-                                       "path": "{}/docker_ps".format(folder)}
-                   # "docker_stats": {"action": "docker", "command": self.docker_stats(),
-                   #                  "path": "{}/docker_stats".format(folder)}
+                                       "path": "{}/docker_ps".format(folder)},
+                   "docker_stats": {"action": "docker", "command": self.docker_stats(),
+                                    "path": "{}/docker_stats".format(folder)}
                    }
         self.load_container_info(folder)
         for action, specification in actions.items():
@@ -1397,28 +1397,75 @@ class LRAgentClient:
             self.logger.info("Failed to acquire docker ps info, {}".format(e))
         return "".join(result)
 
-    # def docker_stats(self) -> str:
-    #     result = []
-    #     try:
-    #         for container in [container for container in self.dockerConnector.get_containers(stopped=True)]:
-    #             stats = container.stats(stream=False)
-    #             result.append("{} {}\n".format(container.name, self.prepare_stats(stats)))
-    #     except Exception as e:
-    #         self.logger.info("Failed to acquire docker ps info, {}".format(e))
-    #     return "".join(result)
-    #
-    # def prepare_stats(self, stats: dict) -> str:
-    #     return "{} {}/{}".format(
-    #         stats["cpu_stats"]["cpu_usage"]["total_usage"] / stats["cpu_stats"]["system_cpu_usage"],
-    #         self.convert_bytes(stats["memory_stats"]["stats"]["active_anon"]),
-    #         self.convert_bytes(stats["memory_stats"]["limit"]))
-    #
-    # def convert_bytes(self, size: int):
-    #     for x in ['bytes', 'KiB', 'MiB', 'GiB', 'TiB']:
-    #         if size < 1024.0:
-    #             return "%3.1f %s" % (size, x)
-    #         size /= 1024.0
-    #     return size
+    def convert_bytes(self, size: int):
+        for x in ['bytes', 'KiB', 'MiB', 'GiB', 'TiB']:
+            if size < 1024.0:
+                return "{:3.1f}{}".format(size, x)
+            size /= 1024.0
+        return size
+
+    def calculate_blkio_bytes(self, container_metrics: dict) -> str:
+        reads, writes = 0, 0
+        try:
+            for value in container_metrics["blkio_stats"]["io_service_bytes_recursive"]:
+                if value["op"] == "Read":
+                    reads += value["value"]
+                elif value["op"] == "Write":
+                    writes += value["value"]
+        except KeyError as ke:
+            self.logger.warning("Failed to get io info {} key is missing.".format(ke))
+        return "{} / {}".format(self.convert_bytes(reads), self.convert_bytes(writes))
+
+    def calculate_network_bytes(self, container_metrics: dict) -> str:
+        if "networks" not in container_metrics:
+            return "0bytes / 0bytes"
+        receive, transmit = 0, 0
+        try:
+            for if_name, data in container_metrics["networks"].items():
+                receive += data["rx_bytes"]
+                transmit += data["tx_bytes"]
+        except KeyError as ke:
+            self.logger.warning("Failed to get network info {} key is missing.".format(ke))
+        return "{} / {}".format(self.convert_bytes(receive), self.convert_bytes(transmit))
+
+    def calculate_cpu_percent(self, container_metrics: dict) -> str:
+        cpu_percent = 0.0
+        try:
+            cpu_count = container_metrics["cpu_stats"]["online_cpus"]
+            cpu_delta = float(container_metrics["cpu_stats"]["cpu_usage"]["total_usage"]) - \
+                        float(container_metrics["precpu_stats"]["cpu_usage"]["total_usage"])
+            system_delta = float(container_metrics["cpu_stats"]["system_cpu_usage"]) - \
+                           float(container_metrics["precpu_stats"]["system_cpu_usage"])
+            if system_delta > 0.0 and cpu_delta > 0.0:
+                cpu_percent = (cpu_delta / system_delta) * 100.0 * cpu_count
+        except Exception as e:
+            self.logger.warning("Failed to get cpu info due to {}.".format(e))
+        return "{:.2f}%".format(cpu_percent)
+
+    def calculate_memory(self, container_metrics: dict) -> str:
+        try:
+            return "{} / {}".format(self.convert_bytes(
+                container_metrics["memory_stats"]["usage"] - container_metrics["memory_stats"]["stats"]["cache"]),
+                                    self.convert_bytes(container_metrics["memory_stats"]["limit"]))
+        except KeyError as ke:
+            self.logger.warning("Failed to get memory info {} key is missing.".format(ke))
+            return "0bytes / 0bytes"
+
+    def docker_stats(self) -> str:
+        result = []
+        try:
+            for container in [container for container in self.dockerConnector.get_containers()]:
+                try:
+                    stats = container.stats(stream=False)
+                    result.append("{}:\t{}\t{}\t{}\t{}\n".format(container.name, self.calculate_cpu_percent(stats),
+                                                                 self.calculate_memory(stats),
+                                                                 self.calculate_network_bytes(stats),
+                                                                 self.calculate_blkio_bytes(stats)))
+                except Exception as e:
+                    self.logger.warning("Failed to get data for {}, {}".format(container.name, e))
+        except Exception as e:
+            self.logger.warning("Failed to acquire docker stats info, {}".format(e))
+        return "".join(result)
 
     # async def write_config(self, response: dict, request: dict) -> dict:
     #     write_type = {"base64": "wb", "json": "w", "text": "w"}

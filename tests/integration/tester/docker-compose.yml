@@ -53,7 +53,7 @@ services:
       SINKIPV6: '::1'
       SINKTTL: 1
   kresman:
-      image: harbor.whalebone.io/resolver/kresman:3.2.6
+      image: harbor.whalebone.io/resolver/kresman:3.2.7
       labels:
         kresman: "6.0"
       restart: always

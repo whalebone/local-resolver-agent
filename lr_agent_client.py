@@ -10,9 +10,11 @@ import uuid
 import re
 import requests
 import websockets
+import traceback
 # import urllib3
 # urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+from aiodocker import Docker
 from collections import deque
 from shutil import copyfile, copytree, rmtree
 from cryptography import x509
@@ -1226,7 +1228,7 @@ class LRAgentClient:
         except FileExistsError:
             rmtree(folder)
             os.mkdir(folder)
-        self.gather_static_files(folder)
+        await self.gather_static_files(folder)
         customer_id, resolver_id = self.create_client_ids()
         logs_zip = "/opt/agent/{}-{}-{}-wblogs.zip".format(customer_id, datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
                                                            resolver_id)
@@ -1279,7 +1281,7 @@ class LRAgentClient:
             except Exception as me:
                 self.logger.warning("Failed to move file {} to {} due to {}".format(file, target_directory, me))
 
-    def gather_static_files(self, folder: str):
+    async def gather_static_files(self, folder: str):
         actions = {"release": {"action": "copy_file", "command": ("/etc/os-release", "{}/release".format(folder))},
                    "etc": {"action": "copy_dir", "command": ("/opt/host/etc/whalebone/", "{}/etc".format(folder))},
                    "log": {"action": "copy_dir", "command": ("/opt/host/var/log/whalebone/", "{}/logs".format(folder))},
@@ -1295,9 +1297,9 @@ class LRAgentClient:
                    "docker_logs": {"action": "list", "command": ["journalctl", "-u", "docker.service"],
                                    "path": "{}/docker.service".format(folder)},
                    "ps": {"action": "list", "command": ["ps", "-aux"], "path": "{}/ps".format(folder)},
-                   "list_containers": {"action": "docker", "command": self.docker_ps(),
+                   "list_containers": {"action": "docker", "command": await self.docker_ps(),
                                        "path": "{}/docker_ps".format(folder)},
-                   "docker_stats": {"action": "docker", "command": self.docker_stats(),
+                   "docker_stats": {"action": "docker", "command": await self.docker_stats(),
                                     "path": "{}/docker_stats".format(folder)}
                    }
         self.load_container_info(folder)
@@ -1388,7 +1390,7 @@ class LRAgentClient:
         except OSError:
             raise
 
-    def docker_ps(self) -> str:
+    async def docker_ps(self) -> str:
         result = []
         try:
             for container in [container for container in self.dockerConnector.get_containers(stopped=True)]:
@@ -1451,21 +1453,46 @@ class LRAgentClient:
             self.logger.warning("Failed to get memory info {} key is missing.".format(ke))
             return "0bytes / 0bytes"
 
-    def docker_stats(self) -> str:
-        result = []
+    async def get_container_statistics(self, container) -> str:
         try:
-            for container in [container for container in self.dockerConnector.get_containers()]:
-                try:
-                    stats = container.stats(stream=False)
-                    result.append("{}:\t{}\t{}\t{}\t{}\n".format(container.name, self.calculate_cpu_percent(stats),
-                                                                 self.calculate_memory(stats),
-                                                                 self.calculate_network_bytes(stats),
-                                                                 self.calculate_blkio_bytes(stats)))
-                except Exception as e:
-                    self.logger.warning("Failed to get data for {}, {}".format(container.name, e))
+            stats = (await container.stats(stream=False))[0]
+            name = (await container.show())["Name"][1:]
+            return "{}:\t{}\t{}\t{}\t{}\n".format(name, self.calculate_cpu_percent(stats),
+                                                         self.calculate_memory(stats),
+                                                         self.calculate_network_bytes(stats),
+                                                         self.calculate_blkio_bytes(stats))
+        except Exception as e:
+            self.logger.warning("Failed to get data for {}, {}".format(container.name, e))
+
+    async def docker_stats(self) -> str:
+        results = []
+        async_docker = Docker()
+        try:
+            tasks = [self.get_container_statistics(container) for container in await async_docker.containers.list()]
+            for stats in await asyncio.gather(*tasks, return_exceptions=True):
+                if isinstance(stats, str) and stats:
+                    results.append(stats)
         except Exception as e:
             self.logger.warning("Failed to acquire docker stats info, {}".format(e))
-        return "".join(result)
+        finally:
+            await async_docker.close()
+        return "".join(results)
+
+    # def docker_stats(self) -> str:
+    #     result = []
+    #     try:
+    #         for container in [container for container in self.dockerConnector.get_containers()]:
+    #             try:
+    #                 stats = container.stats(stream=False)
+    #                 result.append("{}:\t{}\t{}\t{}\t{}\n".format(container.name, self.calculate_cpu_percent(stats),
+    #                                                              self.calculate_memory(stats),
+    #                                                              self.calculate_network_bytes(stats),
+    #                                                              self.calculate_blkio_bytes(stats)))
+    #             except Exception as e:
+    #                 self.logger.warning("Failed to get data for {}, {}".format(container.name, e))
+    #     except Exception as e:
+    #         self.logger.warning("Failed to acquire docker stats info, {}".format(e))
+    #     return "".join(result)
 
     # async def write_config(self, response: dict, request: dict) -> dict:
     #     write_type = {"base64": "wb", "json": "w", "text": "w"}

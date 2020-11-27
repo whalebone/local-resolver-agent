@@ -10,8 +10,8 @@ import uuid
 import re
 import requests
 import websockets
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# import urllib3
+# urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from collections import deque
 from shutil import copyfile, copytree, rmtree

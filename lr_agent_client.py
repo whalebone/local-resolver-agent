@@ -10,7 +10,7 @@ import uuid
 import re
 import requests
 import websockets
-import traceback
+import aiohttp
 # import urllib3
 # urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -1099,18 +1099,23 @@ class LRAgentClient:
     async def update_cache(self,  **_) -> dict:
         address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
-            # msg = requests.get("{}/updatenow".format(address), json={}, timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
-            msg = requests.get("{}/api/general/updatenow".format(address), json={}, verify=False,
-                               # headers={'accept': '*/*', 'Content-Type': 'application/json',
-                               #          'Authorization': 'Bearer {}'.format(self.kresman_token)}
-                               )
+            async with aiohttp.ClientSession() as session:
+                async with session.get("{}/api/general/updatenow".format(address), json={}, ssl=False) as response:
+                    if response.ok:
+                        return {"status": "success", "message": "Cache update successful"}
+                    else:
+                        return {"status": "failure", "message": "Cache update failed"}
+            # msg = requests.get("{}/api/general/updatenow".format(address), json={}, verify=False,
+            #                    # headers={'accept': '*/*', 'Content-Type': 'application/json',
+            #                    #          'Authorization': 'Bearer {}'.format(self.kresman_token)}
+            #                    )
         except requests.exceptions.RequestException as e:
             return {"status": "failure", "body": str(e)}
-        else:
-            if msg.ok:
-                return {"status": "success", "message": "Cache update successful"}
-            else:
-                return {"status": "failure", "message": "Cache update failed"}
+        # else:
+        #     if msg.ok:
+        #         return {"status": "success", "message": "Cache update successful"}
+        #     else:
+        #         return {"status": "failure", "message": "Cache update failed"}
 
     async def trace_domain(self, domain: str, query_type: str = "", **_):
         try:

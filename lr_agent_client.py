@@ -11,8 +11,8 @@ import re
 import requests
 import websockets
 import aiohttp
-# import urllib3
-# urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from aiodocker import Docker
 from collections import deque

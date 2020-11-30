@@ -195,9 +195,10 @@ class SystemInfo:
     def parse_stats_output(self, stats: str) -> dict:
         result = {}
         for line in stats.split("\n"):
-            splitted_line = re.findall(r"[\w']+", line)
-            if len(splitted_line) == 3:
-                result["{}.{}".format(splitted_line[0], splitted_line[1])] = int(splitted_line[2])
+            split_line = re.findall(r"[\w']+", line)
+            if len(split_line) == 3:
+                result["{}.{}".format(split_line[0].replace("'", ""), split_line[1].replace("'", ""))] = int(
+                    split_line[2])
         return result
 
     def result_diff(self, results: dict, cli_request: bool) -> dict:
@@ -242,9 +243,9 @@ class SystemInfo:
                 if stats == "cleanup":
                     continue
                 if stats:
-                    stats = self.parse_stats_output(stats)
-                    if stats:
-                        for stat_name, count in stats.items():
+                    parsed_stats = self.parse_stats_output(stats)
+                    if parsed_stats:
+                        for stat_name, count in parsed_stats.items():
                             try:
                                 stats_results[stat_name] += count
                             except KeyError:

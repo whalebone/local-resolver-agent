@@ -2,17 +2,15 @@ import base64
 import netifaces
 
 
-def create_docker_run_kwargs(compose_fragment: dict) -> dict:
+def create_docker_run_kwargs(parsed_compose: dict) -> dict:
     kwargs = {}
-    for name, definition in compose_fragment.items():
-        param_def = SUPPORTED_PARAMETERS[name]
-        if isinstance(param_def, dict):
-            parse_method = param_def['fn']
-            kwarg_name = param_def['name']
+    for name, definition in parsed_compose.items():
+        parse_function = SUPPORTED_PARAMETERS.get(name, parse_value)
+        if isinstance(parse_function, dict):
+            parse_method, kwarg_name = parse_function['function'], parse_function['param_name']
         else:
-            parse_method = param_def
-            kwarg_name = name
-        kwargs[kwarg_name] = parse_method(compose_fragment[name])
+            parse_method, kwarg_name = parse_function, name
+        kwargs[kwarg_name] = parse_method(parsed_compose[name])
     return kwargs
 
 
@@ -27,7 +25,7 @@ def parse_logging(logging: dict) -> dict:
 def parse_envs(envs: dict) -> dict:
     file_mapping = {"CLIENT_CRT_BASE64": "client.crt", "CLIENT_KEY_BASE64": "client.key"}
     for name, value in envs.items():
-        if name in file_mapping:
+        if name in file_mapping and not value:
             envs[name] = read_file(file_mapping[name])
         if name == "DNS_INTERFACE" and value == "":
             for interface in netifaces.gateways()["default"].values():
@@ -75,13 +73,13 @@ def parse_tmpfs(value: str) -> dict:
 
 
 def read_file(file_name: str) -> str:
-    with open("/opt/whalebone/certs/{}".format(file_name), "r") as file:
+    with open("/opt/agent/certs/{}".format(file_name), "r") as file:
         return base64.b64encode(file.read().encode("utf-8")).decode("utf-8")
 
 
 SUPPORTED_PARAMETERS = {
     'image': parse_value,
-    'net': {'fn': parse_value, 'name': 'network_mode'},
+    'net': {'function': parse_value, 'param_name': 'network_mode'},
     'network_mode': parse_value,
     'dns': parse_value,
     'pid_mode': parse_value,
@@ -93,11 +91,12 @@ SUPPORTED_PARAMETERS = {
     'environment': parse_envs,
     'tty': parse_value,
     'privileged': parse_value,
+    "cap_add": parse_value,
     'stdin_open': parse_value,
-    'restart': {'fn': parse_restart_policy, 'name': 'restart_policy'},
+    'restart': {'function': parse_restart_policy, 'param_name': 'restart_policy'},
     'cpu_shares': parse_value,
     'name': parse_value,
-    'logging': {'fn': parse_logging, 'name': 'log_config'}
+    'logging': {'function': parse_logging, 'param_name': 'log_config'}
     # 'log_driver': None,  # special formatting together with log_opt <1
     # 'log_opt': None,  # special formatting together with log_driver <
 }

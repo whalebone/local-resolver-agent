@@ -1,48 +1,77 @@
 version: '3'
 services:
     resolver:
-      image: whalebone/kres:3.2.1-12
+      image: harbor.whalebone.io/resolver/kres:5.2.0-2-7
       labels:
-         resolver: "2.0"
+        resolver: "3.0"
       logging:
         driver: json-file
         options:
-          max-size: "10m"
+          max-size: "1000m"
           max-file: "1"
       tty: true
+      restart: always
+      tmpfs: /var/lib/kres
       volumes:
       - /etc/whalebone/kres:/etc/kres/
       - /var/log/whalebone/:/var/log/whalebone/
-      - /var/lib/kres:/var/lib/kres
-      - /var/lib/kres/tty:/tty/tty
+      - /var/lib/kres/tty:/tty/control/
       - /var/whalebone/:/var/whalebone/
       network_mode: host
-      restart: always
+      privileged: true
       environment:
-         SINKIP: '159.100.251.128'
-         SINKIPV6: '::1'
-         SINKTTL: 1
+        SINKIP: '159.100.251.128'
+        SINKIPV6: '::1'
+        SINKTTL: 1
+        LMDB_ROOT: '/var/whalebone/lmdb'
+        LOG_THREAT: 127.0.0.1
+        LOG_CONTENT: 127.0.0.1
     kresman:
-      image: whalebone/kresman:2.4.3
+      image: harbor.whalebone.io/resolver/kresman:3.2.7
       labels:
          kresman: "2.0"
       restart: always
       network_mode: host
       cpu_shares: 128
+      volumes:
+        - /var/whalebone/:/var/whalebone/
+        - /var/log/whalebone/:/var/log/whalebone/
       environment:
         CA_CRT_BASE64: 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZ6ekNDQTdlZ0F3SUJBZ0lVUzRqNG9BUm9hZUpHRkNyMWk0Y0VLRXJaNTFvd0RRWUpLb1pJaHZjTkFRRU4KQlFBd2J6RUxNQWtHQTFVRUJoTUNRMW94RnpBVkJnTlZCQWdURGtONlpXTm9JRkpsY0hWaWJHbGpNUmN3RlFZRApWUVFIRXc1RGVtVmphQ0JTWlhCMVlteHBZekVhTUJnR0ExVUVDaE1SVjJoaGJHVmliMjVsTENCekxuSXVieTR4CkVqQVFCZ05WQkFzVENWZG9ZV3hsWW05dVpUQWVGdzB4TmpFeE1URXhNRFF6TURCYUZ3MHlNVEV4TVRBeE1EUXoKTURCYU1HOHhDekFKQmdOVkJBWVRBa05hTVJjd0ZRWURWUVFJRXc1RGVtVmphQ0JTWlhCMVlteHBZekVYTUJVRwpBMVVFQnhNT1EzcGxZMmdnVW1Wd2RXSnNhV014R2pBWUJnTlZCQW9URVZkb1lXeGxZbTl1WlN3Z2N5NXlMbTh1Ck1SSXdFQVlEVlFRTEV3bFhhR0ZzWldKdmJtVXdnZ0lpTUEwR0NTcUdTSWIzRFFFQkFRVUFBNElDRHdBd2dnSUsKQW9JQ0FRRDM5MGhzTDJVeSttaDBMdzlwR0hFUkNEVXFzZEI5YjdHbUVTdDI4VWhObUVQZjltSG1oZ212R0psYwpaem4zTzlzOGNOVE9rUmcwTmV4UW9Jcy9SQ0NhcmF3dHZOVUJmZ2xvN2JWVUhMcWp5VmZUQkkwWmMyTE9Yand3CnV2SjA1d1kvdE4vZ0FSbVJpcDg4ZGxzeTNQd3ZBUjF6M2dXWDVRYmc5Z0xnWnBWbUZSdDBGN0hmeS9zNUlmTEwKMm91bXhFdEtjNXRodTA5SXUxMVAyMUtXNmpjSFhEU0xBL2F5TmRUTDlwRlpwTXBaS3I5bVI4V0ZTM0QybWc0NQpFZjJnbTRDN08reXhYUjBSb3BteGRQMldXRktWKzc0VC9yR0ZCcTY4cTcrVXFUV2ZROTVPZWR0d3c4K1VrbFI1CkFNbndtcEZMQ1NyRWNhc1RESVJWUkwzZkc2Tmh1eGlNT0x6OGZHVFZwNlFwMDcrd0ZCWEZBSHFnc0N0L0JmZlkKMlpkdW5hWXViVlJkOTVFQUlNbzc2UmxJR3FjRmtXKzRnemRpL0ExWFV5NVJaYVBVdWYzd21EN0pObm5sNEhVUQpTSFlyeEdCTCtQVkZjRVNRSXd4VDh0QkZBU3JvRnlURmp4bkltcThLQ29ja1Jtcy9ZQi9BejhXdGZXK3QyWkJwCmNMcDZMdk1QMXpocmtnTHlydkc1TGtjSnRrTjYzTFRvcGhFSDc2eWhUZG9HL2pla00rYnhQWTlESVlEWDZ5VXMKYm0xSVJidzE2UjRyMWpocFZGd3E5UGlVN0dxRHhSb21maUxzM3ViSzRZeDM5RDl2WTh4MjYxRUNQQVhBd3k2ZwpqWEd6V250UXcwd1dJeDR0aTVPVEI4RG5xOHZyZkgzSFlBKzlDUWtKVFFmWm9TSXNtUUlEQVFBQm8yTXdZVEFPCkJnTlZIUThCQWY4RUJBTUNBUVl3RHdZRFZSMFRBUUgvQkFVd0F3RUIvekFkQmdOVkhRNEVGZ1FVaEorZERCWmIKd3FpcTZ5OUREOEZldVlBQXFLc3dId1lEVlIwakJCZ3dGb0FVaEorZERCWmJ3cWlxNnk5REQ4RmV1WUFBcUtzdwpEUVlKS29aSWh2Y05BUUVOQlFBRGdnSUJBTGRudkx1c25Hc25nKys4M2g5WCtIdzhYSFlDUEdHWGlwK0ZMS1pGCmpSbHJKM1AvN0JkT1cyVytweEJwd01DNHIzQ2plbG5UeWZ4bWtsWVhNbjBoTVM3RFlDRUlnTTVNaEhSTXVlM1UKQ0gvTGdlVGFTaEt0NjdMc1VXanF5Q21sa2dLZUVEZG91ZHJWSmVRYmNuRVVjYWR6dk9keWkxMmM3bDNwV2s0bAo0SGF3cXV3SnZKS3hPU3lYZFdhazVta0ZlKzMrMFZud2FiY09ScjBqVHdnODRnci9KV0I2SlBQb215NERWc1JQCmJXcUR6NkdnUjhaaDEwbXB2WjRlWkJuRGgyWjFvcG5Cd09CRUtCWmd5Y2h4dHduUEYvNkVsYUJsOFkrQXdtazUKenFzNjY2bEtzM2c5SzhubUFzd3NCcGd6MXVNY0xFVG1ZUUZZNzgySlB6dWtadUZwL3lwTVFrQUFOTE9VNTFzNQppT3hLVDRLUjN4aG42aHlmQlVJdzJPdHB0M240dVFVRVRJRWhrbW9KNUQwclNvOThGQmQyY2h0Z29vNGZYN0d6CjJ4Mk01d0FMR250N25FM0ZVR2U1bDYxN2o4YmFEL2hweEU3NE9vYjFNRDlRdTQ2cUJZOXhHYjc1WU1lUXYvNzIKaGpmbFpNU01ld3p2VmVkTUc3UE1kVzhNV0pJRVhRRENtSzRmMDE2QzAySzdFZFlhTTNla2t1ak1lcWo4Skw0ego0Q1VIMXg1OUdpRWdtbW9oY1plR2NBdnR2aHRvYmt0ZmxYZStOcUNPU3ExMi95cVJINUpSYmFkQlNnMTAvck9mClMvYXNmdjcxVTdNeE1CVWtZMTc0SEZjbko5eVJ3UGZCMjhQOVQwVTY3RHdLN1pob3FWNEkxZUc4MzIxUDk2SG0KOHZldQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=='
         CLIENT_CRT_BASE64: 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUV3RENDQXFpZ0F3SUJBZ0lVRDVyNE4zWml4YjViM1dZZlVGMWt6WHlYSzNRd0RRWUpLb1pJaHZjTkFRRU4KQlFBd2J6RUxNQWtHQTFVRUJoTUNRMW94RnpBVkJnTlZCQWdURGtONlpXTm9JRkpsY0hWaWJHbGpNUmN3RlFZRApWUVFIRXc1RGVtVmphQ0JTWlhCMVlteHBZekVhTUJnR0ExVUVDaE1SVjJoaGJHVmliMjVsTENCekxuSXVieTR4CkVqQVFCZ05WQkFzVENWZG9ZV3hsWW05dVpUQWVGdzB4T0RBeE1qTXdPVFV4TURCYUZ3MHlPREF4TWpFd09UVXgKTURCYU1Ed3hDekFKQmdOVkJBWVRBa05hTVFvd0NBWURWUVFIRXdFeU1STXdFUVlEVlFRS0V3cDZZV3RoZW01cApheUF5TVF3d0NnWURWUVFERXdNeE5qTXdnZ0VpTUEwR0NTcUdTSWIzRFFFQkFRVUFBNElCRHdBd2dnRUtBb0lCCkFRRFlBeTgxSzFFeXFoMklPWmJ6a0Zua2k5NktLNGJNMEtleXE0cHV5S0U4NGZqNG9wL0VMa0JIWkorVHpSYlQKMkVYclgrMEJOOE5GVm9lWHlTcjNoRkZoaHBnd05DdmF5c2tybXB0anFRY0txY0Yza096bXBaVUxOWUdTTmp1VgpZQlV6MS9XbUVYUVNjRjhyTXYrb2x5MVdQeEsvYTVYZElZMWZRc2FrQ2czMUc0L3BZNEVCL1lvRFEvWiszaitxCnVpL1M4VHEyeTVHcklZeWZDWjNwbVZValdndjhHRURIUWEvNTN4TnhzUlNiYVNHTkk3R3dHdUFpRkNKbFQ5bTEKMHY5R2RLMG1nVzlrU3o0VDBXWlNFZlRmdXhRVmdmc0gxODJ6aGVJemN1Qkh5bWxCUkQzd0ptQjN0QmI3UDdyVgpIcWlsamkwSTZxejU0eTNIQmNEQURmbTdBZ01CQUFHamdZWXdnWU13RGdZRFZSMFBBUUgvQkFRREFnV2dNQk1HCkExVWRKUVFNTUFvR0NDc0dBUVVGQndNQ01Bd0dBMVVkRXdFQi93UUNNQUF3SFFZRFZSME9CQllFRk8wWmF2eTIKcEM2b3RaemtVekZJZmJYUkIyVDZNQjhHQTFVZEl3UVlNQmFBRklTZm5Rd1dXOEtvcXVzdlF3L0JYcm1BQUtpcgpNQTRHQTFVZEVRUUhNQVdDQTJSdWN6QU5CZ2txaGtpRzl3MEJBUTBGQUFPQ0FnRUExaTVvWDdKaEJzVFBoVHpLCjdhR1o3MUtWajVBcWs0UHFXNncySTZjWFB1SmpBblovSzlkd1YxaWdCUkkvNHRjdXlTWndGZ3ltZTZPajBVL3cKbFYwcWFPRFNWeEFtMmlrOWcwWTFDYjNDOXljSmplOTlsL0lLZ2VJR1g1MXJQb2pyNnQzMjRPMGczU2MxeFlJego2cHVCRUZ2cFlMNWxTK2x2RVI3bEM0RkhIOXJCamRlR0Y2QXJNeHVveDZBUTh0UnNkckJqelRQSkdaWnpQN2syCmdITk1BVmFUK2xkSzNLZ2RaUkdjY21xT0drVWp5Ny9RUmdoN0NRdHB2TlhWZ0NQbkMrSGwxcW9XWjVjT1dZRUUKdmRSbVplTG1hZWhILzBDYlBoTlVHcWFtT25Vd2E0NktSTkdubjVSSmNXODZORzk2S1BUcnRtVXh5RXBJSWNVSQpEU3RaR2VFN3VLdUdSVDhGTUp0WUJwc2tRYmNtR0JZWWhndU1LUk5ZVFVzeG9qcStVMEYrcUM0aSt2TnlicmZ1Cm1XbmpxSlAwT1Mxa0tyTTljR08vanFJY0NkVUl0NENxVU9yd3l3VDNndWhYdDhnVFdCY0w1T0orZEkzMmx5aUoKRWRzc1FuWFlKWnZCbFBYWjVqcTlkU0hjWmJsMjdVcVplYTR3VGs2TVkzaWpia0JTZFIyV0tHVFN2ZTZSaEM5YgoyZTl5SmNwaWRQSlpDeTZRcUprSUpRZTFKcDR1bXRvVWNuOXJ1R1JZclVueUdCQ3UxMEZDb3VTMi9tZVpkOUd2Ci9sUXBWQmQ5aXhpa1BPWHZhT2JDZlZab0pTWHNMNzdvNTFlMVVCQ2hqSjNJSkExMnYvZ1cvbTQzWWVja1FJRWkKNDcrcnBoWmlRWkNCSDBDbkZqM3N1bmVYMSt3PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg'
         CLIENT_KEY_BASE64: 'LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBMkFNdk5TdFJNcW9kaURtVzg1Qlo1SXZlaWl1R3pOQ25zcXVLYnNpaFBPSDQrS0tmCnhDNUFSMlNmazgwVzA5aEY2MS90QVRmRFJWYUhsOGtxOTRSUllZYVlNRFFyMnNySks1cWJZNmtIQ3FuQmQ1RHMKNXFXVkN6V0Jralk3bFdBVk05ZjFwaEYwRW5CZkt6TC9xSmN0Vmo4U3YydVYzU0dOWDBMR3BBb045UnVQNldPQgpBZjJLQTBQMmZ0NC9xcm92MHZFNnRzdVJxeUdNbndtZDZabFZJMW9ML0JoQXgwR3YrZDhUY2JFVW0ya2hqU094CnNCcmdJaFFpWlUvWnRkTC9SblN0Sm9GdlpFcytFOUZtVWhIMDM3c1VGWUg3QjlmTnM0WGlNM0xnUjhwcFFVUTkKOENaZ2Q3UVcreis2MVI2b3BZNHRDT3FzK2VNdHh3WEF3QTM1dXdJREFRQUJBb0lCQUJLU3U0VmoweGg3SGd6dgpmclkwakRZbGZKMyt2aGx3TzJzV2F0RzV1SHRtcHFTaVB3QjhSWlNkNTBhckZMSmtYeWFzMmRFSC9XZEIyR2pKCnFFTWVBbTFUU0ZTa3Q3eVpRUkRadTFDbllPNmV4LzdDM0V1OG93TVN0N0JkcjJQWm5oa1dFWTRVNUJrTnhuRU4KY29RSmM2Rjl6TnZlb1VVaE5HbWpjVGI3a2xXbnY0SCtwK24ya3FPYk5icDg0TlFvYUJPcEozcVlhU1FTSHlNRgpKRTRKZGZ3S0JoT3hqRWszZnMxeTcwWmN2R3ZHZ245anZacDU0WU5uNC85NERPMEFpeGNPeUhoRnVyWFZTbjlHCkQrcHdDbGcydmNONXpSUCt4KzI4cS9QbXExTWZYc01QaDFCZmtuYTRmL3dISWg2ZmM0SmRqdTkrbVFLa0s5Z0oKUU82WUl3a0NnWUVBK3pMSGNXdENYUkxRT3p2K2JLZ25oRVpBZjc5YkVxK1E0dnJJN2RINFhkWVg4aXZDVEczSQpLUmJueFVtWitLanN1TTZ4UXZvR0dqbWdDTk9KcW5WYU1rVDNmUks3cGFyNHU1anRtenF4REFZODJnV0FScFI0CkdOUW9adXhHczMwUFZjYUVwVngrWWlKNkxYZXIwM3UxTndPenNGd1JnUEl1MDc4Qi9wejVXclVDZ1lFQTNDUTUKd1BkVzRpY2NsTFJnanpueEcvRHgwMS9BcGFyZWJoTjBHYW9QdVdjbk0yZG9vSll0K2JFTXpuQTdzTUQ0VktzVgpOYSt5NnFYczFkeWtJNm9xdjAzUldLVGVPdlRLWXFjMFZTMUhLUk9ZTnNnY05nYjd3MkwrdWxyUXplVzY4ZTZzCmFFbnRqZ1FMT1NFZjlYR1pyMVhCS3l1MkNBblUyNWJYMzhPNEdLOENnWUVBNnI5WWpSQ2NjeGhLeXFCVk1ydXUKT2puZ3VzRmIzY2wrVCsvbmFBQko1MzlVMzNhdlcvZFlEN1lkSUV5WS9EejVBL2Y4eGNlYmZsU056dEhKSENnUgpBMXRhSVdNcFF6ZlV2Sk84c00wWGVWSTIrZFFjUFZrd0pwdlZxZUZ5YlBnWkphS2dnVncvcTN2bXk2akRSWjZkCkNlMkd0ZkJFVjBsOEkxdWtCSW96cU9VQ2dZQktoOGsxMTRlRzBZOFBtWElIaTZwaHQxVm9Kc2JtVDg4Mm5VZDEKV09veDd3YUtsTHdMZ2t6V2VHYkpqWjNuM2EwMW5TWjFJcU1FWm1Da2x5ckxHRldZcHhQMVd2d1NJY1pUV0NDVApwZHl0djRDTkszckJuK09rNXVNdTNJaE03VFk1cW9DY1hrc2JCYXQzRUF2dDRTUVRCSWw5d0RMRXplOU8yT2NGClR4SUk2UUtCZ0RvS2cvaTZxTytHRW5LY0ZuYUtqS2dHQjFpc0JkdnVZV0ZWN2l5NDBqRWFITzFRN2RjTElvM0MKVjd3Z0oyVUpZM3Q0T3AvQnkzc2F0TjNFd2FwUFNkM2tJZGZ3N0FQQzRUQVlaSVdUZlNtaWcwWVdkOG83cFowOAowRHFOVHZ3bzhEMzg5WGZIb0RUNlQ4TWx4aktCQmx6bmhhLzVNQllEdlFJL0dZaTVodGowCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg'
-        CORE_URL: 'https://resolverapi.whalebone.io:8443/sinkit/rest/protostream/resolvercache'
+        RESOLVERAPI_URL: 'https://resolverapi.whalebone.io:443/sinkit/rest/protostream/resolvercache'
         RESOLVERAPI_UPDATE_INTERVAL_S: 3600
-        kres_update_interval: 900000
+        KRES_UPDATE_INTERVAL_S: 300
+        PRIVATE_API_LISTENER: "http://127.0.0.1:8080/"
+        RADIUS_PORT: 0
+        RADIUS_ENABLED: false
+        UDP_LOGGER_PORT: 0
+        KRES: 127.0.0.1
+        KRES_MIN_PORT: 8880
+        KRES_MAX_PORT: 8912
+        PARTIAL_CACHE_RATIO: 0
+        SHARED_FOLDER: '/var/whalebone/data'
+        LMDB_ROOT: '/var/whalebone/lmdb'
+        LMDB_MAP_SIZE: 268435456
+        SINKHOLE_ENABLED: false
+        SECURITY_TOKEN: 0987654321
+        KRESMAN_WEB_HOSTNAME: redirect.whalebone.io
+      privileged: true
+      mem_limit: 2g
+      logging:
+        driver: json-file
+        options:
+          max-size: "100m"
+          max-file: "1"
     passivedns:
-      image: whalebone/passivedns:local-3
+      image: harbor.whalebone.io/resolver/passivedns:1.1.3
       labels:
          passivedns: "2.0"
       environment:
         DNS_INTERFACE: 'eth0'
         MAX_MEMORY: '256'
+        PASSIVEDNS_LOGFILE: '/var/log/whalebone/passivedns.log'
       volumes:
       - /var/log/whalebone:/var/log/whalebone
       network_mode: host
@@ -53,12 +82,13 @@ services:
           max-size: "10m"
           max-file: "1"
     logstream:
-      image: whalebone/logstream:local-1
+      image: harbor.whalebone.io/resolver/logstream:2.1
       network_mode: host
       labels:
-         logstream: "2.0"
+         logstream: "2.1"
       volumes:
       - /var/log/whalebone:/var/log/whalebone
+      - /var/lib/docker/containers:/opt/containers:ro
       - registry:/usr/share/filebeat/data
       environment:
         LOGSTREAM_HOSTS: '["logger.whalebone.io:443"]'
@@ -72,16 +102,16 @@ services:
           max-size: "100m"
           max-file: "1"
     logrotate:
-      image: whalebone/logrotate:local-1
+      image: harbor.whalebone.io/resolver/logrotate:1.1
       labels:
-         logrotate: "2.0"
+         logrotate: "3.0"
       volumes:
       - /var/log/whalebone:/var/log/whalebone
       environment:
         LOGS_DIRECTORIES: "/var/log/whalebone"
         LOGROTATE_SIZE: "1G"
         LOGROTATE_COMPRESSION: "compress"
-        LOGROTATE_CRONSCHEDULE: "* * * * * *"
+        LOGROTATE_CRONSCHEDULE: "0 */10 * * * *"
         LOGROTATE_COPIES: 5
       restart: always
       network_mode: host
@@ -89,6 +119,40 @@ services:
         driver: json-file
         options:
           max-size: "10m"
+          max-file: "1"
+    logcat:
+      image: harbor.whalebone.io/resolver/logcat:1.1
+      labels:
+        logcat: "1.1"
+      volumes:
+        - /var/log/whalebone:/var/log/whalebone
+      environment:
+        HOST: '127.0.0.1:4000'
+        PATH_OUT: '/var/log/whalebone/'
+        FILENAME: 'whalebone.log'
+      restart: always
+      network_mode: host
+      logging:
+        driver: json-file
+        options:
+          max-size: "100m"
+          max-file: "1"
+    logcat-content:
+      image: harbor.whalebone.io/resolver/logcat:1.1
+      labels:
+        logcat-content: "1.1"
+      volumes:
+        - /var/log/whalebone:/var/log/whalebone
+      environment:
+        HOST: '127.0.0.1:4001'
+        PATH_OUT: '/var/log/whalebone/'
+        FILENAME: 'content.log'
+      restart: always
+      network_mode: host
+      logging:
+        driver: json-file
+        options:
+          max-size: "100m"
           max-file: "1"
 volumes:
   registry:

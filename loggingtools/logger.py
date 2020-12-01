@@ -3,7 +3,8 @@ from logging.handlers import RotatingFileHandler
 import os
 
 
-def build_logger(name: str, log_path: str, log_level: str = "INFO"):
+def build_logger(name: str, log_path: str, log_level: str = "INFO", file_size: int = 20000000, backup_count: int = 12,
+                 console_output: bool = True):
     try:
         os.mkdir(log_path)
     except FileExistsError:
@@ -12,16 +13,18 @@ def build_logger(name: str, log_path: str, log_level: str = "INFO"):
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
     if not logger.handlers:
-        if "DISABLE_FILE_LOGS" not in os.environ:
-            handler = RotatingFileHandler("{}/agent-{}.log".format(log_path, name), maxBytes=20000000, backupCount=12)
-            handler.setLevel(log_level)
-
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(log_level)
-
+        # console_handler = logging.StreamHandler()
+        # console_handler.setLevel(log_level)
         formatter = logging.Formatter('%(asctime)s | %(lineno)d | %(levelname)s | %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.addHandler(console_handler)
+        if "DISABLE_FILE_LOGS" not in os.environ:
+            handler = RotatingFileHandler("{}/agent-{}.log".format(log_path, name), maxBytes=file_size,
+                                          backupCount=backup_count)
+            # handler.setLevel(log_level)
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+        if console_output:
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
 
     return logger

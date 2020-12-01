@@ -1,73 +1,54 @@
 import redis
-import hug
+import falcon
 import os
+import json
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
-# with open("resolver-compose.yml", "r") as f:
-#     resolver_compose = f.read()
+class Sink(object):
+    def __init__(self):
+        self.agent_id = os.environ.get("AGENT_ID", "101")
+        self.address = os.environ.get("REDIS_ADDRESS", "localhost")
+        self.proxy_address = os.environ.get("PROXY_ADDRESS", "localhost")
+        logging.basicConfig(level=logging.DEBUG)
+        self.logger = logging.getLogger(__name__)
+        try:
+            self.connection = redis.Redis(host=self.address)
+        except Exception as e:
+            self.logger.info(e)
 
-try:
-    agent_id = os.environ["AGENT_ID"]
-except KeyError:
-    agent_id = 101
+    def save_data(self, key: str, message: str):
+        try:
+            self.connection.set(key, message)
+        except Exception as e:
+            self.logger.info(e)
 
-try:
-    address = os.environ["REDIS_ADDRESS"]
-except KeyError:
-    address = "localhost"
+    def save_sysinfo(self, sysinfo: str):
+        try:
+            self.connection.lpush("sysinfo", sysinfo)
+        except Exception as e:
+            self.logger.info(e)
 
-try:
-    connection = redis.Redis(host=address)
-except Exception as e:
-    logger.info(e)
-
-try:
-    proxy_address = os.environ["PROXY_ADDRESS"]
-except KeyError:
-    proxy_address = "localhost"
-
-
-def save_data(key, message):
-    try:
-        connection.lpush(key, message)
-    except Exception as e:
-        logger.info(e)
-
-
-@hug.post("/{}/sysinfo".format(agent_id))
-def sysinfo(body):
-    logger.info(body)
-    save_data("sysinfo", body)
-
-
-@hug.post("/{}/stop".format(agent_id))
-def sysinfo(body):
-    logger.info(body)
-    save_data("stop", body)
-
-
-@hug.post("/{}/remove".format(agent_id))
-def sysinfo(body):
-    logger.info(body)
-    save_data("remove", body)
+    def handle_request(self, req, resp):
+        try:
+            data = json.loads(req.stream.read().decode("utf-8"))
+            if "slack" in req.path.split("/"):
+                key = "datacollect"
+            elif "uid" in data:
+                key = data.get("uid")
+            else:
+                self.save_sysinfo(json.dumps(data))
+                key = None
+            if key:
+                self.save_data(key, json.dumps(data))
+        except Exception as e:
+            self.logger.warning("Failed to persist data {}.".format(e))
+            resp.status = falcon.HTTP_500
+            resp.media = {"status": "failed"}
+        else:
+            resp.status = falcon.HTTP_200
+            resp.media = {"status": "success"}
 
 
-@hug.post("/{}/create".format(agent_id))
-def create(body):
-    logger.info(body)
-    save_data("create", body)
-
-
-@hug.post("/{}/upgrade".format(agent_id))
-def upgrade(body):
-    logger.info(body)
-    save_data("upgrade", body)
-
-
-@hug.post("/{}/request".format(agent_id))
-def start(body):
-    logger.info(body)
-    save_data("request", body)
+app = falcon.API()
+app.add_sink(Sink().handle_request, prefix="/")

@@ -22,6 +22,12 @@ Agent envs:
 - RPZ_PERIOD:(optional) the amount of time in seconds between each rpz update (default: 86400 seconds)
 - WEBSOCKET_LOGGING: (optional, default: 10) enable logging of Websockets library, should be supplied as integer using Python [logging codes](https://docs.python.org/3/library/logging.html#logging-levels), use levels INFO, DEBUG and ERROR
 - TASK_TIMEOUT: (optional) sets timeout for periodic actions in which they have to finish, otherwise error will be thrown
+- UPGRADE_SLEEP: (optional, defaul: 0(s)) the number of seconds to sleep between port bind check and old resolver stop in resolver upgrade
+- DNS_TIMEOUT: (optional, default: 1(s)) dns resolve timeout parameter
+- DNS_LIFETIME: (optional, default 1(s)) dns resolve lifetime parameter
+- TRACE_LISTENER: (optional, default: '127.0.0.1:8453') knot http endpoint for domain tracing 
+- KRESMAN_PASSWORD: (optional, default: test value) password to use for obtaining Kresman access token 
+- KRESMAN_LOGIN: (optional, default: test value) login to use for obtaining Kresman access token
 
 
 Messages:
@@ -62,8 +68,8 @@ Pending configuration request deleted.
 
 Testing:
 ----------
-Testing is initiated by docker-compose file in tests/integration/ folder. Test result will be display in the logs 
-of _current_directory__tester_1 container. Wsproxy is required from Whalebone, the rest can be downloaded/built.
+Testing is started by creating containers using **docker-compose.yml** file in tests/integration/ folder. Test result will be display in the logs 
+of **tester** container. Testing containers require harbor login to be pulled.
 
 
 Used volumes:

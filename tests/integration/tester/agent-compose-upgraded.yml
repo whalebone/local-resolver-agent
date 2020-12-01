@@ -1,7 +1,7 @@
 version: '3'
 services:
   lr-agent:
-    image: whalebone/agent:1.4.4
+    image: harbor.whalebone.io/resolver/agent:1.5.0
     name: lr-agent
     stdin_open: true
     tty: true

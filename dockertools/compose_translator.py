@@ -73,7 +73,7 @@ def parse_tmpfs(value: str) -> dict:
 
 
 def read_file(file_name: str) -> str:
-    with open("/opt/whalebone/certs/{}".format(file_name), "r") as file:
+    with open("/opt/agent/certs/{}".format(file_name), "r") as file:
         return base64.b64encode(file.read().encode("utf-8")).decode("utf-8")
 
 

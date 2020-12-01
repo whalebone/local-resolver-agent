@@ -38,14 +38,14 @@ class ComposeToolsTest(unittest.TestCase):
 
     def test_base64_encode(self):
         message = {"data": "testing string"}
-        self.assertEqual(self.lr_Agent.encode_base64_json(message),
+        self.assertEqual(self.lr_Agent.encode_request(message),
                          {"data": base64.encode("testing string".encode("utf-8")).decode("utf-8")})
 
     def test_base64_decode(self):
         message = {"data": base64.encode("testing string".encode("utf-8")).decode("utf-8")}
-        self.assertEqual(self.lr_Agent.decode_base64_json(message), {"data": "testing string"})
+        self.assertEqual(self.lr_Agent.decode_request(message), {"data": "testing string"})
         message = {"data": base64.encode(json.dumps({"key": "value"}).encode("utf-8")).decode("utf-8")}
-        self.assertEqual(self.lr_Agent.decode_base64_json(message), {"data": {"key": "value"}})
+        self.assertEqual(self.lr_Agent.decode_request(message), {"data": {"key": "value"}})
 
     def test_get_error(self):
         self.assertEqual(self.lr_Agent.getError("python error", REQUEST), RESPONSE)

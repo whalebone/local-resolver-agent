@@ -1,7 +1,7 @@
 version: '3'
 services:
     resolver:
-      image: whalebone/kres:4.3.0-17
+      image: harbor.whalebone.io/resolver/kres:5.2.0-2-7
       labels:
         resolver: "2.0"
       logging:
@@ -15,7 +15,7 @@ services:
       volumes:
       - /etc/whalebone/kres:/etc/kres/
       - /var/log/whalebone/:/var/log/whalebone/
-      - /var/lib/kres/tty:/tty/tty
+      - /var/lib/kres/tty:/tty/control/
       - /var/whalebone/:/var/whalebone/
       network_mode: host
       privileged: true
@@ -27,7 +27,7 @@ services:
         LOG_THREAT: 127.0.0.1
         LOG_CONTENT: 127.0.0.1
     kresman:
-      image: whalebone/kresman:3.1.7
+      image: harbor.whalebone.io/resolver/kresman:3.2.7
       labels:
          kresman: "2.0"
       restart: always
@@ -43,7 +43,7 @@ services:
         RESOLVERAPI_URL: 'https://resolverapi.whalebone.io:443/sinkit/rest/protostream/resolvercache'
         RESOLVERAPI_UPDATE_INTERVAL_S: 3600
         KRES_UPDATE_INTERVAL_S: 300
-        PRIVATE_API_LISTENER: http://127.0.0.1:8080/
+        PRIVATE_API_LISTENER: "http://127.0.0.1:8080/"
         RADIUS_PORT: 0
         RADIUS_ENABLED: false
         UDP_LOGGER_PORT: 0
@@ -65,7 +65,7 @@ services:
           max-size: "100m"
           max-file: "1"
     passivedns:
-      image: whalebone/passivedns:1.1.3
+      image: harbor.whalebone.io/resolver/passivedns:1.1.3
       labels:
          passivedns: "2.0"
       environment:
@@ -82,7 +82,7 @@ services:
           max-size: "10m"
           max-file: "1"
     logstream:
-      image: whalebone/logstream:2.1
+      image: harbor.whalebone.io/resolver/logstream:2.1
       network_mode: host
       labels:
          logstream: "2.1"
@@ -102,7 +102,7 @@ services:
           max-size: "100m"
           max-file: "1"
     logrotate:
-      image: whalebone/logrotate:1.1
+      image: harbor.whalebone.io/resolver/logrotate:1.1
       labels:
          logrotate: "3.0"
       volumes:
@@ -121,7 +121,7 @@ services:
           max-size: "10m"
           max-file: "1"
     logcat:
-      image: whalebone/logcat:1.1
+      image: harbor.whalebone.io/resolver/logcat:1.1
       labels:
         logcat: "1.1"
       volumes:
@@ -138,7 +138,7 @@ services:
           max-size: "100m"
           max-file: "1"
     logcat-content:
-      image: whalebone/logcat:1.1
+      image: harbor.whalebone.io/resolver/logcat:1.1
       labels:
         logcat-content: "1.1"
       volumes:

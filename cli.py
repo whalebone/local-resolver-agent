@@ -134,7 +134,6 @@ class Cli:
         except Exception as e:
             print("Failed to load persisted request due to {}.".format(e))
         else:
-            request["cli"] = "true"
             return request
 
     def delete_files(self, final_print: bool = False):
@@ -149,14 +148,14 @@ class Cli:
                 print("Pending configuration request deleted.")
 
     async def execute_request(self, request: dict):
-        agent = LRAgentClient(None)
+        agent = LRAgentClient(None, True)
         try:
-            response = await agent.process(json.dumps(request), True)
+            response = await agent.process(json.dumps(request))
         except Exception as e:
             print("General error during request execution, reason: {}".format(e))
         else:
             if "data" in response:
-                print(response["data"])
+                print(response["data"]["action_status"])
             else:
                 print(response)
 
@@ -164,7 +163,7 @@ class Cli:
         has_params = ["stop", "remove", "create", "upgrade", "restart", "trace", "clearcache"]
         try:
             if self.cli_input["action"] in has_params:
-                request = {"requestId": "666", "cli": "true", "action": self.cli_input["action"],
+                request = {"requestId": "666", "action": self.cli_input["action"],
                            "data": self.create_params(self.cli_input["action"])}
             elif self.cli_input["action"] == "list":
                 self.view_requests()
@@ -174,7 +173,7 @@ class Cli:
             elif self.cli_input["action"] == "delete_request":
                 self.delete_files(True)
             else:
-                request = {"requestId": "666", "cli": "true", "action": self.cli_input["action"]}
+                request = {"requestId": "666", "action": self.cli_input["action"]}
         except Exception as e:
             print("Cannot assemble request, reason: {}".format(e))
         else:

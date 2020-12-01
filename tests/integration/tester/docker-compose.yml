@@ -1,7 +1,7 @@
 version: '3'
 services:
   lr-agent:
-    image: whalebone/agent:1.4.4
+    image: harbor.whalebone.io/resolver/agent:1.5.0
     name: lr-agent
     stdin_open: true
     tty: true
@@ -20,16 +20,17 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/whalebone/:/etc/whalebone/etc/
+      - /etc/:/etc/whalebone/resolv/
 #      - /etc/whalebone/kres/:/etc/whalebone/resolver/
       - /var/whalebone/cli/:/etc/whalebone/cli/
-#      - /etc/whalebone/agent/:/etc/whalebone/compose/
+##      - /etc/whalebone/agent/:/etc/whalebone/compose/
       - /var/log/whalebone/agent/:/etc/whalebone/logs/
       - /var/log/whalebone/:/etc/whalebone/sysinfo/
       - /var/sinkhole/:/etc/whalebone/kresman
       - /:/opt/host/:ro
       - /var/lib/kres/tty/:/etc/whalebone/tty/
   resolver:
-    image: whalebone/kres:3.2.1-12
+    image: harbor.whalebone.io/resolver/kres:5.2.0-2-7
     labels:
       resolver: "6.0"
     logging:
@@ -43,15 +44,16 @@ services:
     - /etc/whalebone/kres:/etc/kres/
     - /var/log/whalebone/:/var/log/whalebone/
     - /var/lib/kres:/var/lib/kres
-    - /var/lib/kres/tty:/tty/tty
+    - /var/lib/kres/tty:/tty/control/
     - /var/whalebone/:/var/whalebone/
+    - dnstap:/tmp/dnstap
     restart: always
     environment:
       SINKIP: '159.100.251.128'
       SINKIPV6: '::1'
       SINKTTL: 1
   kresman:
-      image: whalebone/kresman:2.4.3
+      image: harbor.whalebone.io/resolver/kresman:3.2.7
       labels:
         kresman: "6.0"
       restart: always
@@ -65,7 +67,7 @@ services:
         RESOLVERAPI_UPDATE_INTERVAL_S: 3600
         kres_update_interval: 900000
   passivedns:
-      image: whalebone/passivedns:local-3
+      image: harbor.whalebone.io/resolver/passivedns:1.1.3
       labels:
         passivedns: "4.0"
       environment:
@@ -81,7 +83,7 @@ services:
           max-size: "10m"
           max-file: "1"
   logstream:
-      image: whalebone/logstream:local-1
+      image: harbor.whalebone.io/resolver/logstream:2.1
       network_mode: host
       labels:
         logstream: "6.0"
@@ -100,7 +102,7 @@ services:
           max-size: "100m"
           max-file: "1"
   logrotate:
-      image: whalebone/logrotate:local-1
+      image: harbor.whalebone.io/resolver/logrotate:1.1
       labels:
         logrotate: "4.0"
       volumes:
@@ -118,7 +120,52 @@ services:
         options:
           max-size: "10m"
           max-file: "1"
-
+  logcat:
+    image: harbor.whalebone.io/resolver/logcat:1.1
+    labels:
+      logcat: "1.1"
+    volumes:
+      - /var/log/whalebone:/var/log/whalebone
+    environment:
+      HOST: '127.0.0.1:4000'
+      PATH_OUT: '/var/log/whalebone/'
+      FILENAME: 'whalebone.log'
+    restart: always
+    network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "1"
+  logcat-content:
+    image: harbor.whalebone.io/resolver/logcat:1.1
+    labels:
+      logcat-content: "1.1"
+    volumes:
+      - /var/log/whalebone:/var/log/whalebone
+    environment:
+      HOST: '127.0.0.1:4001'
+      PATH_OUT: '/var/log/whalebone/'
+      FILENAME: 'content.log'
+    restart: always
+    network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "1"
+  dnstag:
+    command: /go/bin/app -b -w /var/log/whalebone/dnstag.log --u=/tmp/dnstap/dnstap.sock
+    image: whalebone/dnstag:1.2
+    labels:
+      dnstag: '1.2'
+    volumes:
+    - dnstap:/tmp/dnstap
+    - /var/log/whalebone:/var/log/whalebone
 volumes:
   registry:
     external: true
+  dnstap:
+    driver_opts:
+      device: tmpfs
+      type: tmpfs

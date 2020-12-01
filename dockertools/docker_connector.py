@@ -4,6 +4,7 @@ from .compose_translator import create_docker_run_kwargs
 from exception.exc import ContainerException
 from loggingtools import logger
 from datetime import datetime
+from aiodocker import Docker
 
 
 class DockerConnector:
@@ -17,22 +18,29 @@ class DockerConnector:
         try:
             return self.docker_client.images.list()
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get images {}.".format(e))
             return []
 
     def get_containers(self, stopped: bool = False) -> list:
         try:
             return self.docker_client.containers.list(all=stopped)
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get containers {}.".format(e))
             return []
 
     def get_container(self, name: str):
         try:
             return self.docker_client.containers.get(name)
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get container {}, {}.".format(name, e))
             return ""
+
+    def get_volumes(self) -> list:
+        try:
+            return self.docker_client.volumes.list()
+        except Exception as e:
+            self.logger.warning("Failed to get volumes {}.".format(e))
+            return []
 
     def container_exec(self, name: str, command: list) -> str:
         service = self.get_container(name)
@@ -40,11 +48,17 @@ class DockerConnector:
             try:
                 result = service.exec_run(command)
             except Exception as e:
-                self.logger.info(e)
+                self.logger.info("Failed to execute command {} in {} due to {}".format(command, name, e))
             else:
                 return result.output.decode("utf-8")
         else:
             return ""
+
+    async def create_volume(self, name: str, **options):
+        try:
+            self.docker_client.volumes.create(name, **options)
+        except Exception as e:
+            raise ContainerException(e)
 
     async def start_service(self, parsed_compose: dict):
         kwargs = create_docker_run_kwargs(parsed_compose)
@@ -58,14 +72,14 @@ class DockerConnector:
         try:
             return self.api_client.version()
         except Exception as e:
-            self.logger.info(e)
+            self.logger.info("Failed to get docker version {}.".format(e))
             return {}
 
-    def container_logs(self, name: str, timestamps: bool = False, tail: int = "all", since: str = None):
+    def container_logs(self, name: str, timestamps: bool = False, tail: int = "all", since: str = None) -> str:
         if since is not None:
             since = datetime.strptime(since, '%Y-%m-%dT%H:%M:%S')
         try:
-            return self.api_client.logs(name, timestamps=timestamps, tail=tail, since=since)
+            return self.api_client.logs(name, timestamps=timestamps, tail=tail, since=since).decode("utf-8")
         except Exception as e:
             raise ConnectionError(e)
 
@@ -105,8 +119,17 @@ class DockerConnector:
         except Exception as e:
             raise ContainerException(e)
 
-    async def pull_image(self, container_name: str):
+    # async def pull_image(self, container_name: str):
+    #     try:
+    #         self.docker_client.images.pull(container_name)
+    #     except Exception as e:
+    #         self.logger.warning("Unable to pull image: {}, reason: {}".format(container_name, e))
+
+    async def pull_image(self, image_name: str):
+        async_client = Docker()
         try:
-            self.docker_client.images.pull(container_name)
+            await async_client.images.pull(image_name)
         except Exception as e:
-            self.logger.warning("Unable to pull image: {}, reason: {}".format(container_name, e))
+            self.logger.warning("Unable to pull image: {}, reason: {}".format(image_name, e))
+        finally:
+            await async_client.close()

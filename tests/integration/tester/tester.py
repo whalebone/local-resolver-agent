@@ -725,8 +725,9 @@ class Tester():
                 else:
                     self.logger.info("Cache clear failed")
                     self.status["clear_cache"] = {"fail": rec}
-            except KeyError:
+            except Exception as e:
                 self.logger.info("Cache clear failed, {}".format(rec))
+                self.status["clear_cache"] = {"fail": rec}
 
     def trace_domain(self):
         try:

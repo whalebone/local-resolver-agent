@@ -30,7 +30,7 @@ services:
       - /:/opt/host/:ro
       - /var/lib/kres/tty/:/etc/whalebone/tty/
   resolver:
-    image: harbor.whalebone.io/resolver/kres:5.1.3-3-2
+    image: harbor.whalebone.io/resolver/kres:5.2.0-2-7
     labels:
       resolver: "6.0"
     logging:

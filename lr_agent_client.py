@@ -1069,7 +1069,7 @@ class LRAgentClient:
                         self.logger.warning("No data present in Microsoft domains list.")
 
     def prefetch_tld(self):
-        message = b"prefill.config({['.'] = { url = 'https://www.internic.net/domain/root.zone', interval = 86400 }})"
+        message = b"prefill.config({['.'] = { url = 'https://www.internic.net/domain/root.zone', interval = 86400 }})\n"
         for tty in os.listdir("/etc/whalebone/tty/"):
             try:
                 self.send_to_socket(message, tty)
@@ -1077,7 +1077,6 @@ class LRAgentClient:
                 self.logger.warning("Failed to send prefetch data to socket")
             else:
                 self.logger.info("Tlds successfully pre fetched.")
-                break
 
     def get_kresman_credentials(self) -> str:
         try:
@@ -1099,23 +1098,23 @@ class LRAgentClient:
     async def update_cache(self,  **_) -> dict:
         address = os.environ.get("KRESMAN_LISTENER", "http://127.0.0.1:8080")
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get("{}/api/general/updatenow".format(address), json={}, ssl=False) as response:
-                    if response.ok:
-                        return {"status": "success", "message": "Cache update successful"}
-                    else:
-                        return {"status": "failure", "message": "Cache update failed"}
-            # msg = requests.get("{}/api/general/updatenow".format(address), json={}, verify=False,
-            #                    # headers={'accept': '*/*', 'Content-Type': 'application/json',
-            #                    #          'Authorization': 'Bearer {}'.format(self.kresman_token)}
-            #                    )
+            # async with aiohttp.ClientSession() as session:
+            #     async with session.get("{}/api/general/updatenow".format(address), json={}, ssl=False) as response:
+            #         if response.ok:
+            #             return {"status": "success", "message": "Cache update successful"}
+            #         else:
+            #             return {"status": "failure", "message": "Cache update failed"}
+            msg = requests.get("{}/api/general/updatenow".format(address), json={}, verify=False,
+                               # headers={'accept': '*/*', 'Content-Type': 'application/json',
+                               #          'Authorization': 'Bearer {}'.format(self.kresman_token)}
+                               )
         except requests.exceptions.RequestException as e:
             return {"status": "failure", "body": str(e)}
-        # else:
-        #     if msg.ok:
-        #         return {"status": "success", "message": "Cache update successful"}
-        #     else:
-        #         return {"status": "failure", "message": "Cache update failed"}
+        else:
+            if msg.ok:
+                return {"status": "success", "message": "Cache update successful"}
+            else:
+                return {"status": "failure", "message": "Cache update failed"}
 
     async def trace_domain(self, domain: str, query_type: str = "", **_):
         try:
@@ -1135,16 +1134,20 @@ class LRAgentClient:
                                     "error": msg.content.decode("utf-8")}
 
     async def resolver_cache_clear(self, clear: str = "all", **_) -> dict:
+        message = "cache.clear()\n" if clear == "all" else "cache.clear('{}', true)\n".format(clear)
         for tty in os.listdir("/etc/whalebone/tty/"):
-            message = "cache.clear()" if clear == "all" else "cache.clear('{}', true)".format(clear)
             try:
-                self.send_to_socket(message.encode("utf-8"), tty)
-            except Exception:
-                return {"status": "failure"}
+                response = self.send_to_socket(message.encode("utf-8"), tty)
+            except Exception as e:
+                self.logger.warning("Failed to clear cache on tty {}, {}.".format(tty, e))
             else:
-                return {"status": "success"}
+                if isinstance(response, str) and "count" in response:
+                    return {"status": "success"}
+                else:
+                    return {"status": "failure", "message": response}
+        return {"status": "failure", "message": "Failed to send command."}
 
-    def send_to_socket(self, message: bytes, tty):
+    def send_to_socket(self, message: bytes, tty) -> str:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.settimeout(5)
         try:
@@ -1156,13 +1159,17 @@ class LRAgentClient:
         else:
             try:
                 sock.sendall(message)
+                amount_received, amount_expected = 0, len(message)
+                while amount_received < amount_expected:
+                    data = sock.recv(65535)
+                    amount_received += len(data)
+                return data.decode("utf-8")
             except socket.timeout as re:
                 self.logger.warning("Failed to get data from socket {}, {}".format(tty, re))
             except Exception as e:
                 self.logger.warning("Failed to get data from {}, {}".format(tty, e))
             finally:
                 sock.close()
-        raise Exception
 
     async def resolver_suicide(self, **_):
         status = {}

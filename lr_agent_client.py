@@ -1247,7 +1247,7 @@ class LRAgentClient:
         logs_zip = "/opt/agent/{}-{}-{}-wblogs.zip".format(customer_id, datetime.now().strftime("%Y-%m-%d_%H:%M:%S"),
                                                            resolver_id)
         self.pack_logs(logs_zip, folder)
-        status = self.upload_logs(logs_zip, url)
+        status = await self.upload_logs(logs_zip, url)
         try:
             rmtree(folder)
             os.remove(logs_zip)
@@ -1255,25 +1255,31 @@ class LRAgentClient:
             pass
         return status
 
-    def upload_logs(self, logs_zip: str, target_url: str) -> dict:
+    async def upload_logs(self, logs_zip: str, target_url: str) -> dict:
         try:
-            files = {'upload_file': open(logs_zip, 'rb')}
-            req = requests.post("https://transfer.whalebone.io", files=files)
+            # files = {'upload_file': open(logs_zip, 'rb')}
+            # req = requests.post("https://transfer.whalebone.io", files=files)
+            files = {'file': open(logs_zip, 'rb')}
+            async with aiohttp.ClientSession() as session:
+                async with session.post("https://transfer.whalebone.io", data=files) as resp:
+                    r_status, r_code, r_message = resp.ok, resp.status, await resp.text()
         except Exception as e:
             self.logger.info("Failed to send files to transfer.whalebone.io, {}".format(e))
             return {"status": "failure", "message": "Data upload failed", "body": str(e)}
         else:
-            if req.ok:
+            if r_status:
                 try:
                     requests.post(target_url,
-                                  json={"text": "New customer log archive was uploaded:\n{}".format(
-                                      req.content.decode("utf-8"))}, timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
-                except Exception as e:
+                                  json={"text": "New customer log archive was uploaded:\n{}".format(r_message)},
+                                  timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
+                except (requests.RequestException, Exception) as e:
                     self.logger.info("Failed to send notification to Slack, {}".format(e))
+                    return {"status": "failure", "message": "Failed to send notification to Slack, {}".format(e)}
                 else:
                     return {"status": "success", "message": "Data uploaded"}
             else:
-                self.logger.warning("Failed to upload file to transfer {}, {}.".format(req.status_code, req.content))
+                self.logger.warning("Failed to upload file to transfer {}, {}.".format(r_code, r_message))
+                return {"status": "failure", "message": "Failed to upload data to transfer {}".format(r_message)}
 
     def load_container_info(self, folder: str):
         with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:

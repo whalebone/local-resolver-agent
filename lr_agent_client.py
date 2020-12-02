@@ -56,6 +56,7 @@ class LRAgentClient:
         self.enable_websocket_log()
         self.cli = cli
         self.alive = int(os.environ.get('KEEP_ALIVE', 10))
+        self.http_timeout = int(os.environ.get("HTTP_TIMEOUT", 10))
         # self.kresman_token = self.get_kresman_credentials()
         # self.sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger, self.kresman_token)
         self.sysinfo_connector = SystemInfo(self.dockerConnector, self.sysinfo_logger)
@@ -1028,7 +1029,8 @@ class LRAgentClient:
     def get_office365_domains(self):
         try:
             req = requests.get(
-                "https://endpoints.office.com/endpoints/worldwide?clientrequestid={}".format(self.microsoft_id))
+                "https://endpoints.office.com/endpoints/worldwide?clientrequestid={}".format(self.microsoft_id),
+                                  timeout=self.http_timeout)
         except requests.RequestException as re:
             self.logger.warning("Request to microsoft service failed, {}.".format(re))
         else:
@@ -1124,8 +1126,7 @@ class LRAgentClient:
         except KeyError:
             address = "http://127.0.0.1:8453"
         try:
-            msg = requests.get("{}/trace/{}/{}".format(address, domain, query_type),
-                               timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
+            msg = requests.get("{}/trace/{}/{}".format(address, domain, query_type), timeout=self.http_timeout)
         except requests.exceptions.RequestException as e:
             return {"status": "failure", "body": str(e)}
         else:
@@ -1271,7 +1272,7 @@ class LRAgentClient:
                 try:
                     requests.post(target_url,
                                   json={"text": "New customer log archive was uploaded:\n{}".format(r_message)},
-                                  timeout=int(os.environ.get("HTTP_TIMEOUT", 10)))
+                                  timeout=self.http_timeout)
                 except (requests.RequestException, Exception) as e:
                     self.logger.info("Failed to send notification to Slack, {}".format(e))
                     return {"status": "failure", "message": "Failed to send notification to Slack, {}".format(e)}

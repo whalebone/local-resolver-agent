@@ -154,9 +154,9 @@ class Cli:
         except Exception as e:
             print("General error during request execution, reason: {}".format(e))
         else:
-            if "data" in response:
-                print(response["data"]["action_status"])
-            else:
+            try:
+                print(response[0])
+            except IndexError:
                 print(response)
 
     async def run_command(self):
@@ -173,13 +173,12 @@ class Cli:
             elif self.cli_input["action"] == "delete_request":
                 self.delete_files(True)
             else:
-                request = {"requestId": "666", "action": self.cli_input["action"]}
+                request = {"requestId": "666", "action": self.cli_input["action"], "data": ""}
         except Exception as e:
             print("Cannot assemble request, reason: {}".format(e))
         else:
             try:
-                if request:
-                    await self.execute_request(request)
+                await self.execute_request(request)
             except NameError:
                 pass
 

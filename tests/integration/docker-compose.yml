@@ -13,7 +13,7 @@ services:
 #    network_mode: host
     tty: true
   tester:
-    image: harbor.whalebone.io/whalebone/agent:tester-testing-1.5.0
+    image: harbor.whalebone.io/whalebone/agent:tester-testing-1.5.3
     stdin_open: true
     container_name: "tester"
     tty: true

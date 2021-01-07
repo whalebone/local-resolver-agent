@@ -76,7 +76,8 @@ class LRAgentClient:
                 try:
                     status, parsed_request = await self.process(request)
                 except Exception as e:
-                    status, parsed_request = {"status": "failure", "body": str(e)}, json.loads(request)
+                    status, parsed_request = {"status": "failure", "body": str(e)}, self.decode_request(
+                        json.loads(request))
                     self.logger.warning("Failed to get action response {}.".format(e))
                 else:
                     try:
@@ -107,11 +108,16 @@ class LRAgentClient:
 
     def prepare_response(self, status: dict, request: dict) -> dict:
         status = status if status else {"Action finished with unknown issue, no status returned"}
-        response = {"action": request.get("action", "unknown"),
-                    "data": {"action_status": status, "uid": request["data"].get("uid", "")}}
-        if "requestId" in request and request["action"] not in self.async_actions:
-            response["requestId"] = request["requestId"]
-        return response
+        try:
+            response = {"action": request.get("action", "unknown"),
+                        "data": {"action_status": status, "uid": request["data"].get("uid", "")}}
+            if "requestId" in request and request["action"] not in self.async_actions:
+                response["requestId"] = request["requestId"]
+        except Exception as e:
+            self.logger.warning("Failed to prepare response {}, status: {}, request: {}".format(e, status, request))
+            return {"action": "unknown", "data": {"action_status": status, "uid": ""}}
+        else:
+            return response
 
     async def send_acknowledgement(self, message: dict):
         message["data"] = {"status": "success", "message": "Command received"}
@@ -197,8 +203,8 @@ class LRAgentClient:
             request = self.decode_request(json.loads(request_json))
         except Exception as e:
             self.logger.info("Failed to parse request: {}, {}".format(e, request_json))
-            return {"action": "request",
-                    "data": {"status": "failure", "message": "failed to parse/decode request", "body": str(e)}}
+            return {"status": "failure", "message": "Failed to parse/decode request {}.".format(e)}, {
+                "action": "request", "data": {}}
         if not self.cli:
             self.logger.info("Received: {}".format(request))
             if request["action"] in self.async_actions:
@@ -619,7 +625,7 @@ class LRAgentClient:
         except Exception as se:
             raise ContainerException("Failed to stop old resolver, {}".format(se))
         else:
-            if self.sysinfo_connector.check_resolving() == "fail":
+            if self.sysinfo_connector.check_resolving() != "ok":
                 return await self.upgrade_translation_fallback(service, old_config)
 
     def upgrade_check_service_state(self, service: str) -> bool:
@@ -1121,10 +1127,7 @@ class LRAgentClient:
             #     return {"status": "failure", "message": "Cache update failed"}
 
     async def trace_domain(self, domain: str, query_type: str = "", **_):
-        try:
-            address = os.environ["TRACE_LISTENER"]
-        except KeyError:
-            address = "http://127.0.0.1:8453"
+        address = os.environ.get("TRACE_LISTENER", "http://127.0.0.1:8453")
         try:
             msg = requests.get("{}/trace/{}/{}".format(address, domain, query_type), timeout=self.http_timeout)
         except requests.exceptions.RequestException as e:
@@ -1318,12 +1321,15 @@ class LRAgentClient:
                    # "docker_logs": {"action": "list", "command": ["journalctl", "-u", "docker.service"],
                    #                 "path": "{}/docker.service".format(folder)},
                    "ps": {"action": "list", "command": ["ps", "-aux"], "path": "{}/ps".format(folder)},
-                   "list_containers": {"action": "docker", "command": await self.docker_ps(),
+                   "list_containers": {"action": "docker", "command": self.docker_ps(),
                                        "path": "{}/docker_ps".format(folder)},
-                   "docker_stats": {"action": "docker", "command": await self.docker_stats(),
+                   "docker_stats": {"action": "docker", "command": self.docker_stats(),
                                     "path": "{}/docker_stats".format(folder)}
                    }
-        self.load_container_info(folder)
+        try:
+            self.load_container_info(folder)
+        except Exception as ce:
+            self.logger.warning("Failed to load logs and configs of containers {}.".format(ce))
         for action, specification in actions.items():
             try:
                 if specification["action"] == "copy_file":
@@ -1335,7 +1341,7 @@ class LRAgentClient:
                         copytree(*specification["command"])
                 elif specification["action"] == "docker":
                     with open(specification["path"], "w") as file:
-                        file.write(specification["command"])
+                        file.write(await specification["command"])
                 else:
                     with open(specification["path"], "w") as file:
                         call(specification["command"], stdout=file)
@@ -1363,15 +1369,17 @@ class LRAgentClient:
         except zipfile.BadZipFile as ze:
             self.logger.info("Error when creating zip file {}.".format(ze))
         else:
-            for root, dirs, files in os.walk(folder):
+            for root, _, files in os.walk(folder):
                 for file in files:
-                    if os.path.exists(os.path.join(root, file)):
+                    try:
                         if os.path.getsize(os.path.join(root, file)) >= 20000000:
                             try:
                                 self.tail_file(os.path.join(root, file), 2000)
-                            except Exception:
-                                pass
+                            except Exception as te:
+                                self.logger.warning("Failed to tail file {}, {}".format(file, te))
                         zip_file.write(os.path.join(root, file))
+                    except Exception as fe:
+                        self.logger.warning("Failed to add file {} to zip, {}".format(file, fe))
             zip_file.close()
 
     def persist_request(self, request: dict):
@@ -1380,23 +1388,19 @@ class LRAgentClient:
         with open("{}/requests/requests.json".format(self.folder), "w") as file:
             json.dump(request, file)
 
-    def tail_file(self, path: str, tail_size: int, repeated=None):
+    def tail_file(self, path: str, tail_size: int):
+        error = False
         try:
             with open(path + "_new", "w") as resized_output:
                 for line in deque(open(path, encoding="utf-8"), tail_size):
                     resized_output.write(line)
-        except UnicodeDecodeError:
-            repeated = "fail"
         except Exception as e:
             self.logger.info("Failed to resize file {} due to error {}".format(path, e))
-            if repeated is not None:
-                self.tail_file(path, 10, True)
-            else:
-                repeated = "fail"
+            error = True
         finally:
             try:
                 self.delete_file(path)
-                if not isinstance(repeated, str):
+                if not error:
                     os.rename(path + "_new", path)
                 else:
                     self.delete_file(path + "_new")
@@ -1406,10 +1410,8 @@ class LRAgentClient:
     def delete_file(self, path: str):
         try:
             os.remove(path)
-        except FileNotFoundError:
+        except (FileNotFoundError, OSError):
             pass
-        except OSError:
-            raise
 
     async def docker_ps(self) -> str:
         result = []

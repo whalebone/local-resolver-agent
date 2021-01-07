@@ -286,7 +286,6 @@ class LRAgentClient:
                         status[service]["status"] = "success"
                         if service == "resolver":
                             await self.update_cache()
-                            self.prefetch_tld()
         return status
 
     # async def upgrade_container(self, response: dict, request: dict) -> dict:
@@ -680,7 +679,6 @@ class LRAgentClient:
                     else:
                         if service == "resolver":
                             await self.update_cache()
-                            self.prefetch_tld()
                         return {"status": "success"}
 
     async def check_named_volumes(self, config: dict):
@@ -1075,16 +1073,6 @@ class LRAgentClient:
                             self.last_update = datetime.now()
                     else:
                         self.logger.warning("No data present in Microsoft domains list.")
-
-    def prefetch_tld(self):
-        message = b"prefill.config({['.'] = { url = 'https://www.internic.net/domain/root.zone', interval = 86400 }})\n"
-        for tty in os.listdir("/etc/whalebone/tty/"):
-            try:
-                self.send_to_socket(message, tty)
-            except Exception:
-                self.logger.warning("Failed to send prefetch data to socket")
-            else:
-                self.logger.info("Tlds successfully pre fetched.")
 
     def get_kresman_credentials(self) -> str:
         try:

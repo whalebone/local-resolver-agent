@@ -1391,9 +1391,10 @@ class LRAgentClient:
     def tail_file(self, path: str, tail_size: int):
         error = False
         try:
-            with open(path + "_new", "w") as resized_output:
-                for line in deque(open(path, encoding="utf-8"), tail_size):
-                    resized_output.write(line)
+            if path.endswith(".log"):
+                with open(path + "_new", "w") as resized_output:
+                    for line in deque(open(path, encoding="utf-8"), tail_size):
+                        resized_output.write(line)
         except Exception as e:
             self.logger.info("Failed to resize file {} due to error {}".format(path, e))
             error = True

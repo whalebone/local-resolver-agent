@@ -1,4 +1,3 @@
-import random
 import requests
 import json
 import psutil
@@ -85,24 +84,24 @@ class SystemInfo:
     #             pass
     #     return "fail"
 
-    def check_resolving(self) -> str:
+    def check_resolving(self) -> dict:
         address = os.environ.get("TRACE_LISTENER", "http://127.0.0.1:8453")
         domains = ("google.com", "microsoft.com", "apple.com", "facebook.com")
-        responses = []
+        traces = []
         for domain in domains:
             try:
                 msg = requests.get("{}/trace/{}/A".format(address, domain), timeout=self.kresman_timeout)
             except requests.exceptions.RequestException as e:
-                self.logger.warning("Failed to check domain {} due to {}.".format(domain, e))
+                self.logger.warning("Failed to trace domain {} due to {}.".format(domain, e))
             else:
-                for line in msg.content.decode("utf-8").split("\n"):
-                    if "rcode" in line and line.split(" ")[-1] == "NOERROR":
-                        return "ok"
-                responses.append(msg.content.decode("utf-8"))
-        try:
-            return random.choice(responses)
-        except Exception:
-            return "fail"
+                try:
+                    for line in msg.content.decode("utf-8").split("\n"):
+                        if "rcode" in line and line.split(" ")[-1] == "NOERROR":
+                            return {"resolve": "ok"}
+                    traces.append(msg.content.decode("utf-8"))
+                except Exception as pe:
+                    self.logger.warning("Failed to process results for domain {}, {}.".format(domain, pe))
+        return {"resolve": "fail", "traces": traces}
 
     def check_port(self, service: str = "resolver") -> str:
         try:
@@ -304,7 +303,7 @@ class SystemInfo:
             "network_info": self.get_network_info(),
             "disk_iops": self.get_disk_info(),
             "docker": self.docker_connector.docker_version(),
-            "check": {"resolve": self.check_resolving(), "port": self.check_port()},
+            "check": {**self.check_resolving(), "port": self.check_port()},
             "containers": {container.name: container.status for container in self.docker_connector.get_containers()},
             "images": self.get_images(),
             "kresman": self.get_kresman_metrics(),

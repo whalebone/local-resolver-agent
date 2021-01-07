@@ -625,7 +625,7 @@ class LRAgentClient:
         except Exception as se:
             raise ContainerException("Failed to stop old resolver, {}".format(se))
         else:
-            if self.sysinfo_connector.check_resolving() != "ok":
+            if self.sysinfo_connector.check_resolving()["resolve"] != "ok":
                 return await self.upgrade_translation_fallback(service, old_config)
 
     def upgrade_check_service_state(self, service: str) -> bool:

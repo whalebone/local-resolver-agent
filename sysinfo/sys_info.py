@@ -1,3 +1,4 @@
+import random
 import requests
 import json
 import psutil
@@ -7,7 +8,7 @@ import socket
 import re
 import os
 from datetime import datetime
-from dns import resolver
+# from dns import resolver
 
 
 class SystemInfo:
@@ -70,19 +71,38 @@ class SystemInfo:
     def to_gigabytes(self, stat: int) -> int:
         return round(stat / (1024 ** 3), 1)
 
+    # def check_resolving(self) -> str:
+    #     domains = ("google.com", "microsoft.com", "apple.com", "facebook.com")
+    #     res = resolver.Resolver()
+    #     res.nameservers = ["127.0.0.1"]
+    #     res.timeout = int(os.environ.get("DNS_TIMEOUT", 3))
+    #     res.lifetime = int(os.environ.get("DNS_LIFETIME", 3))
+    #     for domain in domains:
+    #         try:
+    #             res.resolve(domain)
+    #             return "ok"
+    #         except Exception:
+    #             pass
+    #     return "fail"
+
     def check_resolving(self) -> str:
+        address = os.environ.get("TRACE_LISTENER", "http://127.0.0.1:8453")
         domains = ("google.com", "microsoft.com", "apple.com", "facebook.com")
-        res = resolver.Resolver()
-        res.nameservers = ["127.0.0.1"]
-        res.timeout = int(os.environ.get("DNS_TIMEOUT", 3))
-        res.lifetime = int(os.environ.get("DNS_LIFETIME", 3))
+        responses = []
         for domain in domains:
             try:
-                res.resolve(domain)
-                return "ok"
-            except Exception:
-                pass
-        return "fail"
+                msg = requests.get("{}/trace/{}/A".format(address, domain), timeout=self.kresman_timeout)
+            except requests.exceptions.RequestException as e:
+                self.logger.warning("Failed to check domain {} due to {}.".format(domain, e))
+            else:
+                for line in msg.content.decode("utf-8").split("\n"):
+                    if "rcode" in line and line.split(" ")[-1] == "NOERROR":
+                        return "ok"
+                responses.append(msg.content.decode("utf-8"))
+        try:
+            return random.choice(responses)
+        except Exception:
+            return "fail"
 
     def check_port(self, service: str = "resolver") -> str:
         try:

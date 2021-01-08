@@ -96,7 +96,8 @@ class SystemInfo:
             else:
                 try:
                     for line in msg.content.decode("utf-8").split("\n"):
-                        if "rcode" in line and line.split(" ")[-1] == "NOERROR":
+                        # if "rcode" in line and line.split(" ")[-1] == "NOERROR":
+                        if "status: NOERROR" in line or "rcode: NOERROR" in line:
                             return {"resolve": "ok"}
                     traces.append(msg.content.decode("utf-8"))
                 except Exception as pe:

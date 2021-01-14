@@ -38,7 +38,14 @@ class SystemInfo:
             self.logger.warning("Failed to get network counters {}.".format(e))
             return {}
         else:
-            return {attr_name: getattr(counters, psutil_attr, 0) for psutil_attr, attr_name in self.net_mapping.items()}
+            net_info = {attr_name: getattr(counters, psutil_attr, 0) for psutil_attr, attr_name in
+                        self.net_mapping.items()}
+            try:
+                return self.get_stats_diff(self.result_manipulation("r", file_name="network_stats.json"), net_info)
+            except FileNotFoundError:
+                return {}
+            finally:
+                self.result_manipulation("w", net_info, "network_stats.json")
 
     def get_disk_info(self) -> dict:
         try:
@@ -47,7 +54,22 @@ class SystemInfo:
             self.logger.warning("Failed to get disk iops counters {}.".format(e))
             return {}
         else:
-            return {attr_name: getattr(counters, attr_name, 0) for attr_name in self.disk_mapping}
+            disk_info = {attr_name: getattr(counters, attr_name, 0) for attr_name in self.disk_mapping}
+            try:
+                return self.get_stats_diff(self.result_manipulation("r", file_name="disk_stats.json"), disk_info)
+            except FileNotFoundError:
+                return {}
+            finally:
+                self.result_manipulation("w", disk_info, "disk_stats.json")
+
+    def get_stats_diff(self, previous: dict, current: dict) -> dict:
+        stats = {}
+        for metric, value in current.items():
+            if metric in previous:
+                diff = value - previous[metric]
+                if diff > 0:
+                    stats[metric] = diff
+        return stats
 
     def get_platform(self) -> str:
         try:
@@ -113,8 +135,8 @@ class SystemInfo:
             pass
         return "fail"
 
-    def result_manipulation(self, mode: str, results: dict = None):
-        with open("/etc/whalebone/logs/kres_stats.json", mode) as file:
+    def result_manipulation(self, mode: str, results: dict = None, file_name: str = "kres_stats.json") -> dict:
+        with open("/etc/whalebone/logs/{}".format(file_name), mode) as file:
             if mode == "w":
                 json.dump(results, file)
             else:
@@ -245,7 +267,7 @@ class SystemInfo:
                                 stats[stat] = value
                     return stats
                 finally:
-                    self.result_manipulation("w", results)
+                    self.result_manipulation("w", results=results)
         except Exception as e:
             self.logger.warning("Failed to create resolver diff {}".format(e))
         return {"error": "no data"}

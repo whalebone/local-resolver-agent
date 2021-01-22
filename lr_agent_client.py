@@ -129,7 +129,30 @@ class LRAgentClient:
         elif not os.path.exists("{}etc/agent/docker-compose.yml".format(self.folder)):
             await self.send({"action": "request", "data": {"message": "compose missing"}})
         else:
-            await self.check_running_services()
+            if not self.check_running_upgrade():
+                await self.check_running_services()
+            else:
+                self.logger.info("Validation of host skipped due to a running upgrade.")
+
+    def check_running_upgrade(self) -> bool:
+        base_match = "eyJzdGF0dXMiOiAic3VjY2VzcyIsICJtZXNzYWdlIjogIkNvbW1hbmQgcmVjZWl2ZWQifQ=="
+        try:
+            lines = []
+            with open("{}logs/agent-lr-agent.log".format(self.folder), "r") as log:
+                for line in log:
+                    if "'action': 'upgrade'" in line:
+                        lines.append(line.strip().split(" | ")[-1])
+        except Exception as e:
+            self.logger.warning("Failed to get lines from log {}.".format(e))
+        else:
+            try:
+                if lines[-1].startswith("Received:") or base_match in lines[-1]:
+                    return True
+            except IndexError:
+                pass
+            except Exception as se:
+                self.logger.warning("Failed to check string presence in log line {}.".format(se))
+        return False
 
     async def perform_persisted_upgrade(self):
         with open("{}etc/agent/upgrade.json".format(self.folder), "r") as upgrade:

@@ -530,9 +530,10 @@ class LRAgentClient:
         if "lr-agent" in services and len(services) != 1:
             request = {"action": "upgrade",
                        "data": {"services": [service for service in services if service != "lr-agent"], "uid": uid}}
-            request["data"]["compose"] = json.dumps({'version': '3', 'services': {key: value for key, value in
-                                                                                  parsed_compose["services"].items() if
-                                                                                  key != "lr-agent"}})
+            request["data"]["compose"] = json.dumps(
+                {'version': parsed_compose["version"], 'services': {key: value for key, value in
+                                                                    parsed_compose["services"].items() if
+                                                                    key != "lr-agent"}})
             self.save_file("etc/agent/upgrade.json", "json", request)
             return True
         return False

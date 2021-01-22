@@ -360,6 +360,32 @@ class Tester():
             else:
                 self.status["upgrade_all_{}".format(scenario)] = {"fail": {}}
 
+    def vaidate_host_remove_old(self):
+        try:
+            self.docker_rename_container("resolver", "resolver-old")
+        except Exception as e:
+            self.logger.warning("Faield to remove container {}".format(e))
+        else:
+            for _ in range(self.max_retry + 1):
+                running_containers = self.get_container_names()
+                if "resolver" in running_containers and "resolver-old" not in running_containers:
+                    self.status["host_validation"] = "ok"
+                    break
+                time.sleep(10)
+            else:
+                self.status["host_validation"] = {"fail": {}}
+
+    def check_running_upgrade(self):
+        try:
+            with open("/var/log/whalebone/agent/agent-lr-agent.log", "r") as log:
+                for line in log:
+                    if "Validation of host skipped due to a running upgrade." in line:
+                        self.status["running_upgrade"] = "ok"
+            if "running_upgrade" not in self.status:
+                self.status["running_upgrade"] = "not_found"
+        except Exception as e:
+            self.logger.warning("Failed to check running upgrade log {}.".format(e))
+
     def check_named_volume(self):
         if "dnstap" not in [volume.name for volume in self.docker_client.volumes.list()]:
             self.logger.warning("Named volume not found")
@@ -1168,7 +1194,8 @@ class Tester():
             self.logger.info(e)
         self.delete_compose()
         for test_method in (self.test_inactive_action, self.upgrade_agent_with_old, self.upgrade_resolver_with_missing,
-                            self.upgrade_resolver_with_old_present):
+                            self.upgrade_resolver_with_old_present, self.vaidate_host_remove_old,
+                            self.check_running_upgrade):
             try:
                 test_method()
             except Exception as e:

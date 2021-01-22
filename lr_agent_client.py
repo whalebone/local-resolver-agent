@@ -150,6 +150,7 @@ class LRAgentClient:
                 active_services = [container.name for container in self.dockerConnector.get_containers()]
                 for service, config in self.compose_parser.create_service(compose)["services"].items():
                     if service not in active_services:
+                        await self.check_old_containers(service, active_services)
                         try:
                             await self.upgrade_start_service(service, config)
                         except Exception as e:
@@ -160,6 +161,15 @@ class LRAgentClient:
                         del self.error_stash[service]
         except Exception as se:
             self.logger.warning("Failed to check running services {}.".format(se))
+
+    async def check_old_containers(self, container_name: str, active_containers: list):
+        if container_name in ("lr-agent", "resolver") and "{}-old".format(container_name) in active_containers:
+            try:
+                await self.dockerConnector.remove_container("{}-old".format(container_name))
+            except ContainerException as ce:
+                self.logger.warning("Failed to remove old container for {} due to {}.".format(container_name, ce))
+            else:
+                self.logger.info("Old container for service {} found and deleted.".format(container_name))
 
     def enable_websocket_log(self):
         logger = logging.getLogger('websockets')

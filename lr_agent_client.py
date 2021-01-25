@@ -21,7 +21,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID
 from subprocess import call
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 
 from dockertools.docker_connector import DockerConnector
@@ -54,6 +54,7 @@ class LRAgentClient:
             self.last_update = None
         # if "WEBSOCKET_LOGGING" in os.environ:
         self.enable_websocket_log()
+        self.upgrade_running = None
         self.cli = cli
         self.alive = int(os.environ.get('KEEP_ALIVE', 10))
         self.http_timeout = int(os.environ.get("HTTP_TIMEOUT", 10))
@@ -131,28 +132,36 @@ class LRAgentClient:
         else:
             if not self.check_running_upgrade():
                 await self.check_running_services()
-            else:
-                self.logger.info("Validation of host skipped due to a running upgrade.")
 
     def check_running_upgrade(self) -> bool:
-        base_match = "eyJzdGF0dXMiOiAic3VjY2VzcyIsICJtZXNzYWdlIjogIkNvbW1hbmQgcmVjZWl2ZWQifQ=="
-        try:
-            lines = []
-            with open("{}logs/agent-lr-agent.log".format(self.folder), "r") as log:
-                for line in log:
-                    if "'action': 'upgrade'" in line:
-                        lines.append(line.strip().split(" | ")[-1])
-        except Exception as e:
-            self.logger.warning("Failed to get lines from log {}.".format(e))
-        else:
-            try:
-                if lines[-1].startswith("Received:") or base_match in lines[-1]:
-                    return True
-            except IndexError:
-                pass
-            except Exception as se:
-                self.logger.warning("Failed to check string presence in log line {}.".format(se))
+        if self.upgrade_running:
+            if (datetime.now() - self.upgrade_running) >= timedelta(days=1):
+                self.upgrade_running = None
+                self.logger.warning("Upgrade running state set for longer that 1 day, resetting.")
+            else:
+                self.logger.info("Validation of host skipped due to a running upgrade.")
+                return True
         return False
+
+    # def check_running_upgrade(self) -> bool:
+    #     base_match = "eyJzdGF0dXMiOiAic3VjY2VzcyIsICJtZXNzYWdlIjogIkNvbW1hbmQgcmVjZWl2ZWQifQ=="
+    #     try:
+    #         lines = []
+    #         with open("{}logs/agent-lr-agent.log".format(self.folder), "r") as log:
+    #             for line in log:
+    #                 if "'action': 'upgrade'" in line:
+    #                     lines.append(line.strip().split(" | ")[-1])
+    #     except Exception as e:
+    #         self.logger.warning("Failed to get lines from log {}.".format(e))
+    #     else:
+    #         try:
+    #             if lines[-1].startswith("Received:") or base_match in lines[-1]:
+    #                 return True
+    #         except IndexError:
+    #             pass
+    #         except Exception as se:
+    #             self.logger.warning("Failed to check string presence in log line {}.".format(se))
+    #     return False
 
     async def perform_persisted_upgrade(self):
         with open("{}etc/agent/upgrade.json".format(self.folder), "r") as upgrade:
@@ -214,7 +223,8 @@ class LRAgentClient:
             else:
                 self.status_log.warning("Failed to get status {}.".format(e))
         else:
-            self.status_log.info("Running tasks: {}, ping sent pong received".format(running_tasks))
+            self.status_log.info(
+                "Running tasks: {}, ping sent pong received, upgrade: {}".format(running_tasks, self.upgrade_running))
 
     def process_response(self, status: dict, action: str):
         if isinstance(status, dict) and status:
@@ -497,6 +507,7 @@ class LRAgentClient:
     async def upgrade_container(self, compose: str = "", config: list = None, services: list = None, uid: str = "",
                                 **_) -> dict:
         status, old_config = {}, None
+        self.upgrade_running = datetime.now()
         try:
             compose = self.upgrade_load_compose(compose)
         except Exception as e:
@@ -534,6 +545,8 @@ class LRAgentClient:
                 self.upgrade_persist_compose(status, compose)
             except Exception as de:
                 status["dump"] = de
+        finally:
+            self.upgrade_running = None
         return status
 
     async def upgrade_with_downtime(self, parsed_compose: dict, service: str) -> dict:

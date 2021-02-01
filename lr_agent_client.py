@@ -180,28 +180,26 @@ class LRAgentClient:
         try:
             with open("{}etc/agent/docker-compose.yml".format(self.folder), "r") as compose:
                 active_services = [container.name for container in self.dockerConnector.get_containers()]
-                for service, config in self.compose_parser.create_service(compose)["services"].items():
+                parsed_compose = self.compose_parser.create_service(compose)["services"]
+                for service, config in parsed_compose.items():
                     if service not in active_services:
-                        await self.check_old_containers(service, active_services)
                         try:
                             await self.upgrade_start_service(service, config)
-                        except Exception as e:
-                            self.logger.warning(
-                                "Service: {} is offline, automatic start failed due to: {}".format(service, e))
-                            continue
-                    if service in self.error_stash:
-                        del self.error_stash[service]
+                        except Exception:
+                            pass
+                for running_service in active_services:
+                    if running_service not in parsed_compose:
+                        await self.delete_redundant_service(running_service)
         except Exception as se:
             self.logger.warning("Failed to check running services {}.".format(se))
 
-    async def check_old_containers(self, container_name: str, active_containers: list):
-        if container_name in ("lr-agent", "resolver") and "{}-old".format(container_name) in active_containers:
-            try:
-                await self.dockerConnector.remove_container("{}-old".format(container_name))
-            except ContainerException as ce:
-                self.logger.warning("Failed to remove old container for {} due to {}.".format(container_name, ce))
-            else:
-                self.logger.info("Old container for service {} found and deleted.".format(container_name))
+    async def delete_redundant_service(self, service_name: str):
+        try:
+            await self.dockerConnector.remove_container(service_name)
+        except ContainerException as ce:
+            self.logger.warning("Failed to remove redundant container {} due to {}.".format(service_name, ce))
+        else:
+            self.logger.info("Redundant container {} found running and was deleted.".format(service_name))
 
     def enable_websocket_log(self):
         logger = logging.getLogger('websockets')

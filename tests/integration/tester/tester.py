@@ -1,3 +1,4 @@
+from typing import Union
 import redis
 import requests
 import yaml
@@ -31,6 +32,18 @@ class Tester():
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(logging.Formatter('%(asctime)s | %(message)s'))
         self.logger.addHandler(console_handler)
+        self.valid_resolver_config = ['net.ipv6 = false',
+                                     "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http','whalebone' }",
+                                     "cache.storage = 'lmdb:///var/lib/kres/cache'",
+                                     "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
+                                     "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
+                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
+                                     "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"]
 
     def get_id(self) -> str:
         return str(uuid.uuid4())
@@ -52,7 +65,7 @@ class Tester():
         return volumes
 
     def start_agent(self):
-        compose = yaml.load(self.compose_reader("agent-compose.yml"), Loader=yaml.SafeLoader)
+        compose = self.compose_reader("agent-compose.yml", "dict")
         for k, v in compose["services"].items():
             if "volumes" in v:
                 compose["services"][k]["volumes"] = self.parse_volumes(v["volumes"])
@@ -88,27 +101,21 @@ class Tester():
             self.redis.delete(uid)
             return data
 
+    def get_services(self, compose: str, ignore_list: list = None) -> list:
+        ignored_services = ["api", "tester", "redis", "wsproxy"]
+        if ignore_list:
+            ignored_services.extend(ignore_list)
+        return [service for service in self.parse_compose(compose)["services"] if service not in ignored_services]
+
     def start_resolver(self):
         compose = self.compose_reader("resolver-compose.yml")
         uid = self.get_id()
+        ignored_containers = ["api", "tester", "redis", "wsproxy", "lr-agent"]
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/create".format(self.proxy_address, self.agent_id),
-                json={"compose": compose,
-                      "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http', ''whalebone' }",
-                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
-                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
-                      "uid": uid
-                      })
+                json={"compose": compose, "services": self.get_services(compose, ["lr-agent"]),
+                      "config": self.valid_resolver_config, "uid": uid})
         except Exception as e:
             self.logger.info(e)
         else:
@@ -118,11 +125,12 @@ class Tester():
                     state = {}
                     self.logger.info(status)
                     for key, value in status["action_status"].items():
-                        if value["status"] == "success":
-                            self.logger.info("{} creation successful".format(key))
-                        else:
-                            self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, value["body"]))
-                            state[key] = value["body"]
+                        if key not in ignored_containers:
+                            if value["status"] == "success":
+                                self.logger.info("{} creation successful".format(key))
+                            else:
+                                self.logger.warning("{} upgrade unsuccessful with response: {}".format(key, value["body"]))
+                                state[key] = value["body"]
                     if not state:
                         self.status["start_services"] = "ok"
                     else:
@@ -133,12 +141,55 @@ class Tester():
             else:
                 self.status["start_services"] = {"fail": "timeout"}
 
+    def remove_service(self):
+        compose = self.compose_reader("resolver-compose.yml")
+        services = self.get_services(compose, ["lr-agent", "passivedns"])
+        compose = self.parse_compose(compose)
+        del compose["services"]["passivedns"]
+        uid = self.get_id()
+        try:
+            rec = requests.post(
+                "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
+                json={"compose": self.dump_compose(compose), "services": services, "config": self.valid_resolver_config,
+                      "uid": uid})
+        except Exception as e:
+            self.logger.info(e)
+        else:
+            for _ in range(self.max_retry + 5):
+                status = self.search_redis(uid)
+                if status:
+                    state = {}
+                    self.logger.info(status)
+                    if all(value["status"] == "success" for key, value in status["action_status"].items() if
+                           key in ("resolver", "kresman")):
+                        time.sleep(60)
+                        if "passivedns" not in self.get_container_names():
+                            self.status["remove_services"] = "ok"
+                        else:
+                            self.status["remove_services"] = {"fail": "passivedns found in services"}
+                    else:
+                        self.status["remove_services"] = {"fail": state}
+                    break
+                else:
+                    time.sleep(3)
+            else:
+                self.status["remove_services"] = {"fail": "timeout"}
+
     def redis_output(self, redis_in):
         return ast.literal_eval(redis_in.decode("utf-8"))
 
-    def compose_reader(self, file):
+    def compose_reader(self, file, output: str = "string") -> Union[str, dict]:
         with open(file, "r") as f:
-            return f.read()
+            if output == "string":
+                return f.read()
+            else:
+                return yaml.load(f.read(), Loader=yaml.SafeLoader)
+
+    def parse_compose(self, compose: str) -> dict:
+        return yaml.load(compose, Loader=yaml.SafeLoader)
+
+    def dump_compose(self, compose: dict) -> dict:
+        return yaml.dump(compose)
 
     # def inject_rules(self):
     #     try:
@@ -221,21 +272,7 @@ class Tester():
             try:
                 rec = requests.post(
                     "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
-                    json={"compose": compose,
-                          "uid": uid,
-                          "config": ['net.ipv6 = false',
-                                     "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http','whalebone' }",
-                                     "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                     "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
-                                     "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
-                                     "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
-                          "services": ["resolver"]})
+                    json={"compose": compose, "uid": uid, "config": self.valid_resolver_config, "services": ["resolver"]})
             except Exception as e:
                 self.logger.warning(e)
             else:
@@ -275,20 +312,7 @@ class Tester():
             try:
                 rec = requests.post(
                     "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
-                    json={"compose": compose,
-                          "uid": uid,
-                          "config": ['net.ipv6 = false',
-                                     "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http','whalebone' }",
-                                     "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                     "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
-                                     "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
-                                     "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
-                                     "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
+                    json={"compose": compose, "uid": uid, "config": self.valid_resolver_config,
                           "services": ["resolver"]})
             except Exception as e:
                 self.logger.warning(e)
@@ -324,25 +348,13 @@ class Tester():
     def upgrade_all(self, services: list, scenario: str):
         compose = self.compose_reader("docker-compose.yml")
         uid = self.get_id()
+        if not services:
+            services = self.get_services(compose)
         # services = []
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
-                json={"compose": compose,
-                      "uid": uid,
-                      "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http', 'whalebone' }",
-                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
-                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
-                      "services": services})
+                json={"compose": compose, "uid": uid, "config": self.valid_resolver_config, "services": services})
         except Exception as e:
             self.logger.warning(e)
         else:
@@ -364,7 +376,7 @@ class Tester():
         try:
             self.docker_rename_container("resolver", "resolver-old")
         except Exception as e:
-            self.logger.warning("Faield to remove container {}".format(e))
+            self.logger.warning("Failed to remove container {}".format(e))
         else:
             for _ in range(self.max_retry + 1):
                 running_containers = self.get_container_names()
@@ -1009,21 +1021,7 @@ class Tester():
         try:
             rec = requests.post(
                 "http://{}:8080/wsproxy/rest/message/{}/upgrade".format(self.proxy_address, self.agent_id),
-                json={"compose": compose,
-                      "uid": uid,
-                      "config": ['net.ipv6 = false',
-                                 "modules = { 'workarounds < iterate', 'serve_stale < cache', 'hints', 'policy', 'stats', 'predict', 'bogus_log', 'http', 'whalebone' }",
-                                 "cache.storage = 'lmdb:///var/lib/kres/cache'",
-                                 "cache.size = os.getenv('KNOT_CACHE_SIZE') * MB",
-                                 "net.listen('127.0.0.1', 8453, { kind = 'webmgmt' })",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('microsoftonline.com')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('microsoftonline.com')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('windows.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('windows.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_0X20'), {todname('trafficmanager.net')}))",
-                                 "policy.add(policy.suffix(policy.FLAGS('NO_MINIMIZE'), {todname('trafficmanager.net')}))",
-                                 "policy.add(policy.suffix(policy.DENY, {todname('use-application-dns.net.')}))"],
-                      "services": services})
+                json={"compose": compose, "uid": uid, "config": self.valid_resolver_config, "services": services})
         except Exception as e:
             self.logger.warning(e)
         else:
@@ -1170,7 +1168,7 @@ class Tester():
         except Exception as e:
             self.logger.info(e)
         for test_method in (self.update_cache, self.clear_cache, self.trace_domain, self.upgrade_resolver_config,
-                            self.upgrade_resolver_redirect, self.upgrade_resolver_image):
+                            self.upgrade_resolver_redirect, self.upgrade_resolver_image, self.remove_service):
             try:
                 test_method()
             except Exception as e:

@@ -154,6 +154,43 @@ services:
         options:
           max-size: "100m"
           max-file: "1"
+    lr-agent:
+      image: harbor.whalebone.io/resolver/agent:1.5.3
+      name: lr-agent
+      stdin_open: true
+      tty: true
+      network_mode: host
+      logging:
+        driver: json-file
+        options:
+          max-size: "10m"
+          max-file: "1"
+      labels:
+        lr-agent: "3.0"
+      environment:
+        CLIENT_CRT_BASE64: ""
+        CLIENT_KEY_BASE64: ""
+        PROXY_ADDRESS: "wss://localhost:8443/wsproxy/ws"
+      #      CONFIRMATION_REQUIRED: "true"
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+        - /etc/whalebone/:/etc/whalebone/etc/
+        #      - /etc/whalebone/kres/:/etc/whalebone/resolver/
+        - /var/whalebone/cli/:/etc/whalebone/cli/
+        #      - /etc/whalebone/agent/:/etc/whalebone/compose/
+        - /var/log/whalebone/agent/:/etc/whalebone/logs/
+        - /var/log/whalebone/:/etc/whalebone/sysinfo/
+        - /var/sinkhole/:/etc/whalebone/kresman
+        - /:/opt/host/:ro
+        - /var/lib/kres/tty/:/etc/whalebone/tty/
+    api:
+      image: harbor.whalebone.io/whalebone/agent:api-testing-3
+    tester:
+      image: harbor.whalebone.io/whalebone/agent:tester-testing-1.5.3
+    redis:
+      image: redis:4.0
+    wsproxy:
+      image: harbor.whalebone.io/whalebone/wsproxy:testing-5
 volumes:
   registry:
     external: true

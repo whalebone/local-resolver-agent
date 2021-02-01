@@ -29,3 +29,11 @@ services:
       - /var/sinkhole/:/etc/whalebone/kresman
       - /:/opt/host/:ro
       - /var/lib/kres/tty/:/etc/whalebone/tty/
+  api:
+    image: harbor.whalebone.io/whalebone/agent:api-testing-3
+  tester:
+    image: harbor.whalebone.io/whalebone/agent:tester-testing-1.5.3
+  redis:
+    image: redis:4.0
+  wsproxy:
+    image: harbor.whalebone.io/whalebone/wsproxy:testing-5
